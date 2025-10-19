@@ -1,28 +1,34 @@
-import { createClient } from '@/lib/supabase/server'
-import { notFound } from 'next/navigation'
-import CreditCardComponent from '@/components/dashboard/credit-card'
-import Transactions from '@/components/dashboard/transactions'
-import Perks from '@/components/dashboard/perks'
+import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import CreditCardComponent from "@/components/dashboard/credit-card";
+import Transactions from "@/components/dashboard/transactions";
+import Perks from "@/components/dashboard/perks";
 
-export default async function CardDetailsPage({ params }: { params: { id: string } }) {
-  const supabase = await createClient()
+export default async function CardDetailsPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params; // ✅ await the promise
+
+  const supabase = await createClient();
 
   const { data: card } = await supabase
-    .from('credit_cards')
-    .select('*')
-    .eq('id', params.id)
-    .single()
+    .from("credit_cards")
+    .select("*")
+    .eq("id", id)
+    .single();
 
   if (!card) {
-    notFound()
+    notFound();
   }
 
   const { data: transactions } = await supabase
-    .from('transactions')
-    .select('*')
-    .eq('card_id', params.id)
+    .from("transactions")
+    .select("*")
+    .eq("card_id", id);
 
-  const { data: cards } = await supabase.from('credit_cards').select('*')
+  const { data: cards } = await supabase.from("credit_cards").select("*");
 
   return (
     <div className="space-y-8">
@@ -37,5 +43,5 @@ export default async function CardDetailsPage({ params }: { params: { id: string
         <Transactions transactions={transactions || []} cards={cards || []} />
       </div>
     </div>
-  )
+  );
 }
