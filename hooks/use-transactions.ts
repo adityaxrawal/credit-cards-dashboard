@@ -1,7 +1,8 @@
 import { useRealtime } from './use-realtime'
-import { Transaction } from '@/types'
+import { Database } from '@/types/database'
 
-export function useTransactions() {
-  const transactions = useRealtime<Transaction>('transactions')
-  return { transactions, isLoading: transactions.length === 0 }
+type Transaction = Database['public']['Tables']['transactions']['Row']
+
+export function useTransactions(initialTransactions?: Transaction[]) {
+  return useRealtime<Transaction>('transactions', initialTransactions)
 }

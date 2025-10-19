@@ -53,7 +53,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       spending_limits: {
@@ -97,7 +97,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       statements: {
@@ -147,44 +147,60 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "credit_cards"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
       transactions: {
         Row: {
           amount: number
           card_id: string
+          category: string | null
           created_at: string
-          date: string
-          description: string
+          description: string | null
+          email_id: string | null
           id: string
-          type: string
-          updated_at: string
-          user_id: string
+          is_in_statement: boolean | null
+          merchant_name: string | null
+          statement_id: string | null
+          transaction_date: string
+          transaction_type: string | null
         }
         Insert: {
           amount: number
           card_id: string
+          category?: string | null
           created_at?: string
-          date: string
-          description: string
+          description?: string | null
+          email_id?: string | null
           id?: string
-          type: string
-          updated_at?: string
-          user_id: string
+          is_in_statement?: boolean | null
+          merchant_name?: string | null
+          statement_id?: string | null
+          transaction_date: string
+          transaction_type?: string | null
         }
         Update: {
           amount?: number
           card_id?: string
+          category?: string | null
           created_at?: string
-          date?: string
-          description?: string
+          description?: string | null
+          email_id?: string | null
           id?: string
-          type?: string
-          updated_at?: string
-          user_id?: string
+          is_in_statement?: boolean | null
+          merchant_name?: string | null
+          statement_id?: string | null
+          transaction_date?: string
+          transaction_type?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_statement"
+            columns: ["statement_id"]
+            isOneToOne: false
+            referencedRelation: "statements"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "transactions_card_id_fkey"
             columns: ["card_id"]
@@ -192,37 +208,56 @@ export type Database = {
             referencedRelation: "credit_cards"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      user_profiles: {
+        Row: {
+          created_at: string
+          email: string
+          full_name: string | null
+          gmail_refresh_token: string | null
+          global_spending_limit: number | null
+          id: string
+          profile_picture_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          full_name?: string | null
+          gmail_refresh_token?: string | null
+          global_spending_limit?: number | null
+          id: string
+          profile_picture_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          full_name?: string | null
+          gmail_refresh_token?: string | null
+          global_spending_limit?: number | null
+          id?: string
+          profile_picture_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
           {
-            foreignKeyName: "transactions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
+            foreignKeyName: "user_profiles_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
             referencedRelation: "users"
             referencedColumns: ["id"]
-          }
+          },
         ]
       }
     }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      get_spending_summary: {
-        Args: Record<string, unknown>
-        Returns: {
-          total_spending: number
-          total_transactions: number
-        }[]
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+    Views: { [_ in never]: never }
+    Functions: { [_ in never]: never }
+    Enums: { [_ in never]: never }
+    CompositeTypes: { [_ in never]: never }
   }
 }
 
 export type Tables<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Row"]
-
 export type Enums<T extends keyof Database["public"]["Enums"]> = Database["public"]["Enums"][T]

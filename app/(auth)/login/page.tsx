@@ -1,21 +1,16 @@
-'use client'
+import { Button } from '@/components/ui/button'
+import { FcGoogle } from 'react-icons/fc'
+import { signInWithGoogle } from './actions'
 
-import { createClient } from '@/lib/supabase/client'
-import { Auth } from '@supabase/auth-ui-react'
-import { ThemeSupa } from '@supabase/auth-ui-shared'
-
-export default function AuthForm() {
-  const supabase = createClient()
-
+export default async function LoginPage() {
   return (
-    <Auth
-      supabaseClient={supabase}
-      view="magic_link"
-      appearance={{ theme: ThemeSupa }}
-      theme="dark"
-      showLinks={false}
-      providers={['google']}
-      redirectTo="http://localhost:3000/auth/callback"
-    />
+    <div className="flex h-screen w-screen flex-col items-center justify-center gap-4">
+      <form action={signInWithGoogle}>
+        <Button variant="outline" className="flex items-center gap-2">
+          <FcGoogle />
+          <span>Sign in with Google</span>
+        </Button>
+      </form>
+    </div>
   )
 }

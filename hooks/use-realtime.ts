@@ -1,13 +1,19 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { Database } from '@/types/database'
 
-export function useRealtime<T>(table: string) {
-  const [data, setData] = useState<T[]>([])
+type TableName = keyof Database['public']['Tables']
+
+export function useRealtime<T>(table: TableName, initialData?: T[]) {
+  const [data, setData] = useState<T[]>(initialData || [])
   const supabase = createClient()
 
   useEffect(() => {
     const fetchData = async () => {
-      const { data, error } = await supabase.from(table).select('*')
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data, error } = await supabase.from(table).select('*').eq('user_id', user.id)
       if (error) {
         console.error(error)
         return
@@ -15,15 +21,16 @@ export function useRealtime<T>(table: string) {
       setData(data as T[])
     }
 
-    fetchData()
+    if (initialData === undefined) {
+      fetchData()
+    }
 
     const channel = supabase
       .channel(`realtime:${table}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table },
-        (payload) => {
-          console.log('Change received!', payload)
+        () => {
           fetchData()
         }
       )
@@ -32,7 +39,7 @@ export function useRealtime<T>(table: string) {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [supabase, table])
+  }, [supabase, table, initialData])
 
   return data
 }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient } from '@/lib/supabase/server'
 import { getGoogleAuth } from '@/lib/google'
 import { google } from 'googleapis'
@@ -11,17 +12,18 @@ export async function POST() {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await (supabase as any)
     .from('user_profiles')
-    .select('google_refresh_token')
+    .select('gmail_refresh_token')
+    .eq('id', user.id)
     .single()
 
-  if (!profile || !profile.google_refresh_token) {
+  if (!profile || !profile.gmail_refresh_token) {
     return new Response('Missing Google refresh token', { status: 400 })
   }
 
   const auth = getGoogleAuth()
-  auth.setCredentials({ refresh_token: profile.google_refresh_token })
+  auth.setCredentials({ refresh_token: profile.gmail_refresh_token })
 
   const gmail = google.gmail({ version: 'v1', auth })
 
