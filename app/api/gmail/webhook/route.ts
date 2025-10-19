@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server'
 import { google } from 'googleapis'
 import { getGoogleAuth } from '@/lib/google'
@@ -19,32 +20,66 @@ export async function POST(request: Request) {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await (supabase as any)
     .from('user_profiles')
-    .select('google_refresh_token')
+    .select('gmail_refresh_token')
+    .eq('id', user.id)
     .single()
 
-  if (!profile || !profile.google_refresh_token) {
+  if (!profile || !profile.gmail_refresh_token) {
     return new Response('Missing Google refresh token', { status: 400 })
   }
 
   const auth = getGoogleAuth()
-  auth.setCredentials({ refresh_token: profile.google_refresh_token })
+  auth.setCredentials({ refresh_token: profile.gmail_refresh_token })
 
   const gmail = google.gmail({ version: 'v1', auth })
 
-  const messageId = Buffer.from(message.data, 'base64').toString('utf-8')
+  const decodedData = Buffer.from(message.data, 'base64').toString('utf-8')
+  const messageData = JSON.parse(decodedData)
+  const emailAddress = messageData.emailAddress
+  const historyId = messageData.historyId
+
+  const historyResponse = await gmail.users.history.list({
+    userId: 'me',
+    startHistoryId: historyId,
+    historyTypes: ['messageAdded'],
+  })
+
+  if (!historyResponse.data.history) {
+    return NextResponse.json({ success: true, message: 'No new messages' })
+  }
+
+  const messageId = historyResponse.data.history[0].messages?.[0].id
+
+  if (!messageId) {
+    return NextResponse.json({ success: true, message: 'No new messages' })
+  }
 
   const messageDetails = await gmail.users.messages.get({
     userId: 'me',
     id: messageId,
   })
 
-  const transactions = parseEmail(messageDetails.data.snippet || '')
+  const transactions = parseEmail(JSON.stringify(messageDetails.data))
 
-  if (transactions.length > 0) {
+  if (transactions) {
     const supabase = await createClient()
-    await supabase.from('transactions').insert(transactions)
+    const { data: card } = await supabase
+      .from('credit_cards')
+      .select('id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .single()
+
+    if (card) {
+      const transactionsWithCardId = transactions.map((transaction) => ({
+        ...transaction,
+        card_id: card.id,
+        user_id: user.id,
+      }))
+      await supabase.from('transactions').insert(transactionsWithCardId)
+    }
   }
 
   return NextResponse.json({ success: true })

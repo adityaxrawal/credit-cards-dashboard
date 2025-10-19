@@ -1,25 +1,21 @@
 'use client'
 
-import { useTransactions } from '@/hooks/use-transactions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Transaction } from '@/types'
 
-export default function SpendingSummary() {
-  const { transactions, isLoading } = useTransactions()
-
-  if (isLoading) {
-    return <div>Loading...</div>
+type SpendingSummary = {
+    total_spending: number
+    total_transactions: number
   }
 
-  const totalSpending = transactions.reduce((acc: number, curr: Transaction) => acc + curr.amount, 0)
-
+  export default function SpendingSummary({ summary }: { summary: SpendingSummary }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Spending Summary</CardTitle>
       </CardHeader>
       <CardContent>
-        <p>Total Spending: {totalSpending}</p>
+        <p>Total Spending: {summary.total_spending}</p>
+        <p>Total Transactions: {summary.total_transactions}</p>
       </CardContent>
     </Card>
   )

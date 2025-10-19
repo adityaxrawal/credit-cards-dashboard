@@ -1,23 +1,16 @@
 import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
-import CreditCardComponent from '@/components/dashboard/credit-card'
-import SpendingSummary from '@/components/dashboard/spending-summary'
-import TransactionList from '@/components/dashboard/transaction-list'
+import DashboardClient from './client'
 
-export default async function Dashboard() {
+export default async function DashboardPage() {
   const supabase = await createClient()
-
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect('/login')
+    return <div>Unauthorized</div>
   }
 
-  return (
-    <div className="space-y-8">
-      <CreditCardComponent />
-      <SpendingSummary />
-      <TransactionList />
-    </div>
-  )
+  const { data: cards } = await supabase.from('credit_cards').select('*').eq('user_id', user.id)
+  const { data: transactions } = await supabase.from('transactions').select('*').eq('user_id', user.id)
+
+  return <DashboardClient cards={cards || []} transactions={transactions || []} />
 }
