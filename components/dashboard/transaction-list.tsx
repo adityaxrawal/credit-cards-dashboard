@@ -1,30 +1,23 @@
 'use client'
 
-import { useTransactions } from '@/hooks/use-transactions'
-import { Transaction } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Database } from '@/types/database'
 
-export default function TransactionList() {
-  const { transactions, isLoading } = useTransactions()
+type Transaction = Database['public']['Tables']['transactions']['Row']
 
-  if (isLoading) {
-    return <div>Loading...</div>
-  }
-
+export default function TransactionList({ transactions }: { transactions: Transaction[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Recent Transactions</CardTitle>
+        <CardTitle>Transactions</CardTitle>
       </CardHeader>
       <CardContent>
-        <ul>
-          {transactions.map((transaction: Transaction) => (
-            <li key={transaction.id}>
-              <p>{transaction.description}</p>
-              <p>{transaction.amount}</p>
-            </li>
-          ))}
-        </ul>
+        {transactions.map((transaction) => (
+          <div key={transaction.id}>
+            <p>{transaction.description}</p>
+            <p>{transaction.amount}</p>
+          </div>
+        ))}
       </CardContent>
     </Card>
   )

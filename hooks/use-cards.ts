@@ -1,7 +1,8 @@
 import { useRealtime } from './use-realtime'
-import { CreditCard } from '@/types'
+import { Database } from '@/types/database'
 
-export function useCards() {
-  const cards = useRealtime<CreditCard>('cards')
-  return { cards, isLoading: cards.length === 0 }
+type CreditCard = Database['public']['Tables']['credit_cards']['Row']
+
+export function useCards(initialCards?: CreditCard[]) {
+  return useRealtime<CreditCard>('credit_cards', initialCards)
 }
