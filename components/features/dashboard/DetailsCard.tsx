@@ -63,7 +63,7 @@ const DetailsCard: React.FC<DetailsCardProps> = ({
 
         {/* Credit Card Display */}
         <div className="relative">
-          <div className="bg-gradient-to-br from-cred-green to-emerald-400 rounded-2xl p-4 lg:p-6 text-white relative overflow-hidden">
+          <div className="bg-gradient-to-br from-accent-mint to-accent-green rounded-2xl p-4 lg:p-6 text-white relative overflow-hidden">
             {/* Card Background Pattern */}
             <div className="absolute inset-0 opacity-10">
               <div className="absolute top-3 right-3 lg:top-4 lg:right-4 w-24 h-24 lg:w-32 lg:h-32 rounded-full border-2 border-white"></div>

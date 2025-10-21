@@ -3,7 +3,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Plus, MoreHorizontal, ChevronDown } from 'lucide-react';
-import CreditCard from '../ui/CreditCard';
+import CreditCard from '@/components/shared/data-display/CreditCard';
 import { getSampleDashboardSummary } from '@/lib/sampleData';
 
 interface Card {

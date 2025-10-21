@@ -11,13 +11,45 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        'cred-dark': '#0F0F0F',
-        'cred-secondary': '#1A1A1A',
-        'cred-tertiary': '#2A2A2A',
-        'cred-purple': '#9B6BFF',
-        'cred-pink': '#FF6B9D',
-        'cred-blue': '#4D9BFF',
-        'cred-green': '#00D9A3',
+        // Primary Background Colors (matching the image)
+        'primary-bg': '#1a1d24',
+        'secondary-bg': '#2a2d34',
+        'card-bg': '#2a2d34',
+        'sidebar-bg': '#2a2d34',
+        
+        // Text Colors
+        'text-primary': '#FFFFFF',
+        'text-secondary': '#B8BCC8',
+        'text-muted': '#8B8FA3',
+        
+        // Accent Colors (matching the image)
+        'accent-green': '#4ade80',
+        'accent-purple': '#8b5cf6',
+        'accent-orange': '#f97316',
+        'accent-blue': '#3b82f6',
+        'accent-pink': '#ec4899',
+        
+        // Card Gradient Colors (matching the image)
+        'card-purple': '#8b5cf6',
+        'card-orange': '#f97316',
+        'card-blue': '#3b82f6',
+        'card-green': '#4ade80',
+        'card-pink': '#ec4899',
+        
+        // Status Colors
+        'success': '#4ade80',
+        'warning': '#f97316',
+        'error': '#ef4444',
+        'info': '#3b82f6',
+        
+        // Legacy colors (updated to match new scheme)
+        'cred-dark': '#1a1d24',
+        'cred-secondary': '#2a2d34',
+        'cred-tertiary': '#2a2d34',
+        'cred-purple': '#8b5cf6',
+        'cred-pink': '#ec4899',
+        'cred-blue': '#3b82f6',
+        'cred-green': '#4ade80',
       },
       screens: {
         'mobile': '320px',

@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { Toaster } from "react-hot-toast";
+import { LoadingProvider } from "@/contexts/LoadingContext";
+import LoadingOverlay from "@/components/shared/feedback/LoadingOverlay";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,35 +31,38 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ErrorBoundary>
-          {children}
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: 'rgba(17, 24, 39, 0.95)',
-                color: '#fff',
-                border: '1px solid rgba(75, 85, 99, 0.3)',
-                borderRadius: '12px',
-                backdropFilter: 'blur(16px)',
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-              },
-              success: {
-                iconTheme: {
-                  primary: '#10b981',
-                  secondary: '#fff',
+        <LoadingProvider>
+          <ErrorBoundary>
+            {children}
+            <LoadingOverlay />
+            <Toaster
+              position="top-right"
+              toastOptions={{
+                duration: 4000,
+                style: {
+                  background: 'rgba(17, 24, 39, 0.95)',
+                  color: '#fff',
+                  border: '1px solid rgba(75, 85, 99, 0.3)',
+                  borderRadius: '12px',
+                  backdropFilter: 'blur(16px)',
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
                 },
-              },
-              error: {
-                iconTheme: {
-                  primary: '#ef4444',
-                  secondary: '#fff',
+                success: {
+                  iconTheme: {
+                    primary: '#10b981',
+                    secondary: '#fff',
+                  },
                 },
-              },
-            }}
-          />
-        </ErrorBoundary>
+                error: {
+                  iconTheme: {
+                    primary: '#ef4444',
+                    secondary: '#fff',
+                  },
+                },
+              }}
+            />
+          </ErrorBoundary>
+        </LoadingProvider>
       </body>
     </html>
   );

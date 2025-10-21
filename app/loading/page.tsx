@@ -76,7 +76,7 @@ const LoadingPage: React.FC = () => {
   const progressPercentage = ((completedSteps.length) / steps.length) * 100;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-8">
+    <div className="min-h-screen bg-primary-bg flex items-center justify-center p-8">
       <div className="w-full max-w-md">
         {/* Logo */}
         <motion.div
@@ -84,7 +84,7 @@ const LoadingPage: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-center space-x-3 mb-12"
         >
-          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+          <div className="w-12 h-12 bg-gradient-to-br from-accent-mint to-accent-green rounded-xl flex items-center justify-center">
             <CreditCard className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-white">CreditDash</h1>
@@ -109,7 +109,7 @@ const LoadingPage: React.FC = () => {
             </div>
             <div className="w-full bg-gray-700/50 rounded-full h-2 overflow-hidden">
               <motion.div
-                className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full"
+                className="h-full bg-gradient-to-r from-accent-mint to-accent-green rounded-full"
                 initial={{ width: 0 }}
                 animate={{ width: `${progressPercentage}%` }}
                 transition={{ duration: 0.5, ease: "easeOut" }}
@@ -133,18 +133,18 @@ const LoadingPage: React.FC = () => {
                   transition={{ delay: index * 0.1 }}
                   className={`flex items-center space-x-4 p-4 rounded-lg transition-all duration-300 ${
                     isActive 
-                      ? 'bg-blue-500/10 border border-blue-500/20' 
+                      ? 'bg-accent-mint/10 border border-accent-mint/20' 
                       : isCompleted 
-                        ? 'bg-green-500/10 border border-green-500/20'
+                        ? 'bg-accent-green/10 border border-accent-green/20'
                         : 'bg-gray-800/30 border border-gray-700/30'
                   }`}
                 >
                   {/* Icon */}
                   <div className={`w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-300 ${
                     isActive 
-                      ? 'bg-blue-500/20 border border-blue-500/30' 
+                      ? 'bg-accent-mint/20 border border-accent-mint/30' 
                       : isCompleted 
-                        ? 'bg-green-500/20 border border-green-500/30'
+                        ? 'bg-accent-green/20 border border-accent-green/30'
                         : 'bg-gray-700/30 border border-gray-600/30'
                   }`}>
                     <AnimatePresence mode="wait">
@@ -155,7 +155,7 @@ const LoadingPage: React.FC = () => {
                           animate={{ scale: 1 }}
                           exit={{ scale: 0 }}
                         >
-                          <CheckCircle className="w-6 h-6 text-green-400" />
+                          <CheckCircle className="w-6 h-6 text-accent-green" />
                         </motion.div>
                       ) : isActive ? (
                         <motion.div
@@ -164,7 +164,7 @@ const LoadingPage: React.FC = () => {
                           animate={{ scale: 1 }}
                           exit={{ scale: 0 }}
                         >
-                          <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
+                          <Loader2 className="w-6 h-6 text-accent-mint animate-spin" />
                         </motion.div>
                       ) : (
                         <motion.div
@@ -183,9 +183,9 @@ const LoadingPage: React.FC = () => {
                   <div className="flex-1">
                     <h3 className={`font-semibold transition-colors duration-300 ${
                       isActive 
-                        ? 'text-blue-300' 
+                        ? 'text-accent-mint' 
                         : isCompleted 
-                          ? 'text-green-300'
+                          ? 'text-accent-green'
                           : isPending 
                             ? 'text-gray-500'
                             : 'text-gray-300'
@@ -194,9 +194,9 @@ const LoadingPage: React.FC = () => {
                     </h3>
                     <p className={`text-sm transition-colors duration-300 ${
                       isActive 
-                        ? 'text-blue-400/80' 
+                        ? 'text-accent-mint/80' 
                         : isCompleted 
-                          ? 'text-green-400/80'
+                          ? 'text-accent-green/80'
                           : isPending 
                             ? 'text-gray-600'
                             : 'text-gray-400'
@@ -211,14 +211,14 @@ const LoadingPage: React.FC = () => {
                       <motion.div
                         animate={{ scale: [1, 1.2, 1] }}
                         transition={{ repeat: Infinity, duration: 1.5 }}
-                        className="w-2 h-2 bg-blue-400 rounded-full"
+                        className="w-2 h-2 bg-accent-mint rounded-full"
                       />
                     )}
                     {isCompleted && (
                       <motion.div
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        className="w-2 h-2 bg-green-400 rounded-full"
+                        className="w-2 h-2 bg-accent-green rounded-full"
                       />
                     )}
                     {isPending && (
@@ -242,7 +242,7 @@ const LoadingPage: React.FC = () => {
                 <motion.div
                   animate={{ scale: [1, 1.1, 1] }}
                   transition={{ duration: 0.5 }}
-                  className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4"
+                  className="w-16 h-16 bg-gradient-to-br from-accent-green to-accent-mint rounded-full flex items-center justify-center mx-auto mb-4"
                 >
                   <CheckCircle className="w-8 h-8 text-white" />
                 </motion.div>

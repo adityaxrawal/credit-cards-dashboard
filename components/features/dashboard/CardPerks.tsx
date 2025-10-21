@@ -86,13 +86,13 @@ const CardPerks: React.FC<CardPerksProps> = ({
   // Get perk color scheme
   const getPerkColors = (perkType: string) => {
     const colorMap: Record<string, { bg: string; text: string; accent: string }> = {
-      'cashback': { bg: 'bg-green-500/20', text: 'text-green-400', accent: 'border-green-500/30' },
-      'points': { bg: 'bg-blue-500/20', text: 'text-blue-400', accent: 'border-blue-500/30' },
-      'miles': { bg: 'bg-purple-500/20', text: 'text-purple-400', accent: 'border-purple-500/30' },
-      'discount': { bg: 'bg-orange-500/20', text: 'text-orange-400', accent: 'border-orange-500/30' },
-      'bonus': { bg: 'bg-yellow-500/20', text: 'text-yellow-400', accent: 'border-yellow-500/30' },
-      'protection': { bg: 'bg-red-500/20', text: 'text-red-400', accent: 'border-red-500/30' },
-      'access': { bg: 'bg-indigo-500/20', text: 'text-indigo-400', accent: 'border-indigo-500/30' }
+      'cashback': { bg: 'bg-accent-green/20', text: 'text-accent-green', accent: 'border-accent-green/30' },
+      'points': { bg: 'bg-accent-mint/20', text: 'text-accent-mint', accent: 'border-accent-mint/30' },
+      'miles': { bg: 'bg-accent-purple/20', text: 'text-accent-purple', accent: 'border-accent-purple/30' },
+      'discount': { bg: 'bg-accent-orange/20', text: 'text-accent-orange', accent: 'border-accent-orange/30' },
+      'bonus': { bg: 'bg-accent-yellow/20', text: 'text-accent-yellow', accent: 'border-accent-yellow/30' },
+      'protection': { bg: 'bg-accent-red/20', text: 'text-accent-red', accent: 'border-accent-red/30' },
+      'access': { bg: 'bg-accent-blue/20', text: 'text-accent-blue', accent: 'border-accent-blue/30' }
     };
     
     return colorMap[perkType.toLowerCase()] || colorMap.points;
@@ -156,7 +156,7 @@ const CardPerks: React.FC<CardPerksProps> = ({
               placeholder="Search perks and benefits..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+              className="w-full pl-10 pr-4 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-accent-mint/50 focus:border-accent-mint/50 transition-all"
             />
           </div>
 
@@ -164,7 +164,7 @@ const CardPerks: React.FC<CardPerksProps> = ({
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="bg-gray-800/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            className="bg-gray-800/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-mint/50"
           >
             <option value="all">All Categories</option>
             {categories.map(category => (
@@ -177,7 +177,7 @@ const CardPerks: React.FC<CardPerksProps> = ({
             <select
               value={selectedCard}
               onChange={(e) => setSelectedCard(e.target.value)}
-              className="bg-gray-800/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="bg-gray-800/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-mint/50"
             >
               <option value="all">All Cards</option>
               {creditCards.map((card: CreditCardType) => (
@@ -240,7 +240,7 @@ const CardPerks: React.FC<CardPerksProps> = ({
                   <div className={`${viewMode === 'grid' ? 'mb-3' : 'mb-1'}`}>
                     <h4 className={`${
                       viewMode === 'grid' ? 'text-lg' : 'text-base'
-                    } font-semibold text-white group-hover:text-blue-400 transition-colors`}>
+                    } font-semibold text-white group-hover:text-accent-mint transition-colors`}>
                       {formatRewardRate(perk.reward_rate, perk.perk_type)}
                     </h4>
                     <p className={`${
@@ -286,7 +286,7 @@ const CardPerks: React.FC<CardPerksProps> = ({
                     <div className="mt-4 flex items-center justify-between">
                       <div className="flex items-center space-x-1">
                         <TrendingUp className="w-3 h-3 text-green-400" />
-                        <span className="text-xs text-green-400">Active</span>
+                        <span className="text-xs text-accent-green">Active</span>
                       </div>
                       <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
                     </div>
@@ -332,7 +332,7 @@ const CardPerks: React.FC<CardPerksProps> = ({
             </div>
             
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-400 mb-1">
+              <div className="text-2xl font-bold text-accent-green mb-1">
                 {filteredPerks.filter((p: CardPerk) => p.perk_type.toLowerCase() === 'cashback').length}
               </div>
               <div className="text-xs text-gray-400">Cashback</div>
