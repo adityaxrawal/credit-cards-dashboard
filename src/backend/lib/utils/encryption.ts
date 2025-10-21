@@ -25,7 +25,7 @@ export function encrypt(text: string): string {
   const iv = crypto.randomBytes(IV_LENGTH);
   
   // Create cipher
-  const cipher = crypto.createCipher(ALGORITHM, key);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
   cipher.setAAD(Buffer.from('gmail-token-encryption', 'utf8'));
   
   // Encrypt the text
@@ -69,7 +69,7 @@ export function decrypt(encryptedData: string): string {
   const authTag = Buffer.from(authTagHex, 'hex');
   
   // Create decipher
-  const decipher = crypto.createDecipher(ALGORITHM, key);
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   decipher.setAAD(Buffer.from('gmail-token-encryption', 'utf8'));
   decipher.setAuthTag(authTag);
   
