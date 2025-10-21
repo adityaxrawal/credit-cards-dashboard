@@ -3,7 +3,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, MoreHorizontal, Calendar } from "lucide-react";
-import Button from "../ui/Button";
+import Button from "@/components/ui/Button";
 
 interface InventoryDetailsProps {
   balance: number;

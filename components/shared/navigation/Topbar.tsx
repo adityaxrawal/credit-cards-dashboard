@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Bell, Wallet, Settings } from 'lucide-react';
-import Button from '../ui/Button';
+import { usePathname } from 'next/navigation';
+import Button from '@/components/ui/Button';
 
 interface TopbarProps {
   title?: string;
@@ -11,9 +12,37 @@ interface TopbarProps {
 }
 
 const Topbar: React.FC<TopbarProps> = ({
-  title = "Dashboard",
-  subtitle = "Welcome",
+  title,
+  subtitle,
 }) => {
+  const pathname = usePathname();
+  
+  // Define page titles and subtitles based on pathname
+  const getPageInfo = () => {
+    // Handle dynamic routes first
+    if (pathname.startsWith('/card-detail/')) {
+      return { title: 'Card Detail', subtitle: 'Know your cards' };
+    }
+    
+    switch (pathname) {
+      case '/dashboard':
+        return { title: 'Dashboard', subtitle: 'Welcome back' };
+      case '/cards':
+        return { title: 'Cards', subtitle: 'Manage your cards' };
+      case '/transactions':
+        return { title: 'Transactions', subtitle: 'Transaction history' };
+      case '/statements':
+        return { title: 'Statements', subtitle: 'Monthly statements' };
+      case '/settings':
+        return { title: 'Settings', subtitle: 'Account preferences' };
+      default:
+        return { title: 'Dashboard', subtitle: 'Welcome back' };
+    }
+  };
+
+  const pageInfo = getPageInfo();
+  const displayTitle = title || pageInfo.title;
+  const displaySubtitle = subtitle || pageInfo.subtitle;
   const [searchQuery, setSearchQuery] = useState('');
 
   return (
@@ -25,8 +54,8 @@ const Topbar: React.FC<TopbarProps> = ({
     >
       {/* Left Section - Title */}
       <div className=''>
-        <p className="text-white/60 text-sm mb-1">{subtitle}</p>
-        <h1 className="text-2xl font-bold text-white">{title}</h1>
+        <p className="text-white/60 text-sm mb-1">{displaySubtitle}</p>
+        <h1 className="text-2xl font-bold text-white">{displayTitle}</h1>
       </div>
 
       {/* Center Section - Search */}
@@ -51,19 +80,6 @@ const Topbar: React.FC<TopbarProps> = ({
 
       {/* Right Section - Actions */}
       <div className="flex items-center space-x-4">
-        {/* Settings Button */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="
-            w-12 h-12 rounded-xl bg-white/5 border border-white/10
-            flex items-center justify-center text-white/60 hover:text-white
-            hover:bg-white/10 transition-all duration-200
-          "
-        >
-          <Settings size={20} />
-        </motion.button>
-
         {/* Notifications Button */}
         <motion.button
           whileHover={{ scale: 1.05 }}
@@ -80,17 +96,6 @@ const Topbar: React.FC<TopbarProps> = ({
             <span className="text-xs font-bold text-white">3</span>
           </div>
         </motion.button>
-
-        {/* Wallet Button */}
-        <Button
-          variant="primary"
-          size="md"
-          className="flex items-center space-x-2"
-          onClick={() => console.log('Wallet clicked')}
-        >
-          <Wallet size={18} />
-          <span>Wallet</span>
-        </Button>
       </div>
     </motion.div>
   );

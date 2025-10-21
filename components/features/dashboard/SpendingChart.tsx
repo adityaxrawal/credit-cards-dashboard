@@ -69,10 +69,10 @@ const SpendingChart: React.FC<SpendingChartProps> = ({ className = '' }) => {
 
   // Sample spending data by category
   const categoryData: SpendingData[] = [
-    { category: 'Food & Dining', amount: 1250, percentage: 35, color: '#3B82F6', transactions: 24 },
-    { category: 'Shopping', amount: 890, percentage: 25, color: '#8B5CF6', transactions: 18 },
+    { category: 'Food & Dining', amount: 1250, percentage: 35, color: '#4ECDC4', transactions: 24 },
+    { category: 'Shopping', amount: 890, percentage: 25, color: '#A855F7', transactions: 18 },
     { category: 'Transportation', amount: 540, percentage: 15, color: '#10B981', transactions: 12 },
-    { category: 'Entertainment', amount: 430, percentage: 12, color: '#F59E0B', transactions: 8 },
+    { category: 'Entertainment', amount: 430, percentage: 12, color: '#F97316', transactions: 8 },
     { category: 'Bills & Utilities', amount: 320, percentage: 9, color: '#EF4444', transactions: 6 },
     { category: 'Others', amount: 140, percentage: 4, color: '#6B7280', transactions: 5 }
   ];
@@ -159,20 +159,20 @@ const SpendingChart: React.FC<SpendingChartProps> = ({ className = '' }) => {
             <button
               onClick={() => setChartType('bar')}
               className={`p-2 rounded-md transition-all duration-200 ${
-                chartType === 'bar'
-                  ? 'bg-blue-500 text-white'
-                  : 'text-gray-400 hover:text-white'
-              }`}
+              chartType === 'bar'
+                ? 'bg-accent-mint text-white'
+                : 'text-gray-400 hover:text-white'
+            }`}
             >
               <BarChart3 className="w-4 h-4" />
             </button>
             <button
               onClick={() => setChartType('pie')}
               className={`p-2 rounded-md transition-all duration-200 ${
-                chartType === 'pie'
-                  ? 'bg-blue-500 text-white'
-                  : 'text-gray-400 hover:text-white'
-              }`}
+              chartType === 'pie'
+                ? 'bg-accent-mint text-white'
+                : 'text-gray-400 hover:text-white'
+            }`}
             >
               <PieChartIcon className="w-4 h-4" />
             </button>
@@ -182,17 +182,17 @@ const SpendingChart: React.FC<SpendingChartProps> = ({ className = '' }) => {
 
       {/* Summary Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-gray-800/30 rounded-lg p-4">
+        <div className="bg-secondary-bg rounded-lg p-4">
           <div className="flex items-center space-x-2 mb-2">
-            <TrendingUp className="w-4 h-4 text-green-400" />
+            <TrendingUp className="w-4 h-4 text-accent-mint" />
             <span className="text-gray-400 text-sm">Total Spent</span>
           </div>
           <p className="text-2xl font-bold text-white">₹{totalSpending.toLocaleString()}</p>
         </div>
         
-        <div className="bg-gray-800/30 rounded-lg p-4">
+        <div className="bg-secondary-bg rounded-lg p-4">
           <div className="flex items-center space-x-2 mb-2">
-            <Calendar className="w-4 h-4 text-blue-400" />
+            <Calendar className="w-4 h-4 text-accent-purple" />
             <span className="text-gray-400 text-sm">Transactions</span>
           </div>
           <p className="text-2xl font-bold text-white">
@@ -200,9 +200,9 @@ const SpendingChart: React.FC<SpendingChartProps> = ({ className = '' }) => {
           </p>
         </div>
         
-        <div className="bg-gray-800/30 rounded-lg p-4">
+        <div className="bg-secondary-bg rounded-lg p-4">
           <div className="flex items-center space-x-2 mb-2">
-            <Filter className="w-4 h-4 text-purple-400" />
+            <Filter className="w-4 h-4 text-accent-orange" />
             <span className="text-gray-400 text-sm">Categories</span>
           </div>
           <p className="text-2xl font-bold text-white">{categoryData.length}</p>

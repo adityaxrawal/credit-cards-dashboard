@@ -52,22 +52,22 @@ const SummaryStats: React.FC<SummaryStatsProps> = ({
     {
       title: "Total earnings",
       amount: totalEarnings,
-      color: "bg-cred-blue/20",
-      bgColor: "bg-cred-blue/10 border border-cred-blue/20",
+      color: "bg-accent-mint/20",
+      bgColor: "bg-accent-mint/10 border border-accent-mint/20",
       icon: "📈",
     },
     {
       title: "Total spendings",
       amount: totalSpendings,
-      color: "bg-cred-purple/20",
-      bgColor: "bg-cred-purple/10 border border-cred-purple/20",
+      color: "bg-accent-purple/20",
+      bgColor: "bg-accent-purple/10 border border-accent-purple/20",
       icon: "💳",
     },
     {
       title: "Spending Goal",
       amount: spendingGoal,
-      color: "bg-cred-pink/20",
-      bgColor: "bg-cred-pink/10 border border-cred-pink/20",
+      color: "bg-accent-orange/20",
+      bgColor: "bg-accent-orange/10 border border-accent-orange/20",
       icon: "🎯",
     },
   ];

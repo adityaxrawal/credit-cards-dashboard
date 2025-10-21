@@ -131,11 +131,11 @@ const SpendingSummary: React.FC<SpendingSummaryProps> = ({ className = '' }) => 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.1 }}
-            className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 border border-blue-500/30 rounded-xl p-4"
+            className="bg-gradient-to-br from-accent-mint/20 to-accent-purple/20 border border-accent-mint/30 rounded-xl p-4"
           >
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-blue-400" />
+              <div className="w-10 h-10 bg-accent-mint/20 rounded-lg flex items-center justify-center">
+                <DollarSign className="w-5 h-5 text-accent-mint" />
               </div>
               <div>
                 <p className="text-gray-400 text-sm">This Month</p>
@@ -169,11 +169,11 @@ const SpendingSummary: React.FC<SpendingSummaryProps> = ({ className = '' }) => 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.3 }}
-            className="bg-gradient-to-br from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-xl p-4"
+            className="bg-gradient-to-br from-accent-green/20 to-accent-mint/20 border border-accent-green/30 rounded-xl p-4"
           >
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-green-400" />
+              <div className="w-10 h-10 bg-accent-green/20 rounded-lg flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-accent-green" />
               </div>
               <div>
                 <p className="text-gray-400 text-sm">Available Credit</p>

@@ -17,7 +17,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { getSampleProfile } from '@/lib/sampleData';
-import Button from '@/components/ui/Button';
+
 
 interface HeaderProps {
   activeTab: string;
@@ -45,7 +45,7 @@ const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
   ];
 
   return (
-    <header className="glass-card border-b border-gray-700/50 sticky top-0 z-50">
+    <header className="bg-card-bg/80 backdrop-blur-md border-b border-gray-700/30 sticky top-0 z-50 shadow-lg">
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo and Brand */}
@@ -54,10 +54,10 @@ const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
               whileHover={{ scale: 1.05 }}
               className="flex items-center space-x-3"
             >
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-gradient-to-br from-accent-mint to-accent-blue rounded-lg flex items-center justify-center">
                 <CreditCard className="w-5 h-5 text-white" />
               </div>
-              <h1 className="text-xl font-bold text-white hidden sm:block">
+              <h1 className="text-xl font-bold text-text-primary hidden sm:block">
                 CreditDash
               </h1>
             </motion.div>
@@ -75,8 +75,8 @@ const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
                   onClick={() => onTabChange(item.id)}
                   className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                     isActive
-                      ? 'text-white bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-500/30'
-                      : 'text-gray-300 hover:text-white hover:bg-gray-700/30'
+                      ? 'text-text-primary bg-gradient-to-r from-accent-mint/20 to-accent-blue/20 border border-accent-mint/30'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-card-bg/50'
                   }`}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
@@ -88,7 +88,7 @@ const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
                   {isActive && (
                     <motion.div
                       layoutId="activeTab"
-                      className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-purple-600/10 rounded-lg border border-blue-500/20"
+                      className="absolute inset-0 bg-gradient-to-r from-accent-mint/10 to-accent-blue/10 rounded-lg border border-accent-mint/20"
                       initial={false}
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
                     />
