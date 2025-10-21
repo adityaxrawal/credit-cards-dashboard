@@ -1,139 +1,31 @@
-import sampleDataJson from '@/data/sampleData.json';
+import { 
+  sampleData,
+  Profile,
+  CreditCard,
+  Transaction,
+  Statement,
+  StatementTransaction,
+  CardPerk,
+  SpendingLimit,
+  DashboardSummary,
+  SampleData
+} from '@/data/mockData';
 
-// Type definitions based on the database schema
-export interface Profile {
-  id: string;
-  email: string;
-  name: string;
-  phone: string;
-  created_at: string;
-  updated_at: string;
-}
+// Re-export types for backward compatibility
+export type {
+  Profile,
+  CreditCard,
+  Transaction,
+  Statement,
+  StatementTransaction,
+  CardPerk,
+  SpendingLimit,
+  DashboardSummary,
+  SampleData
+};
 
-export interface CreditCard {
-  id: string;
-  profile_id: string;
-  bank_name: string;
-  card_last_4: string;
-  card_holder_name: string;
-  card_type: string;
-  credit_limit: number;
-  available_credit: number;
-  reward_points: number;
-  statement_date: number;
-  due_date: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Transaction {
-  id: string;
-  card_id: string;
-  amount: number;
-  description: string;
-  merchant: string;
-  category: string;
-  transaction_date: string;
-  status: string;
-  reward_points_earned: number;
-  created_at: string;
-}
-
-export interface Statement {
-  id: string;
-  card_id: string;
-  statement_date: string;
-  due_date: string;
-  total_amount: number;
-  minimum_amount: number;
-  previous_balance: number;
-  payments_credits: number;
-  purchases: number;
-  fees_interest: number;
-  reward_points_earned: number;
-  status: string;
-  created_at: string;
-}
-
-export interface StatementTransaction {
-  id: string;
-  statement_id: string;
-  amount: number;
-  description: string;
-  merchant: string;
-  category: string;
-  transaction_date: string;
-  reward_points_earned: number;
-}
-
-export interface CardPerk {
-  id: string;
-  card_id: string;
-  perk_type: string;
-  category: string;
-  reward_rate: number;
-  description: string;
-  max_monthly_benefit: number | null;
-  is_active: boolean;
-}
-
-export interface SpendingLimit {
-  id: string;
-  card_id: string;
-  category: string;
-  monthly_limit: number;
-  current_spent: number;
-  alert_threshold: number;
-  is_active: boolean;
-  created_at: string;
-}
-
-export interface DashboardSummary {
-  totalCreditLimit: number;
-  totalAvailableCredit: number;
-  totalCurrentDue: number;
-  totalRewardPoints: number;
-  upcomingDueDates: Array<{
-    card_id: string;
-    bank_name: string;
-    due_amount: number;
-    due_date: string;
-    days_remaining: number;
-    status: string;
-  }>;
-  monthlySpending: {
-    current_month: number;
-    previous_month: number;
-    change_percentage: number;
-  };
-  categoryWiseSpending: Array<{
-    category: string;
-    amount: number;
-    percentage: number;
-    transactions: number;
-  }>;
-  recentActivity: Array<{
-    type: string;
-    description: string;
-    amount: number;
-    card: string;
-    timestamp: string;
-  }>;
-}
-
-export interface SampleData {
-  profile: Profile;
-  creditCards: CreditCard[];
-  currentTransactions: Transaction[];
-  statements: Statement[];
-  statementTransactions: StatementTransaction[];
-  cardPerks: CardPerk[];
-  spendingLimits: SpendingLimit[];
-  dashboardSummary: DashboardSummary;
-}
-
-// Sample data with proper typing
-export const sampleData: SampleData = sampleDataJson as SampleData;
+// Re-export the sample data
+export { sampleData };
 
 // Utility functions to work with sample data
 export const getSampleCreditCards = (): CreditCard[] => {
@@ -183,16 +75,16 @@ export const calculateTotalCreditUtilization = (): number => {
   return totalLimit > 0 ? (totalUsed / totalLimit) * 100 : 0;
 };
 
-export const getCardWithHighestDue = (): { card: CreditCard; dueAmount: number } | null => {
-  const dueDates = sampleData.dashboardSummary.upcomingDueDates;
-  if (dueDates.length === 0) return null;
+export const calculateCardUtilization = (cardId: string): number => {
+  const card = sampleData.creditCards.find(c => c.id === cardId);
+  if (!card) return 0;
   
-  const highestDue = dueDates.reduce((max, current) => 
-    current.due_amount > max.due_amount ? current : max
-  );
-  
-  const card = sampleData.creditCards.find(c => c.id === highestDue.card_id);
-  return card ? { card, dueAmount: highestDue.due_amount } : null;
+  const used = card.credit_limit - card.available_credit;
+  return card.credit_limit > 0 ? (used / card.credit_limit) * 100 : 0;
+};
+
+export const getTotalRewardPoints = (): number => {
+  return sampleData.creditCards.reduce((sum, card) => sum + card.reward_points, 0);
 };
 
 export const getTopSpendingCategory = (): { category: string; amount: number; percentage: number } | null => {
