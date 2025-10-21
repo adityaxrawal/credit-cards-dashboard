@@ -36,7 +36,7 @@ const StatCard: React.FC<StatCardProps> = ({ title, amount, color, bgColor, icon
         
         <p className="text-white/80 text-xs lg:text-sm mb-2">{title}</p>
         <p className="text-xl lg:text-2xl font-bold text-white">
-          ${amount.toLocaleString()}
+          ₹{amount.toLocaleString()}
         </p>
       </div>
     </motion.div>

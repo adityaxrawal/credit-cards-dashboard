@@ -44,7 +44,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
           <div className="flex-1">
             <p className="text-gray-600 text-sm mb-2">Your balance:</p>
             <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-1">
-              ${balance.toLocaleString()}
+              ₹{balance.toLocaleString()}
             </h3>
             <p className="text-gray-700 text-sm font-medium">
               {cardCount} CARD{cardCount !== 1 ? "S" : ""}

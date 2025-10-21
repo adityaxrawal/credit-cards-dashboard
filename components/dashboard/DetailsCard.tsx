@@ -127,7 +127,7 @@ const DetailsCard: React.FC<DetailsCardProps> = ({
             <p className="text-white font-medium text-sm lg:text-base">20%</p>
           </div>
           <p className="text-white/60 text-xs lg:text-sm mb-3">
-            ${dailyUsed.toLocaleString()} used of ${dailyTransactionLimit.toLocaleString()}
+            ₹{dailyUsed.toLocaleString()} used of ₹{dailyTransactionLimit.toLocaleString()}
           </p>
           <div className="w-full bg-white/10 rounded-full h-2">
             <motion.div
