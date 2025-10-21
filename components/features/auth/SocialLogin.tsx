@@ -2,13 +2,37 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
+import { createClient } from '@/lib/supabase/client';
 
 interface SocialLoginProps {
-  onGoogleLogin: () => Promise<void>;
+  onGoogleLogin?: () => Promise<void>;
   isLoading: boolean;
 }
 
 const SocialLogin: React.FC<SocialLoginProps> = ({ onGoogleLogin, isLoading }) => {
+  const supabase = createClient();
+
+  const handleGoogleLogin = async () => {
+    if (onGoogleLogin) {
+      await onGoogleLogin();
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/api/auth/callback`
+        }
+      });
+
+      if (error) {
+        console.error('Google login error:', error);
+      }
+    } catch (error) {
+      console.error('Unexpected error during Google login:', error);
+    }
+  };
   return (
     <motion.div
       className="space-y-4"
@@ -18,7 +42,7 @@ const SocialLogin: React.FC<SocialLoginProps> = ({ onGoogleLogin, isLoading }) =
     >
       {/* Google Login */}
       <button
-        onClick={onGoogleLogin}
+        onClick={handleGoogleLogin}
         disabled={isLoading}
         className="w-full bg-white/10 hover:bg-white/20 border border-white/20 text-white font-medium py-4 px-6 rounded-2xl transition-all duration-200 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed backdrop-filter backdrop-blur-sm"
       >

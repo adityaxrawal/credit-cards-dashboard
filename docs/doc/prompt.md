@@ -1,7 +1,7 @@
-Analyse  document end to end to understand the project requirement. Once you done with that start with the Phase 5 from  file. If you require any information or clarity on while executing the application then do ask be before assuming and proceeding.
+Analyse  document end to end to understand the project requirement. Once you done with that start with the Phase 6 from  file. If you require any information or clarity on while executing the application then do ask be before assuming and proceeding.
 
-Execute Phase 5 end to end.
-Once you are done with Phase 5, stop the process and wait for my prompt to proceed on to Phase 6 (next phase).
+Execute Phase 6 end to end.
+Once you are done with Phase 6, stop the process and wait for my prompt to proceed on to Phase 7 (next phase).
 
 
 -------------
