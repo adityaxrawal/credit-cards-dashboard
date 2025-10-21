@@ -1,0 +1,341 @@
+{
+  "profile": {
+    "id": "user_123",
+    "email": "aditya.rawal@example.com",
+    "name": "Aditya Rawal",
+    "phone": "+91-9876543210",
+    "created_at": "2024-01-15T10:30:00Z",
+    "updated_at": "2024-12-15T14:20:00Z"
+  },
+  "creditCards": [
+    {
+      "id": "card_001",
+      "profile_id": "user_123",
+      "bank_name": "HDFC Bank",
+      "card_last_4": "4567",
+      "card_holder_name": "ADITYA RAWAL",
+      "card_type": "Visa",
+      "credit_limit": 500000,
+      "available_credit": 325000,
+      "reward_points": 12450,
+      "statement_date": 15,
+      "due_date": 5,
+      "created_at": "2024-01-15T10:30:00Z",
+      "updated_at": "2024-12-15T14:20:00Z"
+    },
+    {
+      "id": "card_002",
+      "profile_id": "user_123",
+      "bank_name": "SBI",
+      "card_last_4": "8901",
+      "card_holder_name": "ADITYA RAWAL",
+      "card_type": "Mastercard",
+      "credit_limit": 300000,
+      "available_credit": 280000,
+      "reward_points": 5670,
+      "statement_date": 20,
+      "due_date": 10,
+      "created_at": "2024-03-10T09:15:00Z",
+      "updated_at": "2024-12-14T16:45:00Z"
+    },
+    {
+      "id": "card_003",
+      "profile_id": "user_123",
+      "bank_name": "ICICI Bank",
+      "card_last_4": "2345",
+      "card_holder_name": "ADITYA RAWAL",
+      "card_type": "RuPay",
+      "credit_limit": 200000,
+      "available_credit": 150000,
+      "reward_points": 3240,
+      "statement_date": 25,
+      "due_date": 15,
+      "created_at": "2024-06-20T11:00:00Z",
+      "updated_at": "2024-12-13T12:30:00Z"
+    }
+  ],
+  "currentTransactions": [
+    {
+      "id": "txn_001",
+      "card_id": "card_001",
+      "amount": 2500.00,
+      "description": "Swiggy Order - Pizza Hut",
+      "merchant": "Swiggy",
+      "category": "Food & Dining",
+      "transaction_date": "2024-12-15T19:30:00Z",
+      "status": "posted",
+      "reward_points_earned": 25,
+      "created_at": "2024-12-15T19:30:00Z"
+    },
+    {
+      "id": "txn_002",
+      "card_id": "card_001",
+      "amount": 15000.00,
+      "description": "Amazon Purchase - Electronics",
+      "merchant": "Amazon India",
+      "category": "Shopping",
+      "transaction_date": "2024-12-14T14:20:00Z",
+      "status": "posted",
+      "reward_points_earned": 150,
+      "created_at": "2024-12-14T14:20:00Z"
+    },
+    {
+      "id": "txn_003",
+      "card_id": "card_002",
+      "amount": 8500.00,
+      "description": "Fuel - Indian Oil",
+      "merchant": "Indian Oil Corporation",
+      "category": "Fuel",
+      "transaction_date": "2024-12-13T08:45:00Z",
+      "status": "posted",
+      "reward_points_earned": 85,
+      "created_at": "2024-12-13T08:45:00Z"
+    },
+    {
+      "id": "txn_004",
+      "card_id": "card_001",
+      "amount": 3200.00,
+      "description": "Uber Ride",
+      "merchant": "Uber India",
+      "category": "Transportation",
+      "transaction_date": "2024-12-12T22:15:00Z",
+      "status": "posted",
+      "reward_points_earned": 32,
+      "created_at": "2024-12-12T22:15:00Z"
+    },
+    {
+      "id": "txn_005",
+      "card_id": "card_003",
+      "amount": 12000.00,
+      "description": "Grocery Shopping - Big Bazaar",
+      "merchant": "Big Bazaar",
+      "category": "Groceries",
+      "transaction_date": "2024-12-11T16:30:00Z",
+      "status": "posted",
+      "reward_points_earned": 60,
+      "created_at": "2024-12-11T16:30:00Z"
+    }
+  ],
+  "statements": [
+    {
+      "id": "stmt_001",
+      "card_id": "card_001",
+      "statement_date": "2024-11-15T00:00:00Z",
+      "due_date": "2024-12-05T23:59:59Z",
+      "total_amount": 45000.00,
+      "minimum_amount": 4500.00,
+      "previous_balance": 12000.00,
+      "payments_credits": 12000.00,
+      "purchases": 43500.00,
+      "fees_interest": 1500.00,
+      "reward_points_earned": 435,
+      "status": "generated",
+      "created_at": "2024-11-15T00:00:00Z"
+    },
+    {
+      "id": "stmt_002",
+      "card_id": "card_002",
+      "statement_date": "2024-11-20T00:00:00Z",
+      "due_date": "2024-12-10T23:59:59Z",
+      "total_amount": 18500.00,
+      "minimum_amount": 1850.00,
+      "previous_balance": 5000.00,
+      "payments_credits": 5000.00,
+      "purchases": 18500.00,
+      "fees_interest": 0.00,
+      "reward_points_earned": 185,
+      "status": "generated",
+      "created_at": "2024-11-20T00:00:00Z"
+    }
+  ],
+  "statementTransactions": [
+    {
+      "id": "stmt_txn_001",
+      "statement_id": "stmt_001",
+      "amount": 15000.00,
+      "description": "Flipkart Purchase - Mobile Phone",
+      "merchant": "Flipkart",
+      "category": "Electronics",
+      "transaction_date": "2024-11-02T10:30:00Z",
+      "reward_points_earned": 150
+    },
+    {
+      "id": "stmt_txn_002",
+      "statement_id": "stmt_001",
+      "amount": 8500.00,
+      "description": "Zomato Orders",
+      "merchant": "Zomato",
+      "category": "Food & Dining",
+      "transaction_date": "2024-11-05T20:15:00Z",
+      "reward_points_earned": 85
+    },
+    {
+      "id": "stmt_txn_003",
+      "statement_id": "stmt_002",
+      "amount": 12000.00,
+      "description": "Reliance Digital - Laptop Accessories",
+      "merchant": "Reliance Digital",
+      "category": "Electronics",
+      "transaction_date": "2024-11-08T14:45:00Z",
+      "reward_points_earned": 120
+    }
+  ],
+  "cardPerks": [
+    {
+      "id": "perk_001",
+      "card_id": "card_001",
+      "perk_type": "cashback",
+      "category": "Dining",
+      "reward_rate": 5.0,
+      "description": "5% cashback on dining transactions",
+      "max_monthly_benefit": 1000.00,
+      "is_active": true
+    },
+    {
+      "id": "perk_002",
+      "card_id": "card_001",
+      "perk_type": "reward_points",
+      "category": "Online Shopping",
+      "reward_rate": 2.0,
+      "description": "2X reward points on online shopping",
+      "max_monthly_benefit": null,
+      "is_active": true
+    },
+    {
+      "id": "perk_003",
+      "card_id": "card_002",
+      "perk_type": "fuel_surcharge_waiver",
+      "category": "Fuel",
+      "reward_rate": 1.0,
+      "description": "Fuel surcharge waiver on transactions above ₹500",
+      "max_monthly_benefit": 500.00,
+      "is_active": true
+    },
+    {
+      "id": "perk_004",
+      "card_id": "card_003",
+      "perk_type": "cashback",
+      "category": "Groceries",
+      "reward_rate": 3.0,
+      "description": "3% cashback on grocery purchases",
+      "max_monthly_benefit": 750.00,
+      "is_active": true
+    }
+  ],
+  "spendingLimits": [
+    {
+      "id": "limit_001",
+      "card_id": "card_001",
+      "category": "Entertainment",
+      "monthly_limit": 10000.00,
+      "current_spent": 3500.00,
+      "alert_threshold": 80.0,
+      "is_active": true,
+      "created_at": "2024-01-15T10:30:00Z"
+    },
+    {
+      "id": "limit_002",
+      "card_id": "card_001",
+      "category": "Shopping",
+      "monthly_limit": 25000.00,
+      "current_spent": 18500.00,
+      "alert_threshold": 75.0,
+      "is_active": true,
+      "created_at": "2024-01-15T10:30:00Z"
+    },
+    {
+      "id": "limit_003",
+      "card_id": "card_002",
+      "category": "Fuel",
+      "monthly_limit": 15000.00,
+      "current_spent": 8500.00,
+      "alert_threshold": 90.0,
+      "is_active": true,
+      "created_at": "2024-03-10T09:15:00Z"
+    }
+  ],
+  "dashboardSummary": {
+    "totalCreditLimit": 1000000,
+    "totalAvailableCredit": 755000,
+    "totalCurrentDue": 63500.00,
+    "totalRewardPoints": 21360,
+    "upcomingDueDates": [
+      {
+        "card_id": "card_001",
+        "bank_name": "HDFC Bank",
+        "due_amount": 45000.00,
+        "due_date": "2024-12-05T23:59:59Z",
+        "days_remaining": -10,
+        "status": "overdue"
+      },
+      {
+        "card_id": "card_002",
+        "bank_name": "SBI",
+        "due_amount": 18500.00,
+        "due_date": "2024-12-10T23:59:59Z",
+        "days_remaining": -5,
+        "status": "overdue"
+      }
+    ],
+    "monthlySpending": {
+      "current_month": 41200.00,
+      "previous_month": 67500.00,
+      "change_percentage": -38.96
+    },
+    "categoryWiseSpending": [
+      {
+        "category": "Shopping",
+        "amount": 15000.00,
+        "percentage": 36.4,
+        "transactions": 1
+      },
+      {
+        "category": "Groceries",
+        "amount": 12000.00,
+        "percentage": 29.1,
+        "transactions": 1
+      },
+      {
+        "category": "Fuel",
+        "amount": 8500.00,
+        "percentage": 20.6,
+        "transactions": 1
+      },
+      {
+        "category": "Transportation",
+        "amount": 3200.00,
+        "percentage": 7.8,
+        "transactions": 1
+      },
+      {
+        "category": "Food & Dining",
+        "amount": 2500.00,
+        "percentage": 6.1,
+        "transactions": 1
+      }
+    ],
+    "recentActivity": [
+      {
+        "type": "transaction",
+        "description": "New transaction: Swiggy Order - Pizza Hut",
+        "amount": 2500.00,
+        "card": "HDFC Bank ****4567",
+        "timestamp": "2024-12-15T19:30:00Z"
+      },
+      {
+        "type": "payment_due",
+        "description": "Payment overdue for HDFC Bank card",
+        "amount": 45000.00,
+        "card": "HDFC Bank ****4567",
+        "timestamp": "2024-12-05T23:59:59Z"
+      },
+      {
+        "type": "reward_earned",
+        "description": "Reward points earned: Amazon Purchase",
+        "amount": 150,
+        "card": "HDFC Bank ****4567",
+        "timestamp": "2024-12-14T14:20:00Z"
+      }
+    ]
+  }
+}
