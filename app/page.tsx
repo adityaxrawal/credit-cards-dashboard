@@ -1,103 +1,157 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import React, { useState } from "react";
+import { motion } from "framer-motion";
+import Sidebar from "@/components/layout/Sidebar";
+import Topbar from "@/components/layout/Topbar";
+import InventoryDetails from "@/components/dashboard/InventoryDetails";
+import CardList from "@/components/dashboard/CardList";
+import SummaryStats from "@/components/dashboard/SummaryStats";
+import Transactions from "@/components/dashboard/Transactions";
+import DetailsCard from "@/components/dashboard/DetailsCard";
+import { 
+  getSampleCreditCards, 
+  getSampleTransactions, 
+  getSampleDashboardSummary,
+  calculateTotalCreditUtilization,
+  getRecentTransactions,
+  type CreditCard,
+  type Transaction as SampleTransaction
+} from "@/lib/sampleData";
+import './globals.css'
+
+const HomePage: React.FC = () => {
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [selectedCardId, setSelectedCardId] = useState<string>("card_001");
+
+  // Get sample data
+  const creditCards = getSampleCreditCards();
+  const dashboardSummary = getSampleDashboardSummary();
+  const recentTransactions = getRecentTransactions(5);
+  const selectedCard = creditCards.find(card => card.id === selectedCardId) || creditCards[0];
+
+  // Transform sample data for existing components
+  interface Card {
+    id: string;
+    bank_name: string;
+    card_last_4: string;
+    card_holder_name: string;
+    card_type: string;
+  }
+
+  interface Transaction {
+    id: string;
+    description: string;
+    category: string;
+    date: string;
+    amount: number;
+    type: 'credit' | 'debit';
+  }
+
+  interface CardDetails {
+    id: string;
+    bank_name: string;
+    card_number: string;
+    card_holder_name: string;
+    expiry_date: string;
+    cvv: string;
+    level: string;
+  }
+
+  // Transform credit cards for CardList component
+  const cards: Card[] = creditCards.map(card => ({
+    id: card.id,
+    bank_name: card.bank_name,
+    card_last_4: card.card_last_4,
+    card_holder_name: card.card_holder_name,
+    card_type: card.card_type,
+  }));
+
+  // Transform transactions for Transactions component
+  const transactions: Transaction[] = recentTransactions.map(txn => ({
+    id: txn.id,
+    description: txn.description,
+    category: txn.category,
+    date: new Date(txn.transaction_date).toISOString().split('T')[0],
+    amount: txn.amount,
+    type: 'debit' as const, // All sample transactions are expenses
+  }));
+
+  // Transform selected card for DetailsCard component
+  const selectedCardDetails: CardDetails = {
+    id: selectedCard.id,
+    bank_name: selectedCard.bank_name,
+    card_number: `${selectedCard.card_last_4.slice(0, 4)} **** **** ${selectedCard.card_last_4}`,
+    card_holder_name: selectedCard.card_holder_name,
+    expiry_date: "03/28", // Mock expiry date
+    cvv: "***", // Hidden CVV
+    level: "Premium", // Mock level
+  };
+
+  // Calculate current spending for selected card
+  const currentSpending = selectedCard.credit_limit - selectedCard.available_credit;
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+      <div className="min-h-screen bg-gradient-to-br from-cred-dark to-cred-secondary flex flex-col lg:flex-row">
+        {/* Sidebar */}
+        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        {/* Main Content Container */}
+        <div className="flex-1 flex flex-col xl:flex-row min-h-0">
+          {/* Left Column - Main Dashboard */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+            className="flex-1 p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 overflow-y-auto"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+            {/* Topbar */}
+            <Topbar />
+
+            {/* Inventory Details */}
+            <InventoryDetails 
+              balance={dashboardSummary.totalAvailableCredit}
+              cardCount={cards.length}
+              onDetailsClick={() => console.log("Details clicked")}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+            {/* Cards Section */}
+            <CardList 
+              cards={cards}
+              onAddCard={() => console.log("Add card clicked")}
+              onCardClick={(cardId: string) => {
+                setSelectedCardId(cardId);
+                console.log("Card clicked:", cardId);
+              }}
+            />
+
+            {/* Summary Stats */}
+            <SummaryStats 
+              totalEarnings={dashboardSummary.totalRewardPoints}
+              totalSpendings={dashboardSummary.totalCreditLimit - dashboardSummary.totalAvailableCredit}
+              spendingGoal={dashboardSummary.totalCreditLimit * 0.3} // 30% of total limit as goal
+            />
+
+            {/* Transactions */}
+            <Transactions transactions={transactions} />
+          </motion.div>
+
+          {/* Right Column - Details Card */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="w-full xl:w-80 2xl:w-96 p-4 sm:p-6 lg:p-8 xl:border-l xl:border-white/5"
           >
-            Read our docs
-          </a>
+            <DetailsCard 
+              card={selectedCardDetails}
+              currentSpending={currentSpending}
+              spendingLimit={selectedCard.credit_limit}
+            />
+          </motion.div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </div>
   );
-}
+};
+
+export default HomePage;

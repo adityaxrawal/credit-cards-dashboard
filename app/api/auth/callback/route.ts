@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '../../../../lib/supabase/server';
+import { createClient } from '@/backend/lib/supabase/server';
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -43,11 +43,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Determine if this is a new user (created within the last 60 seconds)
-    const isNewUser = profile ? 
+    const newUser = profile ? 
       (new Date().getTime() - new Date(profile.created_at).getTime()) < 60000 : 
       true; // If no profile exists, it's definitely a new user
 
-    if (isNewUser) {
+    if (newUser) {
       console.log('New user detected, redirecting to loading page for initial sync');
       
       // For new users, we'll redirect to a loading page where the initial sync will be triggered
@@ -66,38 +66,4 @@ export async function GET(request: NextRequest) {
     console.error('Unexpected error in auth callback:', error);
     return NextResponse.redirect(`${origin}/login?error=unexpected`);
   }
-}
-
-// Helper function to determine if a user is new based on profile creation time
-function isUserNew(createdAt: string): boolean {
-  const createdTime = new Date(createdAt).getTime();
-  const currentTime = new Date().getTime();
-  const timeDifference = currentTime - createdTime;
-  
-  // Consider user as "new" if created within the last 60 seconds
-  return timeDifference < 60000;
-}
-
-// Type definitions for better error handling
-interface AuthCallbackError {
-  code: string;
-  message: string;
-  details?: unknown;
-}
-
-// Helper function to create standardized error responses
-function createErrorResponse(origin: string, errorType: string, details?: unknown): NextResponse {
-  const errorMap: Record<string, string> = {
-    no_code: 'Authorization code not found',
-    auth_failed: 'Authentication failed',
-    no_user: 'User not found in session',
-    profile_fetch_failed: 'Failed to fetch user profile',
-    unexpected: 'An unexpected error occurred'
-  };
-
-  const errorMessage = errorMap[errorType] || 'Unknown error';
-  
-  console.error(`Auth callback error [${errorType}]:`, errorMessage, details);
-  
-  return NextResponse.redirect(`${origin}/login?error=${errorType}&message=${encodeURIComponent(errorMessage)}`);
 }
