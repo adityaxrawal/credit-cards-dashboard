@@ -1,23 +1,63 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
+import { createClient } from '@/lib/supabase/client';
 import AuthLayout from '@/components/features/auth/AuthLayout';
 import LoginForm from '@/components/features/auth/LoginForm';
 import SocialLogin from '@/components/features/auth/SocialLogin';
 
 export default function LoginPage() {
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
+  const supabase = createClient();
+
   const handleGoogleLogin = async () => {
-    console.log('Google login clicked');
-    // Simulate login
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    window.location.href = '/dashboard';
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/api/auth/callback`
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+      
+      // The redirect will happen automatically
+    } catch (error) {
+      console.error('Google login error:', error);
+      toast.error('Failed to sign in with Google');
+      setIsLoading(false);
+    }
   };
 
   const handleEmailLogin = async (email: string, password: string) => {
-    console.log('Email login:', email);
-    // Simulate login
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    window.location.href = '/dashboard';
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data.user) {
+        toast.success('Successfully signed in!');
+        router.push('/dashboard');
+      }
+    } catch (error) {
+        console.error('Email login error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Invalid email or password';
+        toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -28,7 +68,7 @@ export default function LoginPage() {
       <div className="space-y-6">
         <SocialLogin 
           onGoogleLogin={handleGoogleLogin}
-          isLoading={false}
+          isLoading={isLoading}
         />
         
         <div className="relative">
@@ -44,7 +84,7 @@ export default function LoginPage() {
         
         <LoginForm 
           onSubmit={handleEmailLogin}
-          isLoading={false}
+          isLoading={isLoading}
         />
         
         <div className="text-center">
