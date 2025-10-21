@@ -121,7 +121,7 @@ const Transactions: React.FC<TransactionsProps> = ({ transactions }) => {
                   ? 'text-cred-green' 
                   : 'text-white'
               }`}>
-                {transaction.type === 'credit' ? '+' : '-'}${transaction.amount.toFixed(2)}
+                {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount.toFixed(2)}
               </p>
               <p className="text-xs text-white/40">
                 {transaction.type === 'credit' ? 'Income' : 'Expense'}

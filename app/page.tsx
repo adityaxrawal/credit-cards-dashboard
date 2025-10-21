@@ -9,6 +9,11 @@ import CardList from "@/components/dashboard/CardList";
 import SummaryStats from "@/components/dashboard/SummaryStats";
 import Transactions from "@/components/dashboard/Transactions";
 import DetailsCard from "@/components/dashboard/DetailsCard";
+import SpendingSummary from "@/components/dashboard/SpendingSummary";
+import SpendingChart from "@/components/dashboard/SpendingChart";
+import TransactionTimeline from "@/components/dashboard/TransactionTimeline";
+import CardPerks from "@/components/dashboard/CardPerks";
+import EmptyState from "@/components/ui/EmptyState";
 import { 
   getSampleCreditCards, 
   getSampleTransactions, 
@@ -132,7 +137,19 @@ const HomePage: React.FC = () => {
               spendingGoal={dashboardSummary.totalCreditLimit * 0.3} // 30% of total limit as goal
             />
 
-            {/* Transactions */}
+            {/* Spending Summary */}
+            <SpendingSummary />
+
+            {/* Spending Chart */}
+            <SpendingChart />
+
+            {/* Transaction Timeline */}
+            <TransactionTimeline limit={10} />
+
+            {/* Card Perks */}
+            <CardPerks cardId={selectedCardId} />
+
+            {/* Legacy Transactions (keeping for compatibility) */}
             <Transactions transactions={transactions} />
           </motion.div>
 
