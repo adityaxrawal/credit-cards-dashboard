@@ -19,11 +19,17 @@ import {
   Clock,
   AlertCircle,
   List,
-  GitBranch
+  GitBranch,
+  Plus,
+  Square,
+  CheckSquare
 } from 'lucide-react';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import { getSampleTransactions } from '@/lib/sampleData';
 import type { Transaction } from '@/lib/sampleData';
+import TransactionFilters, { type FilterState } from './TransactionFilters';
+import ManualTransactionForm, { type ManualTransactionData } from './ManualTransactionForm';
+import BulkTransactionActions, { type BulkEditData } from './BulkTransactionActions';
 
 interface MergedTransactionsComponentProps {
   className?: string;
@@ -38,37 +44,130 @@ const MergedTransactionsComponent: React.FC<MergedTransactionsComponentProps> = 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
+  const [selectedTransactions, setSelectedTransactions] = useState<string[]>([]);
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [filters, setFilters] = useState<FilterState>({
+    search: '',
+    categories: [],
+    status: [],
+    dateRange: { start: '', end: '' },
+    amountRange: { min: null, max: null },
+    cards: [],
+    transactionType: []
+  });
 
-  const transactions = getSampleTransactions();
+  const transactions = getSampleTransactions() || [];
   
-  // Filter transactions
+  // Enhanced filtering logic
   const filteredTransactions = transactions
     .filter((transaction: Transaction) => {
-      const matchesSearch = transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          transaction.merchant.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesCategory = selectedCategory === 'all' || transaction.category === selectedCategory;
-      const matchesStatus = selectedStatus === 'all' || transaction.status === selectedStatus;
+      // Basic search
+      const matchesSearch = !filters.search || 
+        transaction.description.toLowerCase().includes(filters.search.toLowerCase()) ||
+        transaction.merchant.toLowerCase().includes(filters.search.toLowerCase());
       
-      return matchesSearch && matchesCategory && matchesStatus;
+      // Category filter
+      const matchesCategory = filters.categories.length === 0 || 
+        filters.categories.includes(transaction.category);
+      
+      // Status filter
+      const matchesStatus = filters.status.length === 0 || 
+        filters.status.includes(transaction.status);
+      
+      // Date range filter
+      const transactionDate = new Date(transaction.transaction_date);
+      const matchesDateRange = (!filters.dateRange.start || transactionDate >= new Date(filters.dateRange.start)) &&
+        (!filters.dateRange.end || transactionDate <= new Date(filters.dateRange.end));
+      
+      // Amount range filter
+      const amount = Math.abs(transaction.amount);
+      const matchesAmountRange = (filters.amountRange.min === null || amount >= filters.amountRange.min) &&
+        (filters.amountRange.max === null || amount <= filters.amountRange.max);
+      
+      // Transaction type filter
+      const transactionType = transaction.amount > 0 ? 'credit' : 'debit';
+      const matchesTransactionType = filters.transactionType.length === 0 || 
+        filters.transactionType.includes(transactionType);
+      
+      return matchesSearch && matchesCategory && matchesStatus && 
+             matchesDateRange && matchesAmountRange && matchesTransactionType;
     })
     .slice(0, limit || 50);
 
   // Get unique categories for filter
   const categories = Array.from(new Set(transactions.map((t: Transaction) => t.category)));
+  
+  // Mock cards data
+  const cards = [
+    { id: '1', name: 'HDFC Regalia', last4: '1234' },
+    { id: '2', name: 'SBI SimplyCLICK', last4: '5678' },
+    { id: '3', name: 'ICICI Amazon Pay', last4: '9012' }
+  ];
+
+  // Selection handlers
+  const handleSelectTransaction = (transactionId: string) => {
+    setSelectedTransactions(prev => 
+      prev.includes(transactionId)
+        ? prev.filter(id => id !== transactionId)
+        : [...prev, transactionId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedTransactions(filteredTransactions.map(t => t.id));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedTransactions([]);
+  };
+
+  // Manual transaction handler
+  const handleManualTransaction = async (data: ManualTransactionData) => {
+    // In a real app, this would make an API call
+    console.log('Adding manual transaction:', data);
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  };
+
+  // Bulk action handler
+  const handleBulkAction = async (action: string, data?: BulkEditData) => {
+    console.log('Bulk action:', action, 'on transactions:', selectedTransactions, 'with data:', data);
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setSelectedTransactions([]);
+  };
+
+  // Export handler
+  const handleExport = (format: 'csv' | 'pdf') => {
+    console.log('Exporting transactions as:', format);
+    // In a real app, this would generate and download the file
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      search: '',
+      categories: [],
+      status: [],
+      dateRange: { start: '', end: '' },
+      amountRange: { min: null, max: null },
+      cards: [],
+      transactionType: []
+    });
+  };
 
   // Category icons mapping
   const getCategoryIcon = (category: string) => {
-    const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-      'Food & Dining': Coffee,
-      'Shopping': ShoppingBag,
-      'Transportation': Car,
-      'Entertainment': Gamepad2,
-      'Bills & Utilities': Home,
-      'Gas': Car,
-      'Groceries': ShoppingBag,
-      'Online': CreditCard
+    const iconMap: Record<string, { icon: React.ComponentType<{ className?: string }>, color: string }> = {
+      'Food & Dining': { icon: Coffee, color: 'bg-orange-500' },
+      'Shopping': { icon: ShoppingBag, color: 'bg-purple-500' },
+      'Transportation': { icon: Car, color: 'bg-blue-500' },
+      'Entertainment': { icon: Gamepad2, color: 'bg-pink-500' },
+      'Bills & Utilities': { icon: Home, color: 'bg-green-500' },
+      'Gas': { icon: Car, color: 'bg-yellow-500' },
+      'Groceries': { icon: ShoppingBag, color: 'bg-emerald-500' },
+      'Online': { icon: CreditCard, color: 'bg-indigo-500' }
     };
-    return iconMap[category] || MoreHorizontal;
+    return iconMap[category] || { icon: MoreHorizontal, color: 'bg-gray-500' };
   };
 
   // Status configuration
@@ -115,101 +214,108 @@ const MergedTransactionsComponent: React.FC<MergedTransactionsComponentProps> = 
   }, {} as Record<string, Transaction[]>);
 
   return (
-    <div className={`glass-card rounded-2xl p-6 shadow-2xl backdrop-blur-sm border border-gray-800 ${className}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-gray-800 rounded-lg">
-            <CreditCard className="w-5 h-5 text-gray-400" />
-          </div>
-          <div>
-            <h3 className="text-xl font-bold text-white">All Transactions</h3>
-            <p className="text-gray-400 text-sm">
-              {filteredTransactions.length} transactions found
-            </p>
-          </div>
-        </div>
-        
-        <div className="flex items-center space-x-2">
-          {/* View Mode Toggle */}
-          <div className="flex bg-gray-800/50 rounded-lg p-1">
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 rounded-md transition-all duration-200 ${
-                viewMode === 'list'
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <List className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('timeline')}
-              className={`p-2 rounded-md transition-all duration-200 ${
-                viewMode === 'timeline'
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <GitBranch className="w-4 h-4" />
-            </button>
+    <div className={`glass-card p-6 ${className}`}>
+      {/* Header with enhanced controls */}
+      <div className="flex flex-col space-y-4 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <h2 className="text-xl font-semibold text-white">
+              Transactions ({filteredTransactions.length})
+            </h2>
+            
+            {/* Bulk Actions */}
+            {selectedTransactions.length > 0 && (
+              <BulkTransactionActions
+                selectedTransactions={selectedTransactions}
+                totalTransactions={filteredTransactions.length}
+                onSelectAll={handleSelectAll}
+                onDeselectAll={handleDeselectAll}
+                onBulkAction={handleBulkAction}
+              />
+            )}
           </div>
           
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="p-2 bg-gray-800/50 rounded-lg text-gray-400 hover:text-white transition-colors"
-          >
-            <Calendar className="w-4 h-4" />
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="p-2 bg-gray-800/50 rounded-lg text-gray-400 hover:text-white transition-colors"
-          >
-            <Filter className="w-4 h-4" />
-          </motion.button>
+          <div className="flex items-center space-x-2">
+            {/* Manual Transaction Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setShowManualForm(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Transaction</span>
+            </motion.button>
+            
+            {/* View Mode Toggle */}
+            <div className="flex bg-gray-800 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`flex items-center space-x-2 px-3 py-2 rounded-md transition-colors ${
+                  viewMode === 'list' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <List className="w-4 h-4" />
+                <span>List</span>
+              </button>
+              <button
+                onClick={() => setViewMode('timeline')}
+                className={`flex items-center space-x-2 px-3 py-2 rounded-md transition-colors ${
+                  viewMode === 'timeline' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <GitBranch className="w-4 h-4" />
+                <span>Timeline</span>
+              </button>
+            </div>
+          </div>
         </div>
+
+        {/* Advanced Filters */}
+        <TransactionFilters
+          filters={filters}
+          onFiltersChange={setFilters}
+          categories={categories}
+          cards={cards}
+          onExport={handleExport}
+          onClearFilters={clearFilters}
+        />
       </div>
 
-      {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        {/* Search */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search transactions..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
-          />
-        </div>
+      {/* Manual Transaction Form Modal */}
+      <AnimatePresence>
+        {showManualForm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            onClick={() => setShowManualForm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-gray-900 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ManualTransactionForm
+                isOpen={true}
+                onClose={() => setShowManualForm(false)}
+                onSubmit={handleManualTransaction}
+                categories={categories}
+                cards={cards}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* Category Filter */}
-        <select
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          className="bg-gray-800/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-        >
-          <option value="all">All Categories</option>
-          {categories.map(category => (
-            <option key={category} value={category}>{category}</option>
-          ))}
-        </select>
 
-        {/* Status Filter */}
-        <select
-          value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value)}
-          className="bg-gray-800/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-        >
-          <option value="all">All Status</option>
-          <option value="completed">Completed</option>
-          <option value="pending">Pending</option>
-          <option value="failed">Failed</option>
-        </select>
-      </div>
 
       {/* Content */}
       <AnimatePresence mode="wait">
@@ -223,7 +329,8 @@ const MergedTransactionsComponent: React.FC<MergedTransactionsComponentProps> = 
             className="space-y-3"
           >
             {filteredTransactions.map((transaction, index) => {
-              const CategoryIcon = getCategoryIcon(transaction.category);
+                const categoryConfig = getCategoryIcon(transaction.category);
+                const CategoryIcon = categoryConfig.icon;
               const statusConfig = getStatusConfig(transaction.status);
               const StatusIcon = statusConfig.icon;
               const isCredit = transaction.amount < 0; // Negative amounts are credits/income
@@ -300,7 +407,8 @@ const MergedTransactionsComponent: React.FC<MergedTransactionsComponentProps> = 
                 {/* Transactions for this date */}
                 <div className="ml-6 space-y-3">
                   {dayTransactions.map((transaction, index) => {
-                    const CategoryIcon = getCategoryIcon(transaction.category);
+                    const categoryConfig = getCategoryIcon(transaction.category);
+                const CategoryIcon = categoryConfig.icon;
                     const statusConfig = getStatusConfig(transaction.status);
                     const StatusIcon = statusConfig.icon;
                     const isCredit = transaction.amount < 0;
@@ -363,6 +471,101 @@ const MergedTransactionsComponent: React.FC<MergedTransactionsComponentProps> = 
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Transaction List */}
+      <div className="space-y-3">
+        <AnimatePresence>
+          {filteredTransactions.map((transaction: Transaction, index: number) => {
+            const isSelected = selectedTransactions.includes(transaction.id);
+            
+            return (
+              <motion.div
+                key={transaction.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ delay: index * 0.05 }}
+                className={`group relative bg-gray-800/30 backdrop-blur-sm rounded-xl p-4 border border-gray-700/50 hover:border-gray-600/50 transition-all duration-200 ${
+                  isSelected ? 'ring-2 ring-blue-500 bg-blue-900/20' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    {/* Selection Checkbox */}
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => handleSelectTransaction(transaction.id)}
+                      className="text-gray-400 hover:text-white transition-colors"
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-5 h-5 text-blue-500" />
+                      ) : (
+                        <Square className="w-5 h-5" />
+                      )}
+                    </motion.button>
+
+                    {/* Transaction Icon */}
+                    <div className={`p-2 rounded-lg ${getCategoryIcon(transaction.category).color}`}>
+                      {React.createElement(getCategoryIcon(transaction.category).icon, {
+                        className: `w-5 h-5 text-white`
+                      })}
+                    </div>
+
+                    {/* Transaction Details */}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-medium text-white group-hover:text-blue-300 transition-colors">
+                          {transaction.description}
+                        </h4>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusConfig(transaction.status).color}`}>
+                          {transaction.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-gray-400">
+                        <span>{transaction.merchant}</span>
+                        <span>•</span>
+                        <span>{transaction.category}</span>
+                        <span>•</span>
+                        <span>{formatDate(transaction.transaction_date)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Amount and Actions */}
+                  <div className="flex items-center space-x-3">
+                    <div className="text-right">
+                      <div className={`font-semibold ${transaction.amount > 0 ? 'text-green-400' : 'text-white'}`}>
+                        {transaction.amount > 0 ? '+' : ''}{formatCurrency(transaction.amount)}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        Card ending in ****
+                      </div>
+                    </div>
+
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      className="p-2 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg transition-all"
+                    >
+                      <MoreHorizontal className="w-4 h-4" />
+                    </motion.button>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+
+        {filteredTransactions.length === 0 && (
+          <div className="text-center py-12">
+            <div className="text-gray-400 mb-2">No transactions found</div>
+            <div className="text-sm text-gray-500">
+              Try adjusting your filters or search terms
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Empty State */}
       {filteredTransactions.length === 0 && (

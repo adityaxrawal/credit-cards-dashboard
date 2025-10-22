@@ -9,7 +9,7 @@ import { getSampleTransactions, getRecentTransactions } from "@/lib/sampleData";
 import "../globals.css";
 
 const TransactionsPage: React.FC = () => {
-  const allTransactions = getSampleTransactions();
+  const allTransactions = getSampleTransactions() || [];
   
   // Transform transactions for Transactions component
   const transformedTransactions = allTransactions.slice(0, 20).map(t => ({

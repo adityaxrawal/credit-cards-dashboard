@@ -276,7 +276,7 @@ const SpendingSummary = React.memo<SpendingSummaryProps>(({ className = '' }) =>
                         alertLevel === 'critical' ? 'text-red-400' : 
                         alertLevel === 'warning' ? 'text-yellow-400' : 'text-gray-300'
                       }`}>
-                        {percentage.toFixed(1)}%
+                        {(percentage || 0).toFixed(1)}%
                       </span>
                       <span className="text-gray-400">100%</span>
                     </div>

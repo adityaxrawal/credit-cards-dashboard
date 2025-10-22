@@ -261,7 +261,7 @@ const CreditCard: React.FC<CreditCardProps> = ({
           >
             <div className="flex justify-between text-xs text-white/60 mb-2">
               <span>Credit Used</span>
-              <span>{getCreditUtilization().toFixed(1)}%</span>
+              <span>{(getCreditUtilization() || 0).toFixed(1)}%</span>
             </div>
             <div className="bg-white/20 h-2 rounded-full overflow-hidden">
               <motion.div

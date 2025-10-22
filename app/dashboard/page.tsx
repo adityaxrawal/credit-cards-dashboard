@@ -8,11 +8,15 @@ import Topbar from '@/components/shared/navigation/Topbar';
 import SpendingLimits from '@/components/features/dashboard/SpendingLimits';
 import SummaryStats from '@/components/features/dashboard/SummaryStats';
 import CardList from '@/components/features/dashboard/CardList';
-import { TrendingUp, Calendar, Activity, Target } from 'lucide-react';
+import { TrendingUp, Calendar, Activity, Target, BarChart3, PieChart, TrendingDown, Calendar as CalendarIcon } from 'lucide-react';
 import { 
   getSampleCreditCards, 
   getSampleDashboardSummary,
 } from "@/lib/sampleData";
+import SpendingTrends from '@/components/analytics/SpendingTrends';
+import CategoryBreakdown from '@/components/analytics/CategoryBreakdown';
+import BudgetComparison from '@/components/analytics/BudgetComparison';
+import SpendingHeatmap from '@/components/analytics/SpendingHeatmap';
 import '../globals.css'
 
 const DashboardPage: React.FC = () => {
@@ -221,7 +225,57 @@ const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Bottom Section - Additional Insights */}
+          {/* Bottom Section - Analytics Dashboard */}
+          <motion.div variants={itemVariants} className="mt-12">
+            <div className="mb-6">
+              <h3 className="text-2xl font-semibold text-white mb-2">Analytics Dashboard</h3>
+              <p className="text-white/60">Detailed insights into your spending patterns and financial trends</p>
+            </div>
+            
+            {/* Analytics Grid */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
+              {/* Spending Trends */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <BarChart3 className="text-accent-mint" size={20} />
+                  <h4 className="text-lg font-semibold text-white">Spending Trends</h4>
+                </div>
+                <SpendingTrends />
+              </div>
+
+              {/* Category Breakdown */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <PieChart className="text-accent-purple" size={20} />
+                  <h4 className="text-lg font-semibold text-white">Category Breakdown</h4>
+                </div>
+                <CategoryBreakdown />
+              </div>
+            </div>
+
+            {/* Budget Comparison and Spending Heatmap */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+              {/* Budget Comparison */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <TrendingDown className="text-blue-400" size={20} />
+                  <h4 className="text-lg font-semibold text-white">Budget vs Actual</h4>
+                </div>
+                <BudgetComparison />
+              </div>
+
+              {/* Spending Heatmap */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <CalendarIcon className="text-orange-400" size={20} />
+                  <h4 className="text-lg font-semibold text-white">Spending Heatmap</h4>
+                </div>
+                <SpendingHeatmap />
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Additional Insights Section */}
           <motion.div variants={itemVariants} className="mt-12">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Recent Activity Preview */}

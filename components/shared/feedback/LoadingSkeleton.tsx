@@ -163,13 +163,17 @@ const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({
             >
               <div className="h-6 bg-gradient-to-r from-white/20 to-white/10 rounded w-1/3 mb-6"></div>
               <div className="flex items-end space-x-2 h-32">
-                {[...Array(8)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="bg-gradient-to-t from-white/20 to-white/10 rounded-t flex-1"
-                    style={{ height: `${Math.random() * 80 + 20}%` }}
-                  ></div>
-                ))}
+                {[...Array(8)].map((_, i) => {
+                  // Use deterministic heights to avoid hydration mismatch
+                  const heights = [85, 65, 90, 45, 75, 55, 95, 70];
+                  return (
+                    <div
+                      key={i}
+                      className="bg-gradient-to-t from-white/20 to-white/10 rounded-t flex-1"
+                      style={{ height: `${heights[i]}%` }}
+                    ></div>
+                  );
+                })}
               </div>
             </motion.div>
           </SkeletonBase>
