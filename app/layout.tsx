@@ -61,6 +61,8 @@ export default function RootLayout({
                 },
               }}
             />
+            {/* Portal root for overlays */}
+            <div id="portal-root" className="fixed inset-0 pointer-events-none z-[10000]" />
           </ErrorBoundary>
         </LoadingProvider>
       </body>

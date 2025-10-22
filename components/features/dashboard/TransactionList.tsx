@@ -1,7 +1,10 @@
 'use client';
 
+import React, { useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowUpRight, ArrowDownLeft, MoreHorizontal } from 'lucide-react';
+import { Card } from '@/components/shared/ui';
+import { formatCurrency } from '@/lib/utils';
 
 interface Transaction {
   id: string;
@@ -19,22 +22,22 @@ interface TransactionListProps {
   showAll?: boolean;
 }
 
-const TransactionList: React.FC<TransactionListProps> = ({
+const TransactionList = React.memo<TransactionListProps>(({
   transactions,
   title = 'Transactions',
   showAll = false,
 }) => {
-  const getTransactionIcon = (type: string) => {
+  const getTransactionIcon = useCallback((type: string) => {
     return type === 'credit' ? ArrowDownLeft : ArrowUpRight;
-  };
+  }, []);
 
-  const getTransactionColor = (type: string) => {
+  const getTransactionColor = useCallback((type: string) => {
     return type === 'credit' 
       ? 'text-green-600 dark:text-green-400' 
       : 'text-red-600 dark:text-red-400';
-  };
+  }, []);
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = useCallback((status: string) => {
     switch (status) {
       case 'completed':
         return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
@@ -45,7 +48,9 @@ const TransactionList: React.FC<TransactionListProps> = ({
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
     }
-  };
+  }, []);
+
+  const memoizedTransactions = useMemo(() => transactions, [transactions]);
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
@@ -61,7 +66,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
       </div>
 
       <div className="space-y-4">
-        {transactions.map((transaction, index) => {
+        {memoizedTransactions.map((transaction, index) => {
           const Icon = getTransactionIcon(transaction.type);
           
           return (
@@ -97,7 +102,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
               
               <div className="flex items-center space-x-2">
                 <span className={`font-semibold ${getTransactionColor(transaction.type)}`}>
-                  {transaction.type === 'credit' ? '+' : '-'}${Math.abs(transaction.amount).toFixed(2)}
+                  {transaction.type === 'credit' ? '+' : '-'}{formatCurrency(Math.abs(transaction.amount))}
                 </span>
                 <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">
                   <MoreHorizontal className="h-4 w-4 text-gray-400" />
@@ -115,6 +120,8 @@ const TransactionList: React.FC<TransactionListProps> = ({
       )}
     </div>
   );
-};
+});
+
+TransactionList.displayName = 'TransactionList';
 
 export default TransactionList;

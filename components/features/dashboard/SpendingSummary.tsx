@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
   TrendingUp, 
@@ -23,35 +23,37 @@ import {
   type DashboardSummary,
   type SpendingLimit 
 } from '@/lib/sampleData';
+import { Card } from '@/components/shared/ui';
+import { formatCurrency } from '@/lib/utils';
 
 interface SpendingSummaryProps {
   className?: string;
 }
 
-const SpendingSummary: React.FC<SpendingSummaryProps> = ({ className = '' }) => {
+const SpendingSummary = React.memo<SpendingSummaryProps>(({ className = '' }) => {
   const [dashboardData, setDashboardData] = useState<DashboardSummary | null>(null);
   const [spendingLimits, setSpendingLimits] = useState<SpendingLimit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Simulate data fetching
-    const fetchData = async () => {
-      setIsLoading(true);
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const summary = getSampleDashboardSummary();
-      const limits = getSampleSpendingLimits();
-      const cards = getSampleCreditCards();
-      
-      setDashboardData(summary);
-      setSpendingLimits(limits);
-      setIsLoading(false);
-    };
-
-    fetchData();
+  // Memoized data fetching function
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    const summary = getSampleDashboardSummary();
+    const limits = getSampleSpendingLimits();
+    const cards = getSampleCreditCards();
+    
+    setDashboardData(summary);
+    setSpendingLimits(limits);
+    setIsLoading(false);
   }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const getCategoryIcon = (category: string) => {
     const icons: { [key: string]: React.ComponentType<{ className?: string }> } = {
@@ -287,6 +289,8 @@ const SpendingSummary: React.FC<SpendingSummaryProps> = ({ className = '' }) => 
       </motion.div>
     </div>
   );
-};
+});
+
+SpendingSummary.displayName = 'SpendingSummary';
 
 export default SpendingSummary;

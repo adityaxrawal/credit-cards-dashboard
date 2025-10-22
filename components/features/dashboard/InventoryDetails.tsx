@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, MoreHorizontal, Calendar } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { formatCurrency } from "@/lib/utils";
 
 interface InventoryDetailsProps {
   balance: number;
@@ -11,11 +12,16 @@ interface InventoryDetailsProps {
   onDetailsClick?: () => void;
 }
 
-const InventoryDetails: React.FC<InventoryDetailsProps> = ({
+const InventoryDetails = React.memo<InventoryDetailsProps>(({
   balance,
   cardCount,
   onDetailsClick,
 }) => {
+  const formattedBalance = useMemo(() => formatCurrency(balance), [balance]);
+  
+  const handleDetailsClick = useCallback(() => {
+    onDetailsClick?.();
+  }, [onDetailsClick]);
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -44,7 +50,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
           <div className="flex-1">
             <p className="text-gray-600 text-sm mb-2">Your balance:</p>
             <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-1">
-              ₹{balance.toLocaleString()}
+              {formattedBalance}
             </h3>
             <p className="text-gray-700 text-sm font-medium">
               {cardCount} CARD{cardCount !== 1 ? "S" : ""}
@@ -55,7 +61,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
             <Button
               variant="outline"
               size="sm"
-              onClick={onDetailsClick}
+              onClick={handleDetailsClick}
               className="flex items-center space-x-2 border-gray-700/30 text-gray-800 hover:bg-gray-800/10 bg-white/20 px-4 py-2 rounded-xl backdrop-blur-sm"
             >
               <span className="text-sm font-medium">Details</span>
@@ -78,6 +84,8 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
       </div>
     </motion.div>
   );
-};
+});
+
+InventoryDetails.displayName = 'InventoryDetails';
 
 export default InventoryDetails;

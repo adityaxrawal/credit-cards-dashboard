@@ -15,6 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useLoading } from "@/contexts/LoadingContext";
+import Portal from "@/components/shared/ui/Portal";
 
 interface SidebarProps {
   activeTab?: string;
@@ -87,6 +88,37 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  // Tooltip overlay state and refs
+  const [hoveredId, setHoveredId] = React.useState<string | null>(null);
+  const [tooltipPos, setTooltipPos] = React.useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const buttonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
+  const profileRef = React.useRef<HTMLDivElement | null>(null);
+
+  const hoveredLabel = React.useMemo(() => {
+    if (!hoveredId) return "";
+    if (hoveredId === "profile") return "Profile";
+    return menuItems.find((m) => m.id === hoveredId)?.label || "";
+  }, [hoveredId]);
+
+  React.useEffect(() => {
+    if (!hoveredId) return;
+
+    const getEl = () => (hoveredId === "profile" ? profileRef.current : buttonRefs.current[hoveredId]);
+    const update = () => {
+      const rect = getEl()?.getBoundingClientRect();
+      if (!rect) return;
+      setTooltipPos({ top: rect.top + rect.height / 2, left: rect.right + 12 });
+    };
+
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [hoveredId]);
+
   return (
     <motion.div
       initial={{ x: -100, opacity: 0 }}
@@ -114,6 +146,11 @@ const Sidebar: React.FC<SidebarProps> = ({
           return (
             <motion.button
               key={item.id}
+              ref={(el) => { buttonRefs.current[item.id] = el; }}
+              onMouseEnter={() => setHoveredId(item.id)}
+              onMouseLeave={() => setHoveredId(null)}
+              onFocus={() => setHoveredId(item.id)}
+              onBlur={() => setHoveredId(null)}
               onClick={() => handleNavigation(item)}
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
@@ -126,6 +163,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     : "text-white/60 hover:bg-white/5 hover:text-white"
                 }
               `}
+              aria-label={item.label}
             >
               <Icon size={18} className="lg:w-5 lg:h-5 xl:w-6 xl:h-6" />
 
@@ -137,12 +175,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                   transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                 />
               )}
-
-              {/* Tooltip */}
-              <div className="absolute left-full ml-4 px-3 py-2 bg-cred-secondary rounded-lg text-sm text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-[9999]">
-                {item.label}
-                <div className="absolute right-full top-1/2 transform -translate-y-1/2 border-4 border-transparent border-r-cred-secondary"></div>
-              </div>
             </motion.button>
           );
         })}
@@ -150,17 +182,33 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* User Profile */}
       <motion.div
+        ref={profileRef}
+        onMouseEnter={() => setHoveredId("profile")}
+        onMouseLeave={() => setHoveredId(null)}
+        onFocus={() => setHoveredId("profile")}
+        onBlur={() => setHoveredId(null)}
         whileHover={{ scale: 1.05 }}
         className="w-10 h-10 lg:w-12 lg:h-12 xl:w-14 xl:h-14 rounded-2xl bg-gradient-to-br from-cred-purple to-cred-pink flex items-center justify-center cursor-pointer shadow-lg group relative"
+        aria-label="Profile"
       >
         <User size={18} className="lg:w-5 lg:h-5 xl:w-6 xl:h-6 text-white" />
-
-        {/* Profile Tooltip */}
-        <div className="absolute left-full ml-4 px-3 py-2 bg-cred-secondary rounded-lg text-sm text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-[9999]">
-          Profile
-          <div className="absolute right-full top-1/2 transform -translate-y-1/2 border-4 border-transparent border-r-cred-secondary"></div>
-        </div>
       </motion.div>
+
+      {/* Tooltip Overlay via Portal */}
+      {hoveredId && hoveredLabel && (
+        <Portal>
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            className="fixed transform -translate-y-1/2 px-3 py-2 bg-cred-secondary rounded-lg text-sm text-white pointer-events-none whitespace-nowrap shadow-xl z-[10000]"
+            style={{ top: tooltipPos.top, left: tooltipPos.left }}
+          >
+            {hoveredLabel}
+            <div className="absolute right-full top-1/2 transform -translate-y-1/2 border-4 border-transparent border-r-cred-secondary"></div>
+          </motion.div>
+        </Portal>
+      )}
     </motion.div>
   );
 };
