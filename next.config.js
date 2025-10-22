@@ -2,7 +2,8 @@
 const nextConfig = {
   experimental: {
     serverActions: {
-      allowedOrigins: ['localhost:3000'],
+      // Allow both common localhost dev ports
+      allowedOrigins: ['localhost:3000', 'localhost:3001'],
     },
   },
   images: {

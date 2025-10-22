@@ -47,7 +47,8 @@ const StatementsPage: React.FC = () => {
                 <div key={month} className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
                   <div>
                     <p className="text-white font-medium">Statement - {new Date(2024, month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
-                    <p className="text-white/60 text-sm">Generated on {new Date(2024, month, 1).toLocaleDateString()}</p>
+-                    <p className="text-white/60 text-sm">Generated on {new Date(2024, month, 1).toLocaleDateString('en-US', { timeZone: 'UTC' })}</p>
++                    <p className="text-white/60 text-sm">Generated on {new Date(2024, month, 1).toISOString().slice(0, 10)}</p>
                   </div>
                   <button className="px-4 py-2 bg-gradient-to-r from-cred-purple to-cred-pink rounded-lg text-white text-sm font-medium hover:opacity-90 transition-opacity">
                     Download

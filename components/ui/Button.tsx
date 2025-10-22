@@ -1,34 +1,33 @@
 "use client";
 
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, HTMLMotionProps } from 'framer-motion';
 import { theme } from '@/lib/theme';
+import { cn } from '@/lib/utils';
 
-export interface ButtonProps {
+export interface ButtonProps extends Omit<HTMLMotionProps<'button'>, 'children'> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'success' | 'error';
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   loading?: boolean;
   disabled?: boolean;
-  onClick?: () => void;
   children: React.ReactNode;
-  className?: string;
   fullWidth?: boolean;
   icon?: React.ReactNode;
   iconPosition?: 'left' | 'right';
 }
 
-const Button: React.FC<ButtonProps> = ({
+const Button = React.memo(React.forwardRef<HTMLButtonElement, ButtonProps>(({
   variant = 'primary',
   size = 'md',
   loading = false,
   disabled = false,
-  onClick,
   children,
-  className = '',
+  className,
   fullWidth = false,
   icon,
   iconPosition = 'left',
-}) => {
+  ...props
+}, ref) => {
   const baseClasses = 'inline-flex items-center justify-center font-medium rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent backdrop-filter backdrop-blur-sm';
   
   const variantClasses = {
@@ -77,19 +76,23 @@ const Button: React.FC<ButtonProps> = ({
 
   return (
     <motion.button
+      ref={ref}
       whileHover={!isDisabled ? { scale: 1.02, y: -1 } : {}}
       whileTap={!isDisabled ? { scale: 0.98 } : {}}
       transition={{ type: "spring", stiffness: 400, damping: 17 }}
-      className={`
-        ${baseClasses}
-        ${variantClasses[variant]}
-        ${sizeClasses[size]}
-        ${fullWidth ? 'w-full' : ''}
-        ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-        ${className}
-      `}
-      onClick={!isDisabled ? onClick : undefined}
+      className={cn(
+        baseClasses,
+        variantClasses[variant],
+        sizeClasses[size],
+        {
+          'w-full': fullWidth,
+          'opacity-50 cursor-not-allowed': isDisabled,
+          'cursor-pointer': !isDisabled,
+        },
+        className
+      )}
       disabled={isDisabled}
+      {...props}
     >
       {loading && <LoadingSpinner />}
       {!loading && icon && iconPosition === 'left' && icon}
@@ -97,6 +100,8 @@ const Button: React.FC<ButtonProps> = ({
       {!loading && icon && iconPosition === 'right' && icon}
     </motion.button>
   );
-};
+}));
+
+Button.displayName = 'Button';
 
 export default Button;

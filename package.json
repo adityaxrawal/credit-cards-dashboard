@@ -16,6 +16,7 @@
     "@upstash/qstash": "^2.8.4",
     "@upstash/redis": "^1.35.6",
     "autoprefixer": "^10.4.21",
+    "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "framer-motion": "^12.23.24",
@@ -26,6 +27,7 @@
     "react-dom": "19.1.0",
     "react-hot-toast": "^2.6.0",
     "recharts": "^3.3.0",
+    "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.1.15",
     "uuid": "^13.0.0"
   },

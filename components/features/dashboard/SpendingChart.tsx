@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart,
@@ -23,6 +23,8 @@ import {
   Filter
 } from 'lucide-react';
 import Button from '@/components/ui/Button';
+import { Card } from '@/components/shared/ui';
+import { formatCurrency } from '@/lib/utils';
 
 interface SpendingData {
   category: string;
@@ -63,31 +65,43 @@ interface SpendingChartProps {
   className?: string;
 }
 
-const SpendingChart: React.FC<SpendingChartProps> = ({ className = '' }) => {
+const SpendingChart = React.memo<SpendingChartProps>(({ className = '' }) => {
   const [chartType, setChartType] = useState<'bar' | 'pie'>('bar');
   const [timeRange, setTimeRange] = useState<'month' | 'quarter' | 'year'>('month');
 
-  // Sample spending data by category
-  const categoryData: SpendingData[] = [
+  // Sample spending data by category - memoized for performance
+  const categoryData: SpendingData[] = useMemo(() => [
     { category: 'Food & Dining', amount: 1250, percentage: 35, color: '#4ECDC4', transactions: 24 },
     { category: 'Shopping', amount: 890, percentage: 25, color: '#A855F7', transactions: 18 },
     { category: 'Transportation', amount: 540, percentage: 15, color: '#10B981', transactions: 12 },
     { category: 'Entertainment', amount: 430, percentage: 12, color: '#F97316', transactions: 8 },
     { category: 'Bills & Utilities', amount: 320, percentage: 9, color: '#EF4444', transactions: 6 },
     { category: 'Others', amount: 140, percentage: 4, color: '#6B7280', transactions: 5 }
-  ];
+  ], []);
 
-  // Sample monthly spending data
-  const monthlyData: MonthlyData[] = [
+  // Sample monthly spending data - memoized for performance
+  const monthlyData: MonthlyData[] = useMemo(() => [
     { month: 'Jan', spending: 3200, budget: 4000 },
     { month: 'Feb', spending: 2800, budget: 4000 },
     { month: 'Mar', spending: 3600, budget: 4000 },
     { month: 'Apr', spending: 3100, budget: 4000 },
     { month: 'May', spending: 3570, budget: 4000 },
     { month: 'Jun', spending: 3850, budget: 4000 }
-  ];
+  ], []);
 
-  const totalSpending = categoryData.reduce((sum, item) => sum + item.amount, 0);
+  const totalSpending = useMemo(() => 
+    categoryData.reduce((sum, item) => sum + item.amount, 0), 
+    [categoryData]
+  );
+
+  // Memoized event handlers
+  const handleChartTypeChange = useCallback((type: 'bar' | 'pie') => {
+    setChartType(type);
+  }, []);
+
+  const handleTimeRangeChange = useCallback((range: 'month' | 'quarter' | 'year') => {
+    setTimeRange(range);
+  }, []);
 
   // Custom tooltip for charts
   const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
@@ -107,8 +121,8 @@ const SpendingChart: React.FC<SpendingChartProps> = ({ className = '' }) => {
   };
 
   // Custom label for pie chart
-  const renderCustomLabel = (props: any) => {
-    const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
+  const renderCustomLabel = (props: unknown) => {
+    const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props as PieLabelProps;
     if (percent < 0.05) return null; // Don't show labels for slices smaller than 5%
     
     const RADIAN = Math.PI / 180;
@@ -311,7 +325,7 @@ const SpendingChart: React.FC<SpendingChartProps> = ({ className = '' }) => {
       {/* Action Buttons */}
       <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-700/50">
         <div className="text-sm text-gray-400">
-          Last updated: {new Date().toLocaleDateString()}
+          Last updated: {new Date().toLocaleDateString('en-US', { timeZone: 'UTC' })}
         </div>
         <div className="flex space-x-3">
           <Button
@@ -332,6 +346,8 @@ const SpendingChart: React.FC<SpendingChartProps> = ({ className = '' }) => {
       </div>
     </div>
   );
-};
+});
+
+SpendingChart.displayName = 'SpendingChart';
 
 export default SpendingChart;
