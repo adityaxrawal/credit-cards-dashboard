@@ -4,6 +4,7 @@ import { gmailClient } from '@/lib/services/gmail-client';
 import { EmailParserService, ParsedEmail } from '@/lib/services/email-parser';
 import { createClient } from '@/src/backend/lib/supabase/server';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { sseManager } from '@/lib/sse/manager';
 
 interface InitialSyncRequest {
   jobId: string;
@@ -27,6 +28,13 @@ export async function POST(request: NextRequest) {
       message: 'Starting initial email sync...',
     });
 
+    // Send SSE progress update
+    await sseManager.sendToUser(userId, 'progress', {
+      process: 'process-1',
+      progress: 0,
+      message: 'Starting email sync...'
+    });
+
     const supabase = await createClient();
     const emailParser = new EmailParserService();
     const yearsBack = data.yearsBack || 2;
@@ -37,12 +45,26 @@ export async function POST(request: NextRequest) {
       message: 'Fetching historical emails from Gmail...',
     });
 
+    // Send SSE progress update
+    await sseManager.sendToUser(userId, 'progress', {
+      process: 'process-1',
+      progress: 10,
+      message: 'Fetching emails...'
+    });
+
     // Fetch historical emails
     const messages = await gmailClient.fetchHistoricalEmails(userId, yearsBack);
     
     await jobQueue.updateJob(jobId, {
       progress: 30,
       message: `Found ${messages.length} emails. Starting to parse...`,
+    });
+
+    // Send SSE progress update
+    await sseManager.sendToUser(userId, 'progress', {
+      process: 'process-1',
+      progress: 30,
+      message: `Found ${messages.length} emails, parsing...`
     });
 
     let processedCount = 0;
@@ -118,6 +140,13 @@ export async function POST(request: NextRequest) {
         progress,
         message: `Processed ${processedCount}/${messages.length} emails. Found ${transactionCount} transactions, ${statementCount} statements.`,
       });
+
+      // Send SSE progress update
+      await sseManager.sendToUser(userId, 'progress', {
+        process: 'process-1',
+        progress,
+        message: `Processed ${processedCount}/${messages.length} emails`
+      });
     }
 
     // Complete the job
@@ -126,6 +155,13 @@ export async function POST(request: NextRequest) {
       progress: 100,
       completedAt: new Date(),
       message: `Initial sync completed. Processed ${processedCount} emails, found ${transactionCount} transactions and ${statementCount} statements.`,
+    });
+
+    // Send final SSE progress update
+    await sseManager.sendToUser(userId, 'progress', {
+      process: 'process-1',
+      progress: 100,
+      message: `✅ Found ${transactionCount} cards, ${transactionCount} transactions`
     });
 
     return NextResponse.json({
