@@ -8,10 +8,21 @@ import TransactionList from './TransactionList';
 import SpendingChart from './SpendingChart';
 import QuickActions from './QuickActions';
 import StatCard from './StatCard';
-import { mockCards, mockTransactions } from '@/data/mockData';
+import { sampleData } from '@/data/mockData';
 
 export function DashboardPage() {
-  const [selectedCard, setSelectedCard] = useState(mockCards[0]);
+  const [selectedCard, setSelectedCard] = useState(sampleData.creditCards[0]);
+
+  // Transform current transactions to match TransactionList interface
+  const transformedTransactions = sampleData.currentTransactions.map(tx => ({
+    id: tx.id,
+    merchant: tx.merchant,
+    amount: tx.amount,
+    date: tx.transaction_date,
+    category: tx.category,
+    type: 'debit' as const, // Assuming all are debit transactions for now
+    status: tx.status as 'completed' | 'pending' | 'failed'
+  }));
 
   const stats = [
     {
@@ -86,7 +97,7 @@ export function DashboardPage() {
               Your Cards
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {mockCards.map((card, index) => (
+              {sampleData.creditCards.map((card, index) => (
                 <CreditCardComponent
                   key={card.id}
                   card={card}
@@ -124,7 +135,7 @@ export function DashboardPage() {
             transition={{ duration: 0.5, delay: 0.5 }}
           >
             <TransactionList
-              transactions={mockTransactions.slice(0, 5)}
+              transactions={transformedTransactions.slice(0, 5)}
               title="Recent Transactions"
             />
           </motion.div>

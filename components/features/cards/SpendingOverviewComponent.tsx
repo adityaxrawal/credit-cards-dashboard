@@ -41,7 +41,7 @@ const SpendingOverviewComponent: React.FC<SpendingOverviewComponentProps> = ({
                   {formatCurrency(category.amount)}
                 </div>
                 <div className="text-xs text-text-secondary">
-                  {category.percentage.toFixed(1)}%
+                  {(category.percentage || 0).toFixed(1)}%
                 </div>
               </div>
             </div>

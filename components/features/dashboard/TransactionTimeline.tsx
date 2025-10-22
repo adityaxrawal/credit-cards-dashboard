@@ -36,7 +36,7 @@ const TransactionTimeline: React.FC<TransactionTimelineProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
 
-  const transactions = getSampleTransactions();
+  const transactions = getSampleTransactions() || [];
   
   // Filter transactions
   const filteredTransactions = transactions

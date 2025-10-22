@@ -140,7 +140,7 @@ const SpendingChart = React.memo<SpendingChartProps>(({ className = '' }) => {
         fontSize={12}
         fontWeight="500"
       >
-        {`${(percent * 100).toFixed(0)}%`}
+        {`${((percent || 0) * 100).toFixed(0)}%`}
       </text>
     );
   };

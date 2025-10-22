@@ -2,6 +2,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
 export async function middleware(request: NextRequest) {
+  // Skip middleware for Vite client requests (development only)
+  if (request.nextUrl.pathname.startsWith('/@vite/')) {
+    return NextResponse.next();
+  }
+
   const response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -30,7 +35,8 @@ export async function middleware(request: NextRequest) {
   try {
     const { data: { user }, error } = await supabase.auth.getUser();
     
-    if (error) {
+    // Only log errors that are not AuthSessionMissingError
+    if (error && error.message !== 'Auth session missing!') {
       console.error('Error getting user in middleware:', error);
     }
 
@@ -54,9 +60,10 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - Static assets (svg, png, jpg, jpeg, gif, webp, ico)
+     * - @vite/ (Vite development client)
+     * Also exclude files with extensions
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|@vite/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };
 
