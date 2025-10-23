@@ -1,14 +1,23 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+"use client";
 
-export default async function HomePage() {
-  const supabase = await createClient()
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { DashboardPage } from '@/components/features/dashboard/DashboardPage';
 
-  const { data: { user } } = await supabase.auth.getUser()
+export default function HomePage() {
+  const router = useRouter();
 
-  if (!user) {
-    redirect('/login')
-  }
+  useEffect(() => {
+    // Redirect to dashboard by default
+    router.push('/dashboard');
+  }, [router]);
 
-  redirect('/dashboard')
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+      <div className="text-white text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+        <p>Redirecting to dashboard...</p>
+      </div>
+    </div>
+  );
 }
