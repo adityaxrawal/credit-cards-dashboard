@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { apiWrapper, validationError } from '@/lib/utils/api-error';
 
 interface Card {
   id: string;
@@ -24,7 +25,7 @@ interface Transaction {
 }
 
 export async function GET(request: NextRequest) {
-  try {
+  return apiWrapper(async () => {
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
     
@@ -32,10 +33,7 @@ export async function GET(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      throw new Error('Unauthorized access');
     }
 
     // Parse query parameters
@@ -46,10 +44,7 @@ export async function GET(request: NextRequest) {
     
     // Validate pagination parameters
     if (page < 1 || limit < 1 || limit > 100) {
-      return NextResponse.json(
-        { error: 'Invalid pagination parameters' },
-        { status: 400 }
-      );
+      throw new Error('Invalid pagination parameters');
     }
 
     // Calculate offset for pagination
@@ -87,11 +82,7 @@ export async function GET(request: NextRequest) {
     const { data: transactions, error: transactionsError, count } = await query;
 
     if (transactionsError) {
-      console.error('Error fetching transactions:', transactionsError);
-      return NextResponse.json(
-        { error: 'Failed to fetch transactions' },
-        { status: 500 }
-      );
+      throw transactionsError;
     }
 
     // Process transactions to flatten the card information
@@ -101,19 +92,12 @@ export async function GET(request: NextRequest) {
       credit_cards: undefined
     })) || [];
 
-    return NextResponse.json({
+    return {
       transactions: processedTransactions,
       total: count || 0,
       page,
       limit,
       totalPages: Math.ceil((count || 0) / limit)
-    });
-
-  } catch (error) {
-    console.error('Unexpected error in transactions API:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
+    };
+  });
 }

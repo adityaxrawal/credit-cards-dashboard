@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { apiWrapper, authError, handleApiError, success } from '@/lib/utils/api-error';
 
 interface Statement {
   id: string;
@@ -28,17 +29,14 @@ interface Card {
 }
 
 export async function GET(request: NextRequest) {
-  try {
+  return apiWrapper(async () => {
     const supabase = await createClient();
     
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      throw new Error('Unauthorized access');
     }
 
     // Fetch all cards for the authenticated user with latest statement
@@ -60,11 +58,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (cardsError) {
-      console.error('Error fetching cards:', cardsError);
-      return NextResponse.json(
-        { error: 'Failed to fetch cards' },
-        { status: 500 }
-      );
+      throw cardsError;
     }
 
     // Process cards to include only the latest statement
@@ -90,16 +84,9 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {});
 
-    return NextResponse.json({
+    return {
       cards: processedCards,
       grouped_by_bank: groupedByBank
-    });
-
-  } catch (error) {
-    console.error('Unexpected error in cards API:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
+    };
+  });
 }
