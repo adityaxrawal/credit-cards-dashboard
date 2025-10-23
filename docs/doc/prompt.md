@@ -1,7 +1,6 @@
-Analyse  document end to end to understand the project requirement. Once you done with that start with the Phase 18 adn 19 from  file. If you require any information or clarity on while executing the application then do ask be before assuming and proceeding.
+Analyse  document end to end to understand the project requirement. Once you done with that start with the Phase 20 from  file. If you require any information or clarity on while executing the application then do ask be before assuming and proceeding.
 
-Execute Phase 18 adn 19 end to end.
-Once you are done with Phase 18 adn 19, stop the process and wait for my prompt to proceed on to Phase 20 (next phase).
+Execute Phase 20 end to end.
 
 
 -------------
