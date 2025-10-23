@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { User } from '@supabase/supabase-js';
 import LoadingSkeleton from '@/components/shared/feedback/LoadingSkeleton';
+import ErrorBoundary from '@/components/shared/ErrorBoundary';
+import { Toaster } from 'react-hot-toast';
 
 
 interface DashboardLayoutProps {
@@ -79,5 +81,55 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   // Render children if user is authenticated
-  return <>{children}</>;
+  return (
+    <ErrorBoundary>
+      {children}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#1f2937',
+            color: '#f9fafb',
+            border: '1px solid #374151',
+            borderRadius: '12px',
+            fontSize: '14px',
+            fontWeight: '500',
+            backdropFilter: 'blur(12px)',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+          },
+          success: {
+            style: {
+              color: '#10b981',
+              border: '1px solid #065f46',
+            },
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#1f2937',
+            },
+          },
+          error: {
+            style: {
+              color: '#ef4444',
+              border: '1px solid #7f1d1d',
+            },
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#1f2937',
+            },
+          },
+          loading: {
+            style: {
+              color: '#3b82f6',
+              border: '1px solid #1e40af',
+            },
+            iconTheme: {
+              primary: '#3b82f6',
+              secondary: '#1f2937',
+            },
+          },
+        }}
+      />
+    </ErrorBoundary>
+  );
 }
