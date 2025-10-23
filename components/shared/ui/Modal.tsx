@@ -48,7 +48,7 @@ const Modal = React.memo<ModalProps>(({
 
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
-      // Prevent body scroll
+      // Prevent body scroll when modal is open
       document.body.style.overflow = 'hidden';
     }
 
@@ -85,33 +85,38 @@ const Modal = React.memo<ModalProps>(({
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.2, type: 'spring', stiffness: 300, damping: 30 }}
             className={cn(
-              'relative w-full bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 max-h-[90vh] overflow-hidden',
+              // Base styles
+              'relative w-full bg-white dark:bg-gray-800 shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden',
+              // Mobile: Full screen with rounded top corners (bottom sheet style)
+              'h-full sm:h-auto sm:max-h-[90vh] sm:rounded-2xl',
+              'sm:mx-4 md:mx-6 lg:mx-8',
+              // Desktop: Normal modal sizing
               sizeVariants[size],
               className
             )}
           >
             {/* Header */}
             {(title || showCloseButton) && (
-              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
                 {title && (
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white pr-4">
                     {title}
                   </h2>
                 )}
                 {showCloseButton && (
                   <button
                     onClick={onClose}
-                    className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="p-2 sm:p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 min-w-[44px] min-h-[44px] flex items-center justify-center"
                     aria-label="Close modal"
                   >
-                    <X size={20} />
+                    <X size={20} className="sm:w-5 sm:h-5" />
                   </button>
                 )}
               </div>
             )}
             
             {/* Content */}
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 sm:max-h-[calc(90vh-120px)]">
               {children}
             </div>
           </motion.div>

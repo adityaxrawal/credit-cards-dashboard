@@ -78,7 +78,10 @@ const Form = React.memo<FormProps>(({
   }, [disabled, loading, isSubmitting, onSubmit, clearAllErrors]);
 
   const formClasses = cn(
-    'space-y-4',
+    // Mobile-first responsive spacing
+    'space-y-4 sm:space-y-5 md:space-y-6',
+    // Mobile padding and width
+    'w-full px-4 sm:px-0',
     {
       'opacity-50 pointer-events-none': disabled || loading,
     },
@@ -107,6 +110,7 @@ const Form = React.memo<FormProps>(({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
+        className="w-full"
       >
         {content}
       </motion.div>

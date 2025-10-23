@@ -30,6 +30,7 @@ import type { Transaction } from '@/lib/sampleData';
 import TransactionFilters, { type FilterState } from './TransactionFilters';
 import ManualTransactionForm, { type ManualTransactionData } from './ManualTransactionForm';
 import BulkTransactionActions, { type BulkEditData } from './BulkTransactionActions';
+import EmptyState from '@/components/shared/feedback/EmptyState';
 
 interface MergedTransactionsComponentProps {
   className?: string;
@@ -569,19 +570,11 @@ const MergedTransactionsComponent: React.FC<MergedTransactionsComponentProps> = 
 
       {/* Empty State */}
       {filteredTransactions.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center py-12"
-        >
-          <div className="w-16 h-16 bg-gray-800/50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Search className="w-8 h-8 text-gray-400" />
-          </div>
-          <h4 className="text-white font-medium mb-2">No transactions found</h4>
-          <p className="text-gray-400 text-sm">
-            Try adjusting your search or filter criteria
-          </p>
-        </motion.div>
+        <EmptyState
+          icon={Search}
+          title="No Transactions Found"
+          description="Try adjusting your search or filter criteria to find transactions."
+        />
       )}
 
       {/* Load More Button */}

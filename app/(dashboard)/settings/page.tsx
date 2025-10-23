@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Sidebar from "@/components/shared/navigation/Sidebar";
 import Topbar from "@/components/shared/navigation/Topbar";
+import EmptyState from "@/components/shared/feedback/EmptyState";
 import { 
   User, 
   CreditCard, 
@@ -387,7 +388,12 @@ const SettingsPage: React.FC = () => {
 
         <div className="space-y-3">
           {spendingLimits.length === 0 ? (
-            <p className="text-white/60 text-center py-8">No spending limits configured</p>
+            <EmptyState
+              icon={DollarSign}
+              title="No Spending Limits Set"
+              description="Create spending limits to track and control your expenses across different categories."
+              size="md"
+            />
           ) : (
             spendingLimits.map((limit) => (
               <div key={limit.id} className="p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-colors">
@@ -480,7 +486,12 @@ const SettingsPage: React.FC = () => {
 
         <div className="space-y-3">
           {emailPatterns.length === 0 ? (
-            <p className="text-white/60 text-center py-8">No email patterns configured</p>
+            <EmptyState
+              icon={Mail}
+              title="No Email Patterns Configured"
+              description="Add email patterns to automatically detect and parse transaction emails from your banks."
+              size="md"
+            />
           ) : (
             emailPatterns.map((pattern) => (
               <div key={pattern.id} className="p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-colors">

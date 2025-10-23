@@ -18,9 +18,10 @@ interface InputProps extends Omit<HTMLMotionProps<'input'>, 'size'> {
 }
 
 const sizeVariants = {
-  sm: 'px-3 py-2 text-sm',
-  md: 'px-4 py-3 text-base',
-  lg: 'px-5 py-4 text-lg'
+  // Mobile-first responsive sizing with better touch targets
+  sm: 'px-3 py-3 sm:py-2 text-sm sm:text-sm',
+  md: 'px-4 py-4 sm:py-3 text-base sm:text-base',
+  lg: 'px-5 py-5 sm:py-4 text-lg sm:text-lg'
 };
 
 const variantClasses = {
@@ -48,12 +49,16 @@ const Input = React.memo(React.forwardRef<HTMLInputElement, InputProps>(({
   const isDisabled = disabled || loading;
 
   const inputClasses = cn(
+    // Base styles with mobile-first approach
     'w-full rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+    // Mobile touch target improvements
+    'min-h-[44px] sm:min-h-[40px]',
     sizeVariants[size],
     variantClasses[variant],
     {
-      'pl-10': leftIcon,
-      'pr-10': rightIcon || loading,
+      // Mobile-friendly icon spacing
+      'pl-12 sm:pl-10': leftIcon,
+      'pr-12 sm:pr-10': rightIcon || loading,
       'border-red-500 focus:ring-red-500': error,
       'opacity-50 cursor-not-allowed': isDisabled,
     },
@@ -65,7 +70,7 @@ const Input = React.memo(React.forwardRef<HTMLInputElement, InputProps>(({
       {label && (
         <label
           htmlFor={inputId}
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300 mb-2 sm:mb-2"
         >
           {label}
           {required && <span className="text-red-500 ml-1">*</span>}
@@ -74,7 +79,7 @@ const Input = React.memo(React.forwardRef<HTMLInputElement, InputProps>(({
       
       <div className="relative">
         {leftIcon && (
-          <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+          <div className="absolute left-4 sm:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 sm:w-4 sm:h-4 flex items-center justify-center">
             {leftIcon}
           </div>
         )}
@@ -92,9 +97,9 @@ const Input = React.memo(React.forwardRef<HTMLInputElement, InputProps>(({
         />
         
         {(rightIcon || loading) && (
-          <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+          <div className="absolute right-4 sm:right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 sm:w-4 sm:h-4 flex items-center justify-center">
             {loading ? (
-              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 sm:w-4 sm:h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             ) : (
               rightIcon
             )}
@@ -107,7 +112,7 @@ const Input = React.memo(React.forwardRef<HTMLInputElement, InputProps>(({
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           className={cn(
-            'mt-2 text-sm',
+            'mt-2 text-sm sm:text-base leading-relaxed px-1',
             error ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'
           )}
         >

@@ -1,6 +1,7 @@
 import React from 'react';
 import { FileText, Eye } from 'lucide-react';
 import { Statement } from '@/lib/sampleData';
+import EmptyState from '@/components/shared/feedback/EmptyState';
 
 interface StatementsComponentProps {
   statements: Statement[];
@@ -76,14 +77,11 @@ const StatementsComponent: React.FC<StatementsComponentProps> = ({
         ))}
 
         {statements.length === 0 && (
-          <div className="text-center py-12">
-            <div className="p-4 bg-gray-800/50 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-              <FileText className="w-8 h-8 text-gray-500" />
-            </div>
-            <p className="text-gray-400">
-              No statements available
-            </p>
-          </div>
+          <EmptyState
+            icon={FileText}
+            title="No Statements Available"
+            description="Your statements will appear here once they are generated."
+          />
         )}
       </div>
     </div>
