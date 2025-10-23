@@ -3,9 +3,6 @@ const nextConfig = {
   // Enable React strict mode for better development experience
   reactStrictMode: true,
   
-  // Enable SWC minification for smaller bundles
-  swcMinify: true,
-  
   // Enable compression
   compress: true,
   
