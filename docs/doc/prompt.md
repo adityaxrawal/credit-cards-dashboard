@@ -5,7 +5,7 @@ Once you are done with Phase 6, stop the process and wait for my prompt to proce
 
 
 -------------
-Now you have to perform complete testing of Phase 0, 1 ,2, 3, 4, 5 new-final-doc.md final-doc-phases.md based on the documentation, If more is implemented then test that as well. And test the integrity of all the phases
+Now you have to perform complete testing of Phase 0, 1 ,2, 3, 4, 5, 6, 7,8,9,10, 11, 12, adn 13 new-final-doc.md final-doc-phases.md based on the documentation, If more is implemented then test that as well. And test the integrity of all the phases
 
 
 -------------
