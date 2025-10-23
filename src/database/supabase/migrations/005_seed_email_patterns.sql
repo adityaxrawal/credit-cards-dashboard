@@ -67,3 +67,7 @@ INSERT INTO public.email_patterns (bank_name, sender_email, subject_pattern, amo
 
 -- Note: This table is not user-specific and doesn't need RLS policies
 -- It contains global email patterns that all users can reference
+ALTER TABLE public.email_patterns ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "public read email_patterns" ON public.email_patterns
+  FOR SELECT
+  USING (true);

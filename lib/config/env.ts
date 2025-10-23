@@ -80,7 +80,8 @@ function createConfig(): AppConfig {
     }
 
     // Validate URL formats
-    if (!supabaseUrl.startsWith('https://')) {
+    const isDev = process.env.NODE_ENV === 'development';
+    if (!isDev && !supabaseUrl.startsWith('https://')) {
       throw new Error('NEXT_PUBLIC_SUPABASE_URL must be a valid HTTPS URL');
     }
 
