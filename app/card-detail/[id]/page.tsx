@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft, EyeOff, Eye, TrendingUp, CreditCard as CreditCardIcon, Clock, Gift, FileText } from "lucide-react";
@@ -15,6 +15,7 @@ import TransactionsComponent from "@/components/features/cards/TransactionsCompo
 import TimelineComponent from "@/components/features/cards/TimelineComponent";
 import StatementsComponent from "@/components/features/cards/StatementsComponent";
 import PerksComponent from "@/components/features/cards/PerksComponent";
+import LoadingSkeleton from "@/components/shared/feedback/LoadingSkeleton";
 import { 
   getSampleCreditCards, 
   getSampleTransactions,
@@ -43,16 +44,15 @@ const CardDetailPage: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [showCardNumber, setShowCardNumber] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [card, setCard] = useState<CreditCardType | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [perks, setPerks] = useState<CardPerk[]>([]);
+  const [statements, setStatements] = useState<Statement[]>([]);
+  
   const router = useRouter();
   const params = useParams();
   const cardId = params.id as string;
-
-  // Get card data
-  const cards = getSampleCreditCards();
-  const card = cards.find(c => c.id === cardId);
-  const transactions = getSampleTransactions(cardId);
-  const perks = getSampleCardPerks(cardId);
-  const statements = getSampleStatements(cardId);
 
   // Generate sample spending data for the card
   const generateSpendingData = (cardTransactions: Transaction[]): CardSpendingData => {
@@ -82,6 +82,35 @@ const CardDetailPage: React.FC = () => {
       monthlyLimit: card?.credit_limit ? card.credit_limit * 0.3 : 50000
     };
   };
+
+  // Simulate data loading
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      
+      // Get card data
+      const cards = getSampleCreditCards();
+      const foundCard = cards.find(c => c.id === cardId);
+      
+      if (foundCard) {
+        const cardTransactions = getSampleTransactions(cardId);
+        const cardPerks = getSampleCardPerks(cardId);
+        const cardStatements = getSampleStatements(cardId);
+        
+        setCard(foundCard);
+        setTransactions(cardTransactions);
+        setPerks(cardPerks);
+        setStatements(cardStatements);
+      }
+      
+      setIsLoading(false);
+    };
+
+    loadData();
+  }, [cardId]);
 
   const spendingData = generateSpendingData(transactions);
 
@@ -150,88 +179,119 @@ const CardDetailPage: React.FC = () => {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5 }}
-          className="flex-1 p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 overflow-y-auto bg-primary-bg"
+          className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6 overflow-y-auto bg-primary-bg"
         >
-          {/* Topbar */}
-          <Topbar />
+          {/* Topbar - Make sticky on mobile */}
+          <div className="sticky top-0 z-30 bg-primary-bg/95 backdrop-blur-sm -mx-3 sm:-mx-4 md:-mx-6 lg:-mx-8 px-3 sm:px-4 md:px-6 lg:px-8 py-2 md:py-0 md:relative md:bg-transparent md:backdrop-blur-none">
+            <Topbar />
+          </div>
 
           {/* Back Button */}
           <button
             onClick={handleBackClick}
-            className="flex items-center gap-2 text-text-secondary hover:text-text-primary transition-colors mb-4"
+            className="flex items-center gap-2 text-text-secondary hover:text-text-primary transition-colors mb-2 md:mb-4 text-sm md:text-base"
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={18} className="md:w-5 md:h-5" />
             <span>Back to Cards</span>
           </button>
 
-          {/* Card Display */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <div>
-              <CreditCard
-                card={card}
-                variant="default"
-                showRewards={true}
-                showCreditLimit={true}
-              />
+          {/* Card Display and Details - Stack vertically on mobile */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6 lg:gap-8">
+            {/* Credit Card Display */}
+            <div className="space-y-4 md:space-y-6">
+              {isLoading ? (
+                <LoadingSkeleton type="credit-card" className="h-48" />
+              ) : card ? (
+                <CreditCard
+                  card={card}
+                  variant="default"
+                  showRewards={true}
+                  showCreditLimit={true}
+                />
+              ) : null}
             </div>
 
             {/* Card Details Component */}
-            <CardDetailsComponent 
-              card={card}
-              formatCurrency={formatCurrency}
-            />
+            {isLoading ? (
+              <LoadingSkeleton type="card" className="h-48" />
+            ) : card ? (
+              <CardDetailsComponent 
+                card={card}
+                formatCurrency={formatCurrency}
+              />
+            ) : null}
           </div>
 
-          {/* Tab Navigation Component */}
-          <TabNavigationComponent 
-            tabs={[
-              { id: "overview", label: "Overview", icon: TrendingUp },
-              { id: "transactions", label: "Transactions", icon: CreditCardIcon },
-              { id: "timeline", label: "Timeline", icon: Clock },
-              { id: "perks", label: "Perks & Benefits", icon: Gift },
-              { id: "statements", label: "Statements", icon: FileText },
-            ]}
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-          />
-
-          {/* Tab Content */}
-            {activeTab === "overview" && (
-              <div className="space-y-6">
-                <RecentActivityComponent 
-                  transactions={transactions}
-                  formatCurrency={formatCurrency}
-                  formatDate={formatDate}
+            {/* Tab Navigation Component - Make scrollable on mobile */}
+            {isLoading ? (
+              <LoadingSkeleton type="card" className="h-12 md:h-16" />
+            ) : (
+              <div className="overflow-x-auto">
+                <TabNavigationComponent 
+                  tabs={[
+                    { id: "overview", label: "Overview", icon: TrendingUp },
+                    { id: "transactions", label: "Transactions", icon: CreditCardIcon },
+                    { id: "timeline", label: "Timeline", icon: Clock },
+                    { id: "perks", label: "Perks & Benefits", icon: Gift },
+                    { id: "statements", label: "Statements", icon: FileText },
+                  ]}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
                 />
               </div>
             )}
 
-            {activeTab === "transactions" && (
-              <TransactionsComponent 
-                cardId={cardId}
-                formatCurrency={formatCurrency}
-                formatDate={formatDate}
-              />
-            )}
+            {/* Tab Content */}
+            {isLoading ? (
+              <div className="space-y-4 md:space-y-6">
+                <LoadingSkeleton type="card" className="h-48 md:h-64" />
+                <LoadingSkeleton type="chart" className="h-60 md:h-80" />
+                <div className="space-y-3 md:space-y-4">
+                  {[...Array(5)].map((_, i) => (
+                    <LoadingSkeleton key={i} type="list" className="h-12 md:h-16" />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                {activeTab === "overview" && (
+                  <div className="space-y-6">
+                    <RecentActivityComponent 
+                      transactions={transactions}
+                      formatCurrency={formatCurrency}
+                      formatDate={formatDate}
+                    />
+                  </div>
+                )}
 
-            {activeTab === "timeline" && (
-              <TimelineComponent 
-                transactions={transactions}
-                formatCurrency={formatCurrency}
-                formatDate={formatDate}
-              />
-            )}
+                {activeTab === "transactions" && (
+                  <TransactionsComponent 
+                    cardId={cardId}
+                    formatCurrency={formatCurrency}
+                    formatDate={formatDate}
+                  />
+                )}
 
-            {activeTab === "statements" && (
-              <StatementsComponent 
-                statements={statements}
-                formatCurrency={formatCurrency}
-                formatDate={formatDate}
-              />
-            )}
+                {activeTab === "timeline" && (
+                  <TimelineComponent 
+                    transactions={transactions}
+                    formatCurrency={formatCurrency}
+                    formatDate={formatDate}
+                  />
+                )}
 
-            {activeTab === "perks" && (
-              <PerksComponent />
+                {activeTab === "statements" && (
+                  <StatementsComponent 
+                    statements={statements}
+                    formatCurrency={formatCurrency}
+                    formatDate={formatDate}
+                  />
+                )}
+
+                {activeTab === "perks" && (
+                  <PerksComponent />
+                )}
+              </>
             )}
         </motion.div>
       </div>

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { config as envConfig } from './lib/config/env';
 
 export async function middleware(request: NextRequest) {
   // Skip middleware for Vite client requests (development only)
@@ -14,8 +15,8 @@ export async function middleware(request: NextRequest) {
   });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    envConfig.supabase.url,
+    envConfig.supabase.anonKey,
     {
       cookies: {
         getAll() {

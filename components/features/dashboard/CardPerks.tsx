@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { getSampleCardPerks, getSampleCreditCards } from '@/lib/sampleData';
 import type { CardPerk, CreditCard as CreditCardType } from '@/lib/sampleData';
+import EmptyState from '@/components/shared/feedback/EmptyState';
 
 interface CardPerksProps {
   className?: string;
@@ -300,19 +301,11 @@ const CardPerks: React.FC<CardPerksProps> = ({
 
       {/* Empty State */}
       {filteredPerks.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center py-12"
-        >
-          <div className="w-16 h-16 bg-gray-800/50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Gift className="w-8 h-8 text-gray-400" />
-          </div>
-          <h4 className="text-white font-medium mb-2">No perks found</h4>
-          <p className="text-gray-400 text-sm">
-            Try adjusting your search or filter criteria
-          </p>
-        </motion.div>
+        <EmptyState
+          icon={Gift}
+          title="No Perks Available"
+          description="Try adjusting your search or filter criteria to find perks."
+        />
       )}
 
       {/* Summary Stats */}

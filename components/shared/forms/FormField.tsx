@@ -29,17 +29,24 @@ const FormField = React.memo<FormFieldProps>(({
   animated = false,
 }) => {
   const fieldClasses = cn(
-    'space-y-2',
+    // Mobile-first responsive spacing
+    'space-y-2 sm:space-y-3',
     className
   );
 
   const labelClasses = cn(
-    'block text-sm font-medium text-gray-700 dark:text-gray-300',
+    // Mobile-friendly label styling
+    'block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300',
+    // Better touch target spacing
+    'mb-2',
     labelClassName
   );
 
   const messageClasses = cn(
-    'flex items-center gap-2 text-sm',
+    // Mobile-friendly message styling
+    'flex items-start gap-2 text-sm sm:text-base leading-relaxed',
+    // Better spacing on mobile
+    'mt-2 px-1',
     {
       'text-red-600 dark:text-red-400': error,
       'text-green-600 dark:text-green-400': success,
@@ -56,24 +63,26 @@ const FormField = React.memo<FormFieldProps>(({
         </label>
       )}
       
-      {children}
+      <div className="w-full">
+        {children}
+      </div>
       
       {(error || success || hint) && (
         <div className={messageClasses}>
           {error && (
             <>
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{error}</span>
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-0.5" />
+              <span className="flex-1">{error}</span>
             </>
           )}
           {success && !error && (
             <>
-              <CheckCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{success}</span>
+              <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-0.5" />
+              <span className="flex-1">{success}</span>
             </>
           )}
           {hint && !error && !success && (
-            <span>{hint}</span>
+            <span className="flex-1 pl-6 sm:pl-7">{hint}</span>
           )}
         </div>
       )}
@@ -86,6 +95,7 @@ const FormField = React.memo<FormFieldProps>(({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
+        className="w-full"
       >
         {content}
       </motion.div>
