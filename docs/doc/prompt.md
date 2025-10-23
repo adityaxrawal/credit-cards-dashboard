@@ -1,11 +1,11 @@
-Analyse  document end to end to understand the project requirement. Once you done with that start with the Phase 6 from  file. If you require any information or clarity on while executing the application then do ask be before assuming and proceeding.
+Analyse  document end to end to understand the project requirement. Once you done with that start with the Phase 18 adn 19 from  file. If you require any information or clarity on while executing the application then do ask be before assuming and proceeding.
 
-Execute Phase 6 end to end.
-Once you are done with Phase 6, stop the process and wait for my prompt to proceed on to Phase 7 (next phase).
+Execute Phase 18 adn 19 end to end.
+Once you are done with Phase 18 adn 19, stop the process and wait for my prompt to proceed on to Phase 20 (next phase).
 
 
 -------------
-Now you have to perform complete testing of Phase 0, 1 ,2, 3, 4, 5, 6, 7,8,9,10, 11, 12, 13 , 14 and 15 new-final-doc.md final-doc-phases.md based on the documentation, If more is implemented then test that as well. And test the integrity of all the phases
+Now you have to perform complete testing of Phase 0, 1 ,2, 3, 4, 5, 6, 7,8,9,10, 11, 12, 13 , 14, 15, 16 ,17 ,18 and 19 new-final-doc.md final-doc-phases.md based on the documentation, If more is implemented then test that as well. And test the integrity of all the phases
 
 
 -------------
