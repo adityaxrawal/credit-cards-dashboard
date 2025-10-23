@@ -51,11 +51,11 @@ interface Card {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { cardId: string } }
+  context: { params: Promise<{ cardId: string }> }
 ) {
   try {
+    const { cardId } = await context.params;
     const supabase = await createClient();
-    const { cardId } = params;
     
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();
