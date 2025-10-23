@@ -20,11 +20,14 @@ const nextConfig = {
     minimumCacheTTL: 60,
   },
   
-  // Security headers
+  // Security headers (apply in production only and exclude Next.js assets)
   async headers() {
+    if (process.env.NODE_ENV !== 'production') {
+      return [];
+    }
     return [
       {
-        source: '/(.*)',
+        source: '/((?!_next/).*)',
         headers: [
           {
             key: 'X-DNS-Prefetch-Control',
