@@ -19,6 +19,9 @@ export interface AppConfig {
     redisUrl: string;
     redisToken: string;
     qstashToken: string;
+    qstashUrl: string;
+    qstashCurrentSigningKey: string;
+    qstashNextSigningKey: string;
   };
   app: {
     url: string;
@@ -66,6 +69,9 @@ function createConfig(): AppConfig {
     const upstashRedisUrl = requireEnv('UPSTASH_REDIS_REST_URL');
     const upstashRedisToken = requireEnv('UPSTASH_REDIS_REST_TOKEN');
     const upstashQstashToken = requireEnv('QSTASH_TOKEN');
+    const upstashQstashUrl = optionalEnv('QSTASH_URL', 'https://qstash.upstash.io');
+    const upstashQstashCurrentSigningKey = requireEnv('QSTASH_CURRENT_SIGNING_KEY');
+    const upstashQstashNextSigningKey = requireEnv('QSTASH_NEXT_SIGNING_KEY');
 
     // Validate application configuration
     const appUrl = requireEnv('NEXT_PUBLIC_URL');
@@ -93,6 +99,18 @@ function createConfig(): AppConfig {
       throw new Error('UPSTASH_REDIS_REST_URL must be a valid HTTPS URL');
     }
 
+    if (!upstashQstashUrl.startsWith('https://')) {
+      throw new Error('QSTASH_URL must be a valid HTTPS URL');
+    }
+
+    if (!upstashQstashCurrentSigningKey.startsWith('sig_')) {
+      throw new Error('QSTASH_CURRENT_SIGNING_KEY must start with "sig_"');
+    }
+
+    if (!upstashQstashNextSigningKey.startsWith('sig_')) {
+      throw new Error('QSTASH_NEXT_SIGNING_KEY must start with "sig_"');
+    }
+
     return {
       supabase: {
         url: supabaseUrl,
@@ -107,6 +125,9 @@ function createConfig(): AppConfig {
         redisUrl: upstashRedisUrl,
         redisToken: upstashRedisToken,
         qstashToken: upstashQstashToken,
+        qstashUrl: upstashQstashUrl,
+        qstashCurrentSigningKey: upstashQstashCurrentSigningKey,
+        qstashNextSigningKey: upstashQstashNextSigningKey,
       },
       app: {
         url: appUrl,
@@ -159,6 +180,8 @@ if (isDevelopment) {
       url: config.upstash.redisUrl,
       hasRedisToken: !!config.upstash.redisToken,
       hasQstashToken: !!config.upstash.qstashToken,
+      qstashUrl: config.upstash.qstashUrl,
+      hasSigningKeys: !!config.upstash.qstashCurrentSigningKey && !!config.upstash.qstashNextSigningKey,
     },
     app: {
       url: config.app.url,

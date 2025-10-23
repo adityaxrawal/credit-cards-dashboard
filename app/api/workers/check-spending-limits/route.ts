@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { jobQueue } from '@/lib/queue/worker';
 import { sseManager } from '@/lib/sse/manager';
 import { SpendingLimitService } from '@/lib/services/spending-limit';
+import { verifyQstashRequest } from '@/lib/qstash/verify';
 
 interface CheckSpendingLimitsRequest {
   jobId: string;
@@ -16,8 +17,13 @@ interface CheckSpendingLimitsRequest {
 }
 
 export async function POST(request: NextRequest) {
+  let body: CheckSpendingLimitsRequest | null = null;
   try {
-    const body: CheckSpendingLimitsRequest = await request.json();
+    const verification = await verifyQstashRequest<CheckSpendingLimitsRequest>(request);
+    if (!verification.valid || !verification.body) {
+      return NextResponse.json({ error: verification.error ?? 'Unauthorized' }, { status: 401 });
+    }
+    body = verification.body;
     const { jobId, userId, data } = body;
 
     if (!jobId || !userId) {
@@ -238,30 +244,18 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Check spending limits worker error:', error);
-    
-    // Update job with error
-    const { jobId, userId } = await request.json().catch(() => ({ jobId: 'unknown', userId: 'unknown' }));
-    
-    if (jobId !== 'unknown') {
+    const jobId = body?.jobId;
+    if (jobId) {
       await jobQueue.updateJob(jobId, {
         status: 'failed',
         error: error instanceof Error ? error.message : 'Unknown error',
         completedAt: new Date(),
       });
     }
-
-    if (userId !== 'unknown') {
-      await sseManager.sendToUser(userId, 'error', {
-        type: 'spending-limits-check-failed',
-        message: 'Failed to check spending limits',
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     );

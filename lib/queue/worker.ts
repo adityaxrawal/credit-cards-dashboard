@@ -1,6 +1,7 @@
 import { Redis } from '@upstash/redis';
 import { Client } from '@upstash/qstash';
 import { v4 as uuidv4 } from 'uuid';
+import { config } from '@/lib/config/env';
 
 // Initialize Redis and QStash clients
 const redis = new Redis({
@@ -81,7 +82,7 @@ export class JobQueue {
       await redis.lpush(`queue:${type}`, jobId);
       
       // Trigger worker via QStash
-      const workerEndpoint = `${process.env.NEXT_PUBLIC_APP_URL}/api/workers/${type}`;
+      const workerEndpoint = `${config.app.url}/api/workers/${type}`;
       
       await qstash.publishJSON({
         url: workerEndpoint,

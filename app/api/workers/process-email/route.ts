@@ -4,6 +4,7 @@ import { gmailClient } from '@/lib/services/gmail-client';
 import { EmailParserService, ParsedEmail } from '@/lib/services/email-parser';
 import { createClient } from '@/src/backend/lib/supabase/server';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { verifyQstashRequest } from '@/lib/qstash/verify';
 
 interface ProcessEmailRequest {
   jobId: string;
@@ -16,8 +17,13 @@ interface ProcessEmailRequest {
 }
 
 export async function POST(request: NextRequest) {
+  let body: ProcessEmailRequest | null = null;
   try {
-    const body: ProcessEmailRequest = await request.json();
+    const verification = await verifyQstashRequest<ProcessEmailRequest>(request);
+    if (!verification.valid || !verification.body) {
+      return NextResponse.json({ error: verification.error ?? 'Unauthorized' }, { status: 401 });
+    }
+    body = verification.body;
     const { jobId, userId, data } = body;
 
     // Update job status to processing
@@ -119,24 +125,14 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Process email worker error:', error);
-    
-    // Update job with error
-    let jobId = 'unknown';
-    try {
-      const errorBody = await request.json();
-      jobId = errorBody.jobId;
-    } catch {
-      // Ignore JSON parsing error
-    }
-    
-    if (jobId !== 'unknown') {
+    const jobId = body?.jobId;
+    if (jobId) {
       await jobQueue.updateJob(jobId, {
         status: 'failed',
         error: error instanceof Error ? error.message : 'Unknown error',
         completedAt: new Date(),
       });
     }
-
     return NextResponse.json(
       { 
         success: false, 

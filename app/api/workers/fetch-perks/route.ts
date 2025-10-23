@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { jobQueue } from '@/lib/queue/worker';
 import { sseManager } from '@/lib/sse/manager';
+import { verifyQstashRequest } from '@/lib/qstash/verify';
 
 // Sample perks data for different card types
 const CARD_PERKS_DATA = {
@@ -108,9 +109,22 @@ const CARD_PERKS_DATA = {
   ]
 };
 
+interface FetchPerksRequest {
+  jobId: string;
+  userId: string;
+  cardId: string;
+  cardType?: string;
+}
+
 export async function POST(request: NextRequest) {
+  let body: FetchPerksRequest | null = null;
   try {
-    const { jobId, userId, cardId, cardType } = await request.json();
+    const verification = await verifyQstashRequest<FetchPerksRequest>(request);
+    if (!verification.valid || !verification.body) {
+      return NextResponse.json({ error: verification.error ?? 'Unauthorized' }, { status: 401 });
+    }
+    body = verification.body;
+    const { jobId, userId, cardId, cardType } = body;
 
     if (!jobId || !userId || !cardId) {
       return NextResponse.json(
@@ -292,27 +306,19 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Fetch perks worker error:', error);
-    
-    const { jobId, userId } = await request.json().catch(() => ({}));
-    
+    const jobId = body?.jobId;
     if (jobId) {
       await jobQueue.updateJob(jobId, {
         status: 'failed',
-        progress: 0,
-        message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        completedAt: new Date(),
       });
     }
-
-    if (userId) {
-      await sseManager.sendToUser(userId, 'progress', {
-        process: 'process-3',
-        progress: 0,
-        message: '❌ Failed to fetch perks'
-      });
-    }
-
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     );
   }

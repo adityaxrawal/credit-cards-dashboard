@@ -68,6 +68,9 @@
     "UPSTASH_REDIS_REST_URL": "@upstash_redis_rest_url",
     "UPSTASH_REDIS_REST_TOKEN": "@upstash_redis_rest_token",
     "QSTASH_TOKEN": "@qstash_token",
+    "QSTASH_URL": "@qstash_url",
+    "QSTASH_CURRENT_SIGNING_KEY": "@qstash_current_signing_key",
+    "QSTASH_NEXT_SIGNING_KEY": "@qstash_next_signing_key",
     "ENCRYPTION_KEY": "@encryption_key",
     "ADMIN_API_KEY": "@admin_api_key",
     "NEXT_PUBLIC_URL": "@next_public_url"

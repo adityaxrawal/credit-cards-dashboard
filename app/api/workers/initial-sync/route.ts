@@ -5,6 +5,7 @@ import { EmailParserService, ParsedEmail } from '@/lib/services/email-parser';
 import { createClient } from '@/src/backend/lib/supabase/server';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { sseManager } from '@/lib/sse/manager';
+import { verifyQstashRequest } from '@/lib/qstash/verify';
 
 interface InitialSyncRequest {
   jobId: string;
@@ -16,8 +17,13 @@ interface InitialSyncRequest {
 }
 
 export async function POST(request: NextRequest) {
+  let body: InitialSyncRequest | null = null;
   try {
-    const body: InitialSyncRequest = await request.json();
+    const verification = await verifyQstashRequest<InitialSyncRequest>(request);
+    if (!verification.valid || !verification.body) {
+      return NextResponse.json({ error: verification.error ?? 'Unauthorized' }, { status: 401 });
+    }
+    body = verification.body;
     const { jobId, userId, data } = body;
 
     // Update job status to processing
@@ -174,22 +180,18 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Initial sync worker error:', error);
-    
-    // Update job with error
-    const { jobId } = await request.json().catch(() => ({ jobId: 'unknown' }));
-    
-    if (jobId !== 'unknown') {
+    const jobId = body?.jobId;
+    if (jobId) {
       await jobQueue.updateJob(jobId, {
         status: 'failed',
         error: error instanceof Error ? error.message : 'Unknown error',
         completedAt: new Date(),
       });
     }
-
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     );
