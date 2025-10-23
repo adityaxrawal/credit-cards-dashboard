@@ -1,6 +1,9 @@
 import { google, Auth } from 'googleapis';
 import { createClient } from '@/lib/supabase/server';
 
+/**
+ * Represents Gmail OAuth2 token information
+ */
 export interface GmailToken {
   access_token: string;
   refresh_token: string;
@@ -9,6 +12,9 @@ export interface GmailToken {
   expiry_date: number;
 }
 
+/**
+ * Represents a Gmail message with its metadata and content
+ */
 export interface GmailMessage {
   id: string;
   threadId: string;
@@ -26,9 +32,29 @@ export interface GmailMessage {
   internalDate: string;
 }
 
+/**
+ * Service class for interacting with Gmail API to fetch and process emails
+ * 
+ * This service handles OAuth2 authentication, email fetching, and content extraction
+ * for credit card transaction and statement emails.
+ * 
+ * @example
+ * ```typescript
+ * const gmailService = new GmailClientService();
+ * const emails = await gmailService.fetchHistoricalEmails('user123', 1);
+ * 
+ * for (const email of emails) {
+ *   const content = gmailService.extractEmailContent(email);
+ *   console.log(`From: ${content.from}, Subject: ${content.subject}`);
+ * }
+ * ```
+ */
 export class GmailClientService {
   private oauth2Client: Auth.OAuth2Client;
 
+  /**
+   * Initialize the Gmail client service with OAuth2 configuration
+   */
   constructor() {
     this.oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -38,7 +64,18 @@ export class GmailClientService {
   }
 
   /**
-   * Get Gmail client for a specific user
+   * Get authenticated Gmail client for a specific user
+   * 
+   * @param userId - The user ID to get Gmail client for
+   * @returns Authenticated Gmail API client
+   * 
+   * @throws {Error} When user tokens are not found or authentication fails
+   * 
+   * @example
+   * ```typescript
+   * const gmail = await gmailService.getGmailClient('user123');
+   * const messages = await gmail.users.messages.list({ userId: 'me' });
+   * ```
    */
   async getGmailClient(userId: string) {
     try {
@@ -75,7 +112,20 @@ export class GmailClientService {
   }
 
   /**
-   * Fetch historical emails from Gmail
+   * Fetch historical emails from Gmail based on credit card related keywords
+   * 
+   * @param userId - The user ID to fetch emails for
+   * @param yearsBack - Number of years to look back (default: 2)
+   * @returns Array of Gmail messages matching credit card criteria
+   * 
+   * @throws {Error} When Gmail API request fails or authentication is invalid
+   * 
+   * @example
+   * ```typescript
+   * // Fetch emails from last 1 year
+   * const emails = await gmailService.fetchHistoricalEmails('user123', 1);
+   * console.log(`Found ${emails.length} credit card related emails`);
+   * ```
    */
   async fetchHistoricalEmails(userId: string, yearsBack: number = 2): Promise<GmailMessage[]> {
     try {
@@ -145,6 +195,18 @@ export class GmailClientService {
 
   /**
    * Fetch a specific email by message ID
+   * 
+   * @param userId - The user ID who owns the email
+   * @param messageId - The Gmail message ID to fetch
+   * @returns The complete Gmail message object
+   * 
+   * @throws {Error} When message is not found or access is denied
+   * 
+   * @example
+   * ```typescript
+   * const message = await gmailService.fetchEmailById('user123', 'msg_abc123');
+   * const content = gmailService.extractEmailContent(message);
+   * ```
    */
   async fetchEmailById(userId: string, messageId: string): Promise<GmailMessage> {
     try {
@@ -164,7 +226,19 @@ export class GmailClientService {
   }
 
   /**
-   * Extract email content from Gmail message
+   * Extract readable content from Gmail message payload
+   * 
+   * @param message - The Gmail message object to extract content from
+   * @returns Extracted email content with subject, sender, body, and date
+   * 
+   * @example
+   * ```typescript
+   * const content = gmailService.extractEmailContent(gmailMessage);
+   * console.log(`Subject: ${content.subject}`);
+   * console.log(`From: ${content.from}`);
+   * console.log(`Date: ${content.date.toISOString()}`);
+   * console.log(`Body: ${content.body.substring(0, 100)}...`);
+   * ```
    */
   extractEmailContent(message: GmailMessage): { subject: string; from: string; body: string; date: Date } {
     const headers = message.payload.headers;
@@ -194,7 +268,25 @@ export class GmailClientService {
   }
 
   /**
-   * Update Gmail tokens in database
+   * Update stored Gmail tokens for a user (handles token refresh)
+   * 
+   * @param userId - The user ID to update tokens for
+   * @param tokens - The new token information to store
+   * 
+   * @throws {Error} When database update fails
+   * 
+   * @example
+   * ```typescript
+   * const newTokens = {
+   *   access_token: 'new_access_token',
+   *   refresh_token: 'refresh_token',
+   *   scope: 'https://www.googleapis.com/auth/gmail.readonly',
+   *   token_type: 'Bearer',
+   *   expiry_date: Date.now() + 3600000
+   * };
+   * 
+   * await gmailService.updateTokens('user123', newTokens);
+   * ```
    */
   async updateTokens(userId: string, tokens: GmailToken): Promise<void> {
     try {

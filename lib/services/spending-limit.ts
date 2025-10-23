@@ -1,43 +1,98 @@
 import { createClient } from '@/lib/supabase/client';
 
+/**
+ * Represents a spending limit that has been exceeded or is approaching its threshold
+ * @interface LimitExceeded
+ */
 export interface LimitExceeded {
+  /** Type of limit exceeded - either global or category-specific */
   type: 'GLOBAL' | 'CATEGORY';
+  /** The maximum amount allowed for this limit */
   limitAmount: number;
+  /** Current amount spent against this limit */
   currentSpending: number;
+  /** Category name if this is a category-specific limit */
   category?: string;
+  /** Threshold percentage (0-100) at which alerts are triggered */
   threshold: number;
+  /** Whether the spending is approaching the limit threshold */
   isApproachingLimit: boolean;
+  /** Whether the spending has exceeded the limit */
   exceedsLimit: boolean;
 }
 
+/**
+ * Represents a spending limit configuration
+ * @interface SpendingLimit
+ */
 export interface SpendingLimit {
+  /** Unique identifier for the spending limit */
   id: string;
+  /** ID of the user who owns this limit */
   user_id: string;
+  /** Optional card ID if limit applies to specific card */
   card_id?: string;
+  /** Optional category if limit applies to specific category */
   category?: string;
+  /** Maximum amount allowed for this limit */
   limit_amount: number;
+  /** Time period for the limit (daily, weekly, monthly, yearly) */
   period: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  /** Current amount spent against this limit */
   current_spent: number;
+  /** Whether this limit is currently active */
   is_active: boolean;
+  /** Threshold percentage (0-100) at which alerts are triggered */
   alert_threshold: number;
+  /** Whether alerts are enabled for this limit */
   alert_enabled: boolean;
+  /** ISO date string of when the limit was last reset */
   last_reset_date: string;
+  /** ISO date string of when the limit was created */
   created_at: string;
+  /** ISO date string of when the limit was last updated */
   updated_at: string;
 }
 
+/**
+ * Represents a transaction for spending limit calculations
+ * @interface Transaction
+ */
 export interface Transaction {
+  /** Unique identifier for the transaction */
   id: string;
+  /** ID of the card used for this transaction */
   card_id: string;
+  /** Transaction amount (positive for debits, negative for credits) */
   amount: number;
+  /** Transaction category */
   category: string;
+  /** ISO date string of when the transaction occurred */
   date: string;
+  /** Type of transaction */
   type: 'debit' | 'credit' | 'reversal';
 }
 
+/**
+ * Service class for managing spending limits and monitoring spending patterns
+ * @class SpendingLimitService
+ */
 export class SpendingLimitService {
   /**
-   * Check if any spending limits are exceeded or approaching threshold
+   * Check if any spending limits are exceeded or approaching threshold for a given transaction
+   * @param {string} userId - The ID of the user to check limits for
+   * @param {Transaction} transaction - The transaction to check against limits
+   * @returns {Promise<LimitExceeded | null>} Information about exceeded limit or null if no limits exceeded
+   * @throws {Error} When database operations fail
+   * @example
+   * ```typescript
+   * const service = new SpendingLimitService();
+   * const transaction = { id: '123', card_id: 'card1', amount: 500, category: 'groceries', date: '2024-01-01', type: 'debit' };
+   * const exceeded = await service.checkLimits('user123', transaction);
+   * if (exceeded) {
+   *   console.log(`Limit exceeded: ${exceeded.type}`);
+   * }
+   * ```
    */
   async checkLimits(userId: string, transaction: Transaction): Promise<LimitExceeded | null> {
     try {
@@ -80,6 +135,14 @@ export class SpendingLimitService {
 
   /**
    * Update current spending for all active limits for a user
+   * @param {string} userId - The ID of the user to update spending for
+   * @returns {Promise<void>} Promise that resolves when all limits are updated
+   * @throws {Error} When database operations fail
+   * @example
+   * ```typescript
+   * const service = new SpendingLimitService();
+   * await service.updateSpending('user123');
+   * ```
    */
   async updateSpending(userId: string): Promise<void> {
     try {
@@ -125,6 +188,16 @@ export class SpendingLimitService {
 
   /**
    * Calculate current spending based on limit type and period
+   * @private
+   * @param {string} userId - The ID of the user
+   * @param {SpendingLimit} limit - The spending limit configuration
+   * @returns {Promise<number>} The current spending amount for the limit period
+   * @throws {Error} When database operations fail
+   * @example
+   * ```typescript
+   * const spending = await this.calculateCurrentSpending('user123', limit);
+   * console.log(`Current spending: $${spending}`);
+   * ```
    */
   private async calculateCurrentSpending(userId: string, limit: SpendingLimit): Promise<number> {
     try {
@@ -172,6 +245,17 @@ export class SpendingLimitService {
 
   /**
    * Check if spending exceeds or approaches the limit threshold
+   * @private
+   * @param {SpendingLimit} limit - The spending limit configuration
+   * @param {number} currentSpending - The current spending amount
+   * @returns {LimitExceeded | null} Information about exceeded limit or null if within limits
+   * @example
+   * ```typescript
+   * const exceeded = this.checkLimitThreshold(limit, 850);
+   * if (exceeded?.exceedsLimit) {
+   *   console.log('Spending limit exceeded!');
+   * }
+   * ```
    */
   private checkLimitThreshold(limit: SpendingLimit, currentSpending: number): LimitExceeded | null {
     const percentage = (currentSpending / limit.limit_amount) * 100;
@@ -195,6 +279,15 @@ export class SpendingLimitService {
 
   /**
    * Get date range based on period and last reset date
+   * @private
+   * @param {string} period - The time period (daily, weekly, monthly, yearly)
+   * @param {string} lastResetDate - ISO date string of when the limit was last reset
+   * @returns {{ start: string; end: string }} Object with start and end ISO date strings
+   * @example
+   * ```typescript
+   * const range = this.getDateRangeForPeriod('monthly', '2024-01-01T00:00:00Z');
+   * console.log(`Period: ${range.start} to ${range.end}`);
+   * ```
    */
   private getDateRangeForPeriod(period: string, lastResetDate: string): { start: string; end: string } {
     const now = new Date();
@@ -243,6 +336,15 @@ export class SpendingLimitService {
 
   /**
    * Get all active spending limits for a user
+   * @param {string} userId - The ID of the user to fetch limits for
+   * @returns {Promise<SpendingLimit[]>} Array of active spending limits
+   * @throws {Error} When database operations fail
+   * @example
+   * ```typescript
+   * const service = new SpendingLimitService();
+   * const limits = await service.getActiveSpendingLimits('user123');
+   * console.log(`User has ${limits.length} active limits`);
+   * ```
    */
   async getActiveSpendingLimits(userId: string): Promise<SpendingLimit[]> {
     try {
@@ -267,6 +369,25 @@ export class SpendingLimitService {
 
   /**
    * Create a new spending limit
+   * @param {string} userId - The ID of the user creating the limit
+   * @param {Object} limitData - The spending limit configuration
+   * @param {string} [limitData.card_id] - Optional card ID if limit applies to specific card
+   * @param {string} [limitData.category] - Optional category if limit applies to specific category
+   * @param {number} limitData.limit_amount - Maximum amount allowed for this limit
+   * @param {'daily' | 'weekly' | 'monthly' | 'yearly'} limitData.period - Time period for the limit
+   * @param {number} [limitData.alert_threshold=80] - Threshold percentage (0-100) at which alerts are triggered
+   * @returns {Promise<SpendingLimit>} The created spending limit
+   * @throws {Error} When database operations fail
+   * @example
+   * ```typescript
+   * const service = new SpendingLimitService();
+   * const limit = await service.createSpendingLimit('user123', {
+   *   category: 'groceries',
+   *   limit_amount: 500,
+   *   period: 'monthly',
+   *   alert_threshold: 90
+   * });
+   * ```
    */
   async createSpendingLimit(userId: string, limitData: {
     card_id?: string;
@@ -307,6 +428,19 @@ export class SpendingLimitService {
 
   /**
    * Update an existing spending limit
+   * @param {string} limitId - The ID of the spending limit to update
+   * @param {string} userId - The ID of the user who owns the limit
+   * @param {Partial<SpendingLimit>} updates - Partial spending limit object with fields to update
+   * @returns {Promise<SpendingLimit>} The updated spending limit
+   * @throws {Error} When database operations fail or limit not found
+   * @example
+   * ```typescript
+   * const service = new SpendingLimitService();
+   * const updated = await service.updateSpendingLimit('limit123', 'user123', {
+   *   limit_amount: 600,
+   *   alert_threshold: 85
+   * });
+   * ```
    */
   async updateSpendingLimit(limitId: string, userId: string, updates: Partial<SpendingLimit>): Promise<SpendingLimit> {
     try {
@@ -335,6 +469,16 @@ export class SpendingLimitService {
 
   /**
    * Delete a spending limit
+   * @param {string} limitId - The ID of the spending limit to delete
+   * @param {string} userId - The ID of the user who owns the limit
+   * @returns {Promise<void>} Promise that resolves when limit is deleted
+   * @throws {Error} When database operations fail or limit not found
+   * @example
+   * ```typescript
+   * const service = new SpendingLimitService();
+   * await service.deleteSpendingLimit('limit123', 'user123');
+   * console.log('Spending limit deleted successfully');
+   * ```
    */
   async deleteSpendingLimit(limitId: string, userId: string): Promise<void> {
     try {

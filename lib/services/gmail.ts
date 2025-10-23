@@ -2,11 +2,24 @@ import { google, gmail_v1, Auth } from 'googleapis';
 import { createClient } from '@/lib/supabase/server';
 import { encrypt, decrypt } from '@/src/backend/lib/utils/encryption';
 
-// Rate limiter class for Gmail API
+/**
+ * Rate limiter class for Gmail API to prevent exceeding quota limits
+ * @class GmailRateLimiter
+ */
 class GmailRateLimiter {
   private requests: number[] = [];
   private readonly maxRequestsPerMinute = 250;
 
+  /**
+   * Check if we can make a request without exceeding rate limits
+   * @returns {Promise<void>} Promise that resolves when it's safe to make a request
+   * @example
+   * ```typescript
+   * const limiter = new GmailRateLimiter();
+   * await limiter.checkLimit(); // Will wait if necessary
+   * // Now safe to make Gmail API request
+   * ```
+   */
   async checkLimit(): Promise<void> {
     const now = Date.now();
     const oneMinuteAgo = now - 60 * 1000;
@@ -30,24 +43,53 @@ class GmailRateLimiter {
   }
 }
 
+/**
+ * Gmail OAuth token data structure
+ * @interface GmailTokenData
+ */
 export interface GmailTokenData {
+  /** OAuth access token for Gmail API */
   access_token: string;
+  /** OAuth refresh token for renewing access */
   refresh_token: string;
+  /** OAuth scope permissions granted */
   scope: string;
+  /** Type of token (usually 'Bearer') */
   token_type: string;
+  /** Unix timestamp when token expires */
   expiry_date: number;
 }
 
+/**
+ * Gmail watch configuration for push notifications
+ * @interface GmailWatchConfig
+ */
 export interface GmailWatchConfig {
+  /** Gmail history ID to start watching from */
   historyId: string;
+  /** Unix timestamp when watch expires */
   expiration: number;
 }
 
+/**
+ * Service class for interacting with Gmail API
+ * Handles authentication, rate limiting, and email operations
+ * @class GmailService
+ */
 export class GmailService {
   private userId: string;
   private oauth2Client: Auth.OAuth2Client;
   private rateLimiter: GmailRateLimiter;
 
+  /**
+   * Create a new Gmail service instance
+   * @param {string} userId - The ID of the user to authenticate for
+   * @example
+   * ```typescript
+   * const gmailService = new GmailService('user123');
+   * const client = await gmailService.getClient();
+   * ```
+   */
   constructor(userId: string) {
     this.userId = userId;
     this.rateLimiter = new GmailRateLimiter();
@@ -61,6 +103,14 @@ export class GmailService {
 
   /**
    * Get Gmail client with authenticated credentials
+   * @returns {Promise<gmail_v1.Gmail>} Authenticated Gmail API client
+   * @throws {Error} When tokens are not found or authentication fails
+   * @example
+   * ```typescript
+   * const service = new GmailService('user123');
+   * const gmail = await service.getClient();
+   * const messages = await gmail.users.messages.list({ userId: 'me' });
+   * ```
    */
   async getClient(): Promise<gmail_v1.Gmail> {
     try {
@@ -108,6 +158,16 @@ export class GmailService {
 
   /**
    * Fetch messages from Gmail with query and max results
+   * @param {string} query - Gmail search query (e.g., 'from:bank@example.com')
+   * @param {number} [maxResults=100] - Maximum number of messages to fetch (max 500)
+   * @returns {Promise<gmail_v1.Schema$Message[]>} Array of Gmail messages
+   * @throws {Error} When Gmail API requests fail
+   * @example
+   * ```typescript
+   * const service = new GmailService('user123');
+   * const messages = await service.fetchMessages('from:bank@example.com', 50);
+   * console.log(`Found ${messages.length} messages`);
+   * ```
    */
   async fetchMessages(query: string, maxResults: number = 100): Promise<gmail_v1.Schema$Message[]> {
     try {
@@ -158,6 +218,15 @@ export class GmailService {
 
   /**
    * Setup Gmail push notifications using Pub/Sub
+   * @param {string} topicName - Google Cloud Pub/Sub topic name for notifications
+   * @returns {Promise<void>} Promise that resolves when watch is set up
+   * @throws {Error} When watch setup fails or database operations fail
+   * @example
+   * ```typescript
+   * const service = new GmailService('user123');
+   * await service.setupWatch('projects/my-project/topics/gmail-notifications');
+   * console.log('Gmail watch notifications enabled');
+   * ```
    */
   async setupWatch(topicName: string): Promise<void> {
     try {
@@ -205,6 +274,14 @@ export class GmailService {
 
   /**
    * Refresh access token if expired
+   * @returns {Promise<void>} Promise that resolves when token is refreshed
+   * @throws {Error} When token refresh fails or database operations fail
+   * @example
+   * ```typescript
+   * const service = new GmailService('user123');
+   * await service.refreshToken();
+   * console.log('Token refreshed successfully');
+   * ```
    */
   async refreshToken(): Promise<void> {
     try {
@@ -258,6 +335,15 @@ export class GmailService {
 
   /**
    * Get message history since a specific history ID
+   * @param {string} startHistoryId - Gmail history ID to start from
+   * @returns {Promise<gmail_v1.Schema$History[]>} Array of Gmail history records
+   * @throws {Error} When Gmail API requests fail
+   * @example
+   * ```typescript
+   * const service = new GmailService('user123');
+   * const history = await service.getHistory('12345');
+   * console.log(`Found ${history.length} history records`);
+   * ```
    */
   async getHistory(startHistoryId: string): Promise<gmail_v1.Schema$History[]> {
     try {
@@ -279,6 +365,16 @@ export class GmailService {
 
   /**
    * Get a specific message by ID
+   * @param {string} messageId - Gmail message ID to retrieve
+   * @returns {Promise<gmail_v1.Schema$Message | null>} Gmail message or null if not found
+   * @example
+   * ```typescript
+   * const service = new GmailService('user123');
+   * const message = await service.getMessage('msg123');
+   * if (message) {
+   *   console.log('Message found:', message.snippet);
+   * }
+   * ```
    */
   async getMessage(messageId: string): Promise<gmail_v1.Schema$Message | null> {
     try {
@@ -300,6 +396,20 @@ export class GmailService {
 
   /**
    * Extract email content from Gmail message
+   * @static
+   * @param {gmail_v1.Schema$Message} message - Gmail message object
+   * @returns {Object} Extracted email content
+   * @returns {string} returns.subject - Email subject line
+   * @returns {string} returns.from - Sender email address
+   * @returns {string} returns.body - Email body content
+   * @returns {Date} returns.date - Email date
+   * @returns {string} returns.messageId - Gmail message ID
+   * @example
+   * ```typescript
+   * const content = GmailService.extractEmailContent(message);
+   * console.log(`Subject: ${content.subject}`);
+   * console.log(`From: ${content.from}`);
+   * ```
    */
   static extractEmailContent(message: gmail_v1.Schema$Message): {
     subject: string;
@@ -340,10 +450,18 @@ export class GmailService {
   }
 }
 
-// Export singleton factory function
+/**
+ * Factory function to create a new Gmail service instance
+ * @param {string} userId - The ID of the user to create service for
+ * @returns {GmailService} New Gmail service instance
+ * @example
+ * ```typescript
+ * const gmailService = createGmailService('user123');
+ * const messages = await gmailService.fetchMessages('from:bank@example.com');
+ * ```
+ */
 export function createGmailService(userId: string): GmailService {
   return new GmailService(userId);
 }
 
-// Export default instance creator
 export default GmailService;

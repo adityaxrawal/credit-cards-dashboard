@@ -2,28 +2,88 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { apiWrapper, validationError } from '@/lib/utils/api-error';
 
+/**
+ * Represents a credit card with basic information
+ * @interface Card
+ */
 interface Card {
+  /** Unique identifier for the card */
   id: string;
+  /** ID of the user who owns the card */
   user_id: string;
+  /** Name of the bank that issued the card */
   bank_name: string;
+  /** Name/type of the credit card */
   card_name: string;
+  /** Last four digits of the card number */
   last_four_digits: string;
 }
 
+/**
+ * Represents a transaction with card information
+ * @interface Transaction
+ */
 interface Transaction {
+  /** Unique identifier for the transaction */
   id: string;
+  /** ID of the associated credit card */
   card_id: string;
+  /** Transaction amount (positive for debits, negative for credits) */
   amount: number;
+  /** Description of the transaction */
   description: string;
+  /** Auto-categorized transaction category */
   category: string;
+  /** Manually assigned category (overrides auto-category) */
   category_manual?: string;
+  /** ISO date string of the transaction */
   date: string;
+  /** Type of transaction */
   type: 'debit' | 'credit' | 'reversal';
+  /** Name of the merchant (if available) */
   merchant_name?: string;
+  /** ISO date string of when the transaction was created */
   created_at: string;
+  /** ISO date string of when the transaction was last updated */
   updated_at: string;
 }
 
+/**
+ * GET /api/transactions/current
+ * Retrieves current transactions for the authenticated user with pagination and filtering
+ * @param {NextRequest} request - The incoming request object
+ * @returns {Promise<NextResponse>} JSON response with transactions data and pagination info
+ * @throws {Error} When user is not authenticated, validation fails, or database operations fail
+ * @example
+ * ```typescript
+ * // Query parameters:
+ * // - cardId: Filter by specific card ID
+ * // - category: Filter by transaction category
+ * // - page: Page number (default: 1)
+ * // - limit: Items per page (default: 50, max: 100)
+ * 
+ * // Response format:
+ * {
+ *   "transactions": [
+ *     {
+ *       "id": "tx123",
+ *       "amount": 25.99,
+ *       "description": "Coffee Shop",
+ *       "category": "dining",
+ *       "date": "2024-01-15",
+ *       "card": {
+ *         "bank_name": "Chase",
+ *         "card_name": "Sapphire Preferred"
+ *       }
+ *     }
+ *   ],
+ *   "total": 150,
+ *   "page": 1,
+ *   "limit": 50,
+ *   "totalPages": 3
+ * }
+ * ```
+ */
 export async function GET(request: NextRequest) {
   return apiWrapper(async () => {
     const supabase = await createClient();

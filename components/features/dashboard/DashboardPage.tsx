@@ -10,6 +10,23 @@ import QuickActions from './QuickActions';
 import StatCard from './StatCard';
 import { sampleData } from '@/data/mockData';
 
+/**
+ * Main dashboard page component that displays user's financial overview
+ * 
+ * Features:
+ * - Financial statistics cards (balance, spending, credit, next payment)
+ * - Credit card display with selection functionality
+ * - Recent transactions list
+ * - Spending chart visualization
+ * - Quick action buttons
+ * 
+ * @component
+ * @returns {JSX.Element} The rendered dashboard page
+ * @example
+ * ```tsx
+ * <DashboardPage />
+ * ```
+ */
 export function DashboardPage() {
   const [selectedCard, setSelectedCard] = useState(sampleData.creditCards[0]);
 

@@ -2,26 +2,72 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+/**
+ * Configuration options for the useApi hook
+ * @template T - The type of data returned by the API function
+ * @interface UseApiOptions
+ */
 interface UseApiOptions<T> {
+  /** Initial data to set before any API calls */
   initialData?: T;
+  /** Whether to execute the API function immediately on mount */
   immediate?: boolean;
+  /** Callback function called when API call succeeds */
   onSuccess?: (data: T) => void;
+  /** Callback function called when API call fails */
   onError?: (error: Error) => void;
+  /** Cache key for storing/retrieving cached results */
   cacheKey?: string;
-  cacheDuration?: number; // in milliseconds
+  /** Duration in milliseconds to keep cached data valid (default: 5 minutes) */
+  cacheDuration?: number;
 }
 
+/**
+ * Return type for the useApi hook
+ * @template T - The type of data returned by the API function
+ * @interface UseApiReturn
+ */
 interface UseApiReturn<T> {
+  /** The current data from the API call */
   data: T | null;
+  /** Whether an API call is currently in progress */
   loading: boolean;
+  /** Any error that occurred during the API call */
   error: Error | null;
+  /** Function to manually execute the API call */
   execute: (...args: unknown[]) => Promise<T | null>;
+  /** Function to reset the hook state to initial values */
   reset: () => void;
 }
 
-// Simple in-memory cache
+/**
+ * Simple in-memory cache for API responses
+ * Maps cache keys to data and timestamp objects
+ */
 const cache = new Map<string, { data: unknown; timestamp: number }>();
 
+/**
+ * Custom React hook for managing API calls with loading states, error handling, and caching
+ * @template T - The type of data returned by the API function
+ * @param {Function} apiFunction - The async function to call for API requests
+ * @param {UseApiOptions<T>} options - Configuration options for the hook
+ * @returns {UseApiReturn<T>} Object containing data, loading state, error, and control functions
+ * @example
+ * ```typescript
+ * // Basic usage
+ * const { data, loading, error, execute } = useApi(fetchUserData, {
+ *   immediate: true,
+ *   cacheKey: 'user-data',
+ *   onSuccess: (data) => console.log('User loaded:', data),
+ *   onError: (error) => console.error('Failed to load user:', error)
+ * });
+ * 
+ * // Manual execution
+ * const handleRefresh = () => {
+ *   execute(userId);
+ * };
+ * ```
+ */
 function useApi<T>(
   apiFunction: (...args: unknown[]) => Promise<T>,
   options: UseApiOptions<T> = {}

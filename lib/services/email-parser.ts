@@ -1,5 +1,8 @@
 import { EMAIL_PATTERNS, STATEMENT_PATTERNS, TRANSACTION_CATEGORIES, EmailPattern } from '../email-patterns';
 
+/**
+ * Represents a parsed email containing transaction or statement information
+ */
 export interface ParsedEmail {
   bank: string;
   type: 'transaction' | 'statement';
@@ -16,6 +19,9 @@ export interface ParsedEmail {
   };
 }
 
+/**
+ * Represents a parsed credit card transaction
+ */
 export interface ParsedTransaction {
   cardNumber: string;
   amount: number;
@@ -27,6 +33,9 @@ export interface ParsedTransaction {
   description: string;
 }
 
+/**
+ * Represents a parsed credit card statement
+ */
 export interface ParsedStatement {
   cardNumber: string;
   bank: string;
@@ -38,10 +47,35 @@ export interface ParsedStatement {
   creditLimit?: number;
 }
 
+/**
+ * Service class for parsing credit card transaction and statement emails from various banks
+ * 
+ * This service uses predefined patterns to extract structured data from bank emails,
+ * supporting multiple Indian banks including SBI, HDFC, Axis, and others.
+ * 
+ * @example
+ * ```typescript
+ * const parser = new EmailParserService();
+ * const email = {
+ *   subject: "Transaction Alert - Rs 2,500.00 spent on your HDFC Card",
+ *   body: "Dear Customer, You have spent Rs 2,500.00 at AMAZON...",
+ *   sender: "alerts@hdfcbank.net",
+ *   date: new Date()
+ * };
+ * 
+ * const parsed = parser.parseEmail(email);
+ * if (parsed && parsed.type === 'transaction') {
+ *   console.log(`Transaction: ${parsed.amount} at ${parsed.merchant}`);
+ * }
+ * ```
+ */
 export class EmailParserService {
   private patterns: EmailPattern[];
   private statementPatterns: EmailPattern[];
 
+  /**
+   * Initialize the EmailParserService with predefined patterns
+   */
   constructor() {
     this.patterns = EMAIL_PATTERNS;
     this.statementPatterns = STATEMENT_PATTERNS;
@@ -49,6 +83,22 @@ export class EmailParserService {
 
   /**
    * Parse an email and determine if it's a transaction or statement
+   * 
+   * @param email - The email object containing subject, body, sender, and date
+   * @returns ParsedEmail object if parsing is successful, null otherwise
+   * 
+   * @example
+   * ```typescript
+   * const email = {
+   *   subject: "Transaction Alert - Rs 1,500.00",
+   *   body: "You have spent Rs 1,500.00 at SWIGGY",
+   *   sender: "alerts@hdfcbank.net",
+   *   date: new Date()
+   * };
+   * 
+   * const result = parser.parseEmail(email);
+   * console.log(result?.type); // 'transaction' or 'statement'
+   * ```
    */
   parseEmail(email: {
     subject: string;
@@ -111,7 +161,22 @@ export class EmailParserService {
   }
 
   /**
-   * Parse transaction details from email
+   * Parse a transaction email and extract transaction details
+   * 
+   * @param email - The email object to parse
+   * @returns ParsedTransaction object if successful, null otherwise
+   * 
+   * @throws {Error} When email format is invalid or parsing fails
+   * 
+   * @example
+   * ```typescript
+   * const transaction = parser.parseTransaction({
+   *   subject: "Card Transaction Alert",
+   *   body: "Rs 2,500.00 spent at AMAZON on Card ending 1234",
+   *   sender: "alerts@hdfcbank.net",
+   *   date: new Date()
+   * });
+   * ```
    */
   parseTransaction(email: {
     subject: string;
@@ -174,7 +239,20 @@ export class EmailParserService {
   }
 
   /**
-   * Parse statement details from email
+   * Parse statement details from email and extract billing information
+   * 
+   * @param email - The email object containing statement information
+   * @returns ParsedStatement object if successful, null otherwise
+   * 
+   * @example
+   * ```typescript
+   * const statement = parser.parseStatement({
+   *   subject: "Your HDFC Credit Card Statement is ready",
+   *   body: "Statement Date: 15-Jan-2024, Due Date: 05-Feb-2024, Total Due: Rs 45,000",
+   *   sender: "statements@hdfcbank.net",
+   *   date: new Date()
+   * });
+   * ```
    */
   parseStatement(email: {
     subject: string;
@@ -231,7 +309,17 @@ export class EmailParserService {
   }
 
   /**
-   * Categorize transaction based on merchant and content
+   * Categorize transaction based on merchant name and email content
+   * 
+   * @param merchant - The merchant name extracted from the transaction
+   * @param content - The full email content (subject + body)
+   * @returns The transaction category (e.g., 'Food & Dining', 'Shopping', 'Others')
+   * 
+   * @example
+   * ```typescript
+   * const category = parser.categorizeTransaction('SWIGGY', 'Transaction at SWIGGY for food delivery');
+   * console.log(category); // 'Food & Dining'
+   * ```
    */
   categorizeTransaction(merchant: string, content: string): string {
     const merchantLower = merchant.toLowerCase();
@@ -250,7 +338,17 @@ export class EmailParserService {
   }
 
   /**
-   * Identify bank from sender email
+   * Identify the bank from the sender email address
+   * 
+   * @param sender - The sender email address
+   * @returns The bank name if identified, null otherwise
+   * 
+   * @private
+   * @example
+   * ```typescript
+   * const bank = this.identifyBank('alerts@hdfcbank.net');
+   * console.log(bank); // 'HDFC Bank'
+   * ```
    */
   private identifyBank(sender: string): string | null {
     for (const pattern of this.patterns) {
@@ -264,7 +362,13 @@ export class EmailParserService {
   }
 
   /**
-   * Determine if email is a statement email
+   * Determine if the email contains statement information
+   * 
+   * @param subject - The email subject line
+   * @param body - The email body content
+   * @returns True if the email is a statement email, false otherwise
+   * 
+   * @private
    */
   private isStatementEmail(subject: string, body: string): boolean {
     const content = `${subject} ${body}`.toLowerCase();
@@ -274,7 +378,18 @@ export class EmailParserService {
   }
 
   /**
-   * Determine transaction type (debit/credit/reversal)
+   * Determine the transaction type based on email content and patterns
+   * 
+   * @param content - The combined email content (subject + body)
+   * @param pattern - The email pattern for the specific bank
+   * @returns The transaction type ('debit', 'credit', or 'reversal')
+   * 
+   * @private
+   * @example
+   * ```typescript
+   * const type = this.determineTransactionType('Amount debited Rs 1500', pattern);
+   * console.log(type); // 'debit'
+   * ```
    */
   private determineTransactionType(content: string, pattern: EmailPattern): 'debit' | 'credit' | 'reversal' {
     const contentLower = content.toLowerCase();
@@ -305,7 +420,19 @@ export class EmailParserService {
   }
 
   /**
-   * Parse date string to Date object
+   * Parse date string into Date object with multiple format support
+   * 
+   * @param dateString - The date string to parse
+   * @returns Parsed Date object, or current date if parsing fails
+   * 
+   * @private
+   * @throws {Error} When date string format is not recognized
+   * 
+   * @example
+   * ```typescript
+   * const date = this.parseDate('15-Jan-2024');
+   * const date2 = this.parseDate('2024-01-15');
+   * ```
    */
   private parseDate(dateString: string): Date {
     try {
@@ -341,21 +468,53 @@ export class EmailParserService {
   }
 
   /**
-   * Get all supported banks
+   * Get list of all supported banks
+   * 
+   * @returns Array of supported bank names
+   * 
+   * @example
+   * ```typescript
+   * const banks = parser.getSupportedBanks();
+   * console.log(banks); // ['HDFC Bank', 'SBI', 'Axis Bank', ...]
+   * ```
    */
   getSupportedBanks(): string[] {
     return this.patterns.map(p => p.bank);
   }
 
   /**
-   * Get pattern for specific bank
+   * Get the email pattern configuration for a specific bank
+   * 
+   * @param bank - The bank name to get pattern for
+   * @returns EmailPattern object if found, undefined otherwise
+   * 
+   * @example
+   * ```typescript
+   * const pattern = parser.getPatternForBank('HDFC Bank');
+   * if (pattern) {
+   *   console.log(pattern.senderRegex);
+   * }
+   * ```
    */
   getPatternForBank(bank: string): EmailPattern | undefined {
     return this.patterns.find(p => p.bank === bank);
   }
 
   /**
-   * Validate email format for parsing
+   * Validate email format and required fields
+   * 
+   * @param email - The email object to validate
+   * @returns True if email format is valid, false otherwise
+   * 
+   * @example
+   * ```typescript
+   * const isValid = parser.validateEmailFormat({
+   *   subject: 'Transaction Alert',
+   *   body: 'You have spent Rs 1500',
+   *   sender: 'alerts@bank.com',
+   *   date: new Date()
+   * });
+   * ```
    */
   validateEmailFormat(email: {
     subject: string;
