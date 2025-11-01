@@ -1,0 +1,192 @@
+name: Backend CI/CD
+
+on:
+    push:
+        branches: [main, develop]
+        paths:
+            - "backend/**"
+            - ".github/workflows/backend.yml"
+    pull_request:
+        branches: [main, develop]
+        paths:
+            - "backend/**"
+
+jobs:
+    test:
+        name: Test Backend Services
+        runs-on: ubuntu-latest
+
+        services:
+            postgres:
+                image: postgres:15
+                env:
+                    POSTGRES_PASSWORD: postgres
+                    POSTGRES_DB: test
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+                ports:
+                    - 5432:5432
+
+            redis:
+                image: redis:7-alpine
+                options: >-
+                    --health-cmd "redis-cli ping"
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+                ports:
+                    - 6379:6379
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+
+            - name: Install shared dependencies
+              working-directory: ./backend/shared
+              run: npm ci
+
+            - name: Install API Gateway dependencies
+              working-directory: ./backend/services/api-gateway
+              run: npm ci
+
+            - name: Run linter
+              working-directory: ./backend/services/api-gateway
+              run: npm run lint
+
+            - name: Run type check
+              working-directory: ./backend/services/api-gateway
+              run: npm run type-check
+
+            - name: Run tests
+              working-directory: ./backend/services/api-gateway
+              run: npm run test:ci
+              env:
+                  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test
+                  REDIS_URL: redis://localhost:6379
+                  JWT_SECRET: test-secret
+                  JWT_REFRESH_SECRET: test-refresh-secret
+                  NODE_ENV: test
+
+            - name: Upload coverage
+              uses: codecov/codecov-action@v3
+              with:
+                  files: ./backend/services/api-gateway/coverage/lcov.info
+                  flags: backend
+
+    build:
+        name: Build Docker Image
+        needs: test
+        runs-on: ubuntu-latest
+        if: github.event_name == 'push'
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Authenticate to Google Cloud
+              uses: google-github-actions/auth@v2
+              with:
+                  credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+            - name: Set up Cloud SDK
+              uses: google-github-actions/setup-gcloud@v2
+
+            - name: Configure Docker for GCR
+              run: gcloud auth configure-docker
+
+            - name: Build and push API Gateway image
+              working-directory: ./backend/services/api-gateway
+              run: |
+                  docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/api-gateway:${{ github.sha }} .
+                  docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/api-gateway:latest .
+                  docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/api-gateway:${{ github.sha }}
+                  docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/api-gateway:latest
+
+    deploy-staging:
+        name: Deploy to Staging
+        needs: build
+        if: github.ref == 'refs/heads/develop'
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Authenticate to Google Cloud
+              uses: google-github-actions/auth@v2
+              with:
+                  credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+            - name: Set up Cloud SDK
+              uses: google-github-actions/setup-gcloud@v2
+
+            - name: Deploy to Cloud Run (Staging)
+              run: |
+                  gcloud run deploy api-gateway-staging \
+                    --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/api-gateway:${{ github.sha }} \
+                    --platform managed \
+                    --region us-central1 \
+                    --allow-unauthenticated \
+                    --set-env-vars="NODE_ENV=staging" \
+                    --set-secrets="DATABASE_URL=database-url:latest,REDIS_URL=redis-url:latest,JWT_SECRET=jwt-secret:latest"
+
+    deploy-production:
+        name: Deploy to Production
+        needs: build
+        if: github.ref == 'refs/heads/main'
+        runs-on: ubuntu-latest
+        environment:
+            name: production
+            url: ${{ steps.deploy.outputs.url }}
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Authenticate to Google Cloud
+              uses: google-github-actions/auth@v2
+              with:
+                  credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+            - name: Set up Cloud SDK
+              uses: google-github-actions/setup-gcloud@v2
+
+            - name: Deploy to Cloud Run (Production)
+              id: deploy
+              run: |
+                  gcloud run deploy api-gateway \
+                    --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/api-gateway:${{ github.sha }} \
+                    --platform managed \
+                    --region us-central1 \
+                    --allow-unauthenticated \
+                    --min-instances 0 \
+                    --max-instances 10 \
+                    --cpu 1 \
+                    --memory 512Mi \
+                    --timeout 300 \
+                    --set-env-vars="NODE_ENV=production" \
+                    --set-secrets="DATABASE_URL=database-url:latest,REDIS_URL=redis-url:latest,JWT_SECRET=jwt-secret:latest,JWT_REFRESH_SECRET=jwt-refresh-secret:latest,GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest"
+
+            - name: Get service URL
+              run: |
+                  echo "Service URL: $(gcloud run services describe api-gateway --platform managed --region us-central1 --format 'value(status.url)')"
+
+            - name: Comment on PR
+              if: github.event_name == 'pull_request'
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      github.rest.issues.createComment({
+                        issue_number: context.issue.number,
+                        owner: context.repo.owner,
+                        repo: context.repo.name,
+                        body: '✅ Backend deployed to production!'
+                      })

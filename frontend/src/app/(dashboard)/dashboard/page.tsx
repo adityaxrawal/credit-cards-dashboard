@@ -1,0 +1,350 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { useAuth } from "@/lib/auth/AuthContext";
+import {
+  analyticsApi,
+  type DashboardOverview,
+  type UpcomingBill,
+} from "@/lib/api/analytics";
+import { transactionApi, type Transaction } from "@/lib/api/transactions";
+import Link from "next/link";
+
+/**
+ * Dashboard Page
+ * Main dashboard view showing overview of cards, transactions, and analytics
+ */
+export default function DashboardPage() {
+  const { user, logout } = useAuth();
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [recentTransactions, setRecentTransactions] = useState<Transaction[]>(
+    []
+  );
+  const [upcomingBills, setUpcomingBills] = useState<UpcomingBill[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      const [overviewData, transactionsData, billsData] = await Promise.all([
+        analyticsApi.getDashboardOverview(),
+        transactionApi.getRecentTransactions(10),
+        analyticsApi.getUpcomingBills(30),
+      ]);
+      setOverview(overviewData);
+      setRecentTransactions(transactionsData);
+      setUpcomingBills(billsData);
+    } catch (error) {
+      console.error("Failed to load dashboard data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-gray-600">Loading dashboard...</div>
+        </div>
+      </ProtectedRoute>
+    );
+  }
+
+  return (
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <header className="bg-white shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+                <p className="text-sm text-gray-600">
+                  Welcome back, {user?.name}
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <Link
+                  href="/cards"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Cards
+                </Link>
+                <Link
+                  href="/transactions"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Transactions
+                </Link>
+                <button
+                  onClick={logout}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-4 mb-8">
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-sm font-medium text-gray-500">Total Cards</h3>
+              <p className="mt-2 text-3xl font-semibold text-gray-900">
+                {overview?.total_cards || 0}
+              </p>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-sm font-medium text-gray-500">
+                Monthly Spending
+              </h3>
+              <p className="mt-2 text-3xl font-semibold text-gray-900">
+                ₹{overview?.monthly_spending?.toLocaleString() || 0}
+              </p>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-sm font-medium text-gray-500">
+                Transactions
+              </h3>
+              <p className="mt-2 text-3xl font-semibold text-gray-900">
+                {overview?.total_transactions || 0}
+              </p>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-sm font-medium text-gray-500">Outstanding</h3>
+              <p className="mt-2 text-3xl font-semibold text-red-600">
+                ₹{overview?.total_outstanding?.toLocaleString() || 0}
+              </p>
+            </div>
+          </div>
+
+          {/* Credit Utilization */}
+          {overview && overview.total_cards > 0 && (
+            <div className="bg-white rounded-lg shadow p-6 mb-8">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-gray-800">
+                  Credit Utilization
+                </h2>
+                <span
+                  className={`text-2xl font-bold ${
+                    overview.credit_utilization > 70
+                      ? "text-red-600"
+                      : "text-gray-800"
+                  }`}
+                >
+                  {overview.credit_utilization.toFixed(1)}%
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-4">
+                <div
+                  className={`h-4 rounded-full transition-all ${
+                    overview.credit_utilization > 70
+                      ? "bg-red-500"
+                      : "bg-blue-500"
+                  }`}
+                  style={{
+                    width: `${Math.min(overview.credit_utilization, 100)}%`,
+                  }}
+                />
+              </div>
+              {overview.monthly_budget && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-gray-600">Budget Progress</span>
+                    <span className="font-semibold">
+                      ₹{overview.monthly_spending?.toLocaleString()} / ₹
+                      {overview.monthly_budget?.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className={`h-3 rounded-full ${
+                        (overview.budget_utilization || 0) > 90
+                          ? "bg-red-500"
+                          : "bg-green-500"
+                      }`}
+                      style={{
+                        width: `${Math.min(
+                          overview.budget_utilization || 0,
+                          100
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Recent Transactions */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-semibold text-gray-800">
+                    Recent Transactions
+                  </h2>
+                  <Link
+                    href="/transactions"
+                    className="text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    View All
+                  </Link>
+                </div>
+              </div>
+              <div className="p-6">
+                {recentTransactions.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No transactions yet</p>
+                    <Link
+                      href="/transactions/new"
+                      className="mt-4 inline-block text-blue-600 hover:text-blue-700"
+                    >
+                      Add your first transaction
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentTransactions.map((transaction) => (
+                      <div
+                        key={transaction.id}
+                        className="flex justify-between items-start"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-800">
+                            {transaction.merchant_name}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {new Date(
+                              transaction.transaction_date
+                            ).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <p
+                          className={`font-semibold ${
+                            transaction.transaction_type === "debit"
+                              ? "text-red-600"
+                              : "text-green-600"
+                          }`}
+                        >
+                          {transaction.transaction_type === "credit" ||
+                          transaction.transaction_type === "refund"
+                            ? "+"
+                            : "-"}
+                          ₹{transaction.amount.toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Upcoming Bills */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-semibold text-gray-800">
+                    Upcoming Bills
+                  </h2>
+                  <Link
+                    href="/cards"
+                    className="text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    View Cards
+                  </Link>
+                </div>
+              </div>
+              <div className="p-6">
+                {upcomingBills.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No upcoming bills</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {upcomingBills.map((bill) => (
+                      <div
+                        key={bill.card_id}
+                        className="flex justify-between items-start"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-800">
+                            {bill.card_name}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {bill.bank_name}
+                          </p>
+                          <p
+                            className={`text-xs mt-1 ${
+                              bill.days_until_due <= 7
+                                ? "text-red-600 font-medium"
+                                : "text-gray-600"
+                            }`}
+                          >
+                            {bill.days_until_due === 0
+                              ? "Due today"
+                              : bill.days_until_due === 1
+                              ? "Due tomorrow"
+                              : `Due in ${bill.days_until_due} days`}
+                          </p>
+                        </div>
+                        <p className="font-semibold text-red-600">
+                          ₹{bill.outstanding.toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Empty State for No Cards */}
+          {overview && overview.total_cards === 0 && (
+            <div className="mt-8 bg-white rounded-lg shadow p-12 text-center">
+              <svg
+                className="mx-auto h-12 w-12 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+                />
+              </svg>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">
+                No credit cards added yet
+              </h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Get started by adding your first credit card
+              </p>
+              <div className="mt-6">
+                <Link
+                  href="/cards/new"
+                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                >
+                  Add Card
+                </Link>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+    </ProtectedRoute>
+  );
+}
