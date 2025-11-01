@@ -1,0 +1,37 @@
+{
+  "name": "credit-card-dashboard",
+  "version": "1.0.0",
+  "description": "Personal credit card management and analytics dashboard",
+  "private": true,
+  "scripts": {
+    "setup": "bash scripts/setup-infrastructure.sh",
+    "dev": "bash scripts/dev.sh",
+    "test": "bash scripts/test.sh",
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build",
+    "frontend:test": "cd frontend && npm test",
+    "backend:dev": "cd backend/services/api-gateway && npm run dev",
+    "backend:build": "cd backend/services/api-gateway && npm run build",
+    "backend:test": "cd backend/services/api-gateway && npm test",
+    "db:migrate:up": "cd database && npm run migrate:up",
+    "db:migrate:down": "cd database && npm run migrate:down",
+    "lint": "npm run frontend:lint && npm run backend:lint",
+    "frontend:lint": "cd frontend && npm run lint",
+    "backend:lint": "cd backend/services/api-gateway && npm run lint"
+  },
+  "keywords": [
+    "credit-card",
+    "dashboard",
+    "finance",
+    "budgeting",
+    "analytics"
+  ],
+  "author": "",
+  "license": "MIT",
+  "workspaces": [
+    "frontend",
+    "backend/services/*",
+    "backend/shared",
+    "database"
+  ]
+}
