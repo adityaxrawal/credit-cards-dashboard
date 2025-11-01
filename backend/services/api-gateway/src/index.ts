@@ -14,6 +14,7 @@ import transactionRoutes from "./routes/transaction.routes";
 import budgetRoutes from "./routes/budget.routes";
 import alertRoutes from "./routes/alert.routes";
 import analyticsRoutes from "./routes/analytics.routes";
+import gmailRoutes from "./routes/gmail.routes";
 
 dotenv.config();
 
@@ -45,6 +46,7 @@ app.use("/transactions", transactionRoutes);
 app.use("/budget", budgetRoutes);
 app.use("/alerts", alertRoutes);
 app.use("/analytics", analyticsRoutes);
+app.use("/gmail", gmailRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

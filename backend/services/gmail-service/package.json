@@ -1,0 +1,47 @@
+{
+  "name": "gmail-service",
+  "version": "1.0.0",
+  "description": "Gmail API integration service for automated transaction extraction",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts"
+  },
+  "keywords": [
+    "gmail",
+    "oauth",
+    "email",
+    "transaction-extraction"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google-cloud/pubsub": "^4.0.7",
+    "@upstash/redis": "^1.35.6",
+    "bull": "^4.11.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "googleapis": "^128.0.0",
+    "ioredis": "^5.3.2",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.16",
+    "@types/express": "^4.17.20",
+    "@types/jest": "^29.5.8",
+    "@types/node": "^20.9.0",
+    "@typescript-eslint/eslint-plugin": "^6.10.0",
+    "@typescript-eslint/parser": "^6.10.0",
+    "eslint": "^8.53.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1",
+    "prettier": "^3.0.3",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
+}
