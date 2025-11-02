@@ -13,8 +13,11 @@ import cardRoutes from "./routes/card.routes";
 import transactionRoutes from "./routes/transaction.routes";
 import budgetRoutes from "./routes/budget.routes";
 import alertRoutes from "./routes/alert.routes";
-import analyticsRoutes from "./routes/analytics.routes";
+import analyticsRoutes from "./routes/analytics-enhanced.routes";
 import gmailRoutes from "./routes/gmail.routes";
+import jobsRoutes from "./routes/jobs.routes";
+import billReminderRoutes from "./routes/bill-reminder.routes";
+import { BackgroundJobService } from "./services/background-jobs.service";
 
 dotenv.config();
 
@@ -47,6 +50,8 @@ app.use("/budget", budgetRoutes);
 app.use("/alerts", alertRoutes);
 app.use("/analytics", analyticsRoutes);
 app.use("/gmail", gmailRoutes);
+app.use("/jobs", jobsRoutes);
+app.use("/bills", billReminderRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
@@ -60,6 +65,15 @@ app.use(errorHandler);
 if (process.env.NODE_ENV !== "test") {
   app.listen(PORT, () => {
     logger.info(`API Gateway running on port ${PORT}`);
+
+    // Start background jobs in production
+    if (
+      process.env.NODE_ENV === "production" ||
+      process.env.ENABLE_BACKGROUND_JOBS === "true"
+    ) {
+      BackgroundJobService.startAllJobs();
+      logger.info("Background jobs started");
+    }
   });
 }
 
