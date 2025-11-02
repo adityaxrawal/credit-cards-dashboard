@@ -17,6 +17,11 @@ import analyticsRoutes from "./routes/analytics-enhanced.routes";
 import gmailRoutes from "./routes/gmail.routes";
 import jobsRoutes from "./routes/jobs.routes";
 import billReminderRoutes from "./routes/bill-reminder.routes";
+import aiInsightsRoutes from "./routes/ai-insights.routes";
+import subscriptionRoutes from "./routes/subscriptions.routes";
+import reportsRoutes from "./routes/reports.routes";
+import rewardsRoutes from "./routes/rewards.routes";
+import statementUploadRoutes from "./routes/statement-upload.routes";
 import { BackgroundJobService } from "./services/background-jobs.service";
 
 dotenv.config();
@@ -52,6 +57,11 @@ app.use("/analytics", analyticsRoutes);
 app.use("/gmail", gmailRoutes);
 app.use("/jobs", jobsRoutes);
 app.use("/bills", billReminderRoutes);
+app.use("/ai-insights", aiInsightsRoutes);
+app.use("/subscriptions", subscriptionRoutes);
+app.use("/reports", reportsRoutes);
+app.use("/rewards", rewardsRoutes);
+app.use("/api/statements", statementUploadRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
