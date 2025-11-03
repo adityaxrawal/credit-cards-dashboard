@@ -4,7 +4,6 @@
     "module": "node16",
     "lib": ["ES2020"],
     "outDir": "./dist",
-    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -17,6 +16,6 @@
     "sourceMap": true,
     "declaration": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../../shared/monitoring/**/*"],
   "exclude": ["node_modules", "dist", "tests"]
 }
