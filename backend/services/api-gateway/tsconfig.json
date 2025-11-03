@@ -12,6 +12,7 @@
     "resolveJsonModule": true,
     "moduleResolution": "node16",
     "allowSyntheticDefaultImports": true,
+    "isolatedModules": true,
     "types": ["node", "jest"],
     "sourceMap": true,
     "declaration": true
