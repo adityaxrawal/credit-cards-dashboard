@@ -1,257 +1,257 @@
 name: Phase 2 - Email Integration Tests
 
 on:
-  push:
-    branches: [main, dev, 'feat/email-**']
-  pull_request:
-    branches: [main, dev]
-    paths:
-      - 'backend/services/gmail-service/**'
-      - 'backend/database/migrations/002_**'
-      - 'backend/database/migrations/006_**'
-      - 'frontend/src/components/gmail/**'
-      - 'frontend/src/components/settings/GmailIntegrationCard.tsx'
-      - '.github/workflows/phase2-tests.yml'
+    push:
+        branches: [main, dev, "feat/email-**"]
+    pull_request:
+        branches: [main, dev]
+        paths:
+            - "backend/services/gmail-service/**"
+            - "backend/database/migrations/002_**"
+            - "backend/database/migrations/006_**"
+            - "frontend/src/components/gmail/**"
+            - "frontend/src/components/settings/GmailIntegrationCard.tsx"
+            - ".github/workflows/phase2-tests.yml"
 
 env:
-  NODE_VERSION: '20.x'
-  
+    NODE_VERSION: "20.x"
+
 jobs:
-  lint:
-    name: Lint Code
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: |
-            backend/services/gmail-service/package-lock.json
-            frontend/package-lock.json
-      
-      - name: Install Backend Dependencies
-        working-directory: backend/services/gmail-service
-        run: npm ci
-      
-      - name: Lint Backend
-        working-directory: backend/services/gmail-service
-        run: npm run lint || echo "Linting completed"
-      
-      - name: Install Frontend Dependencies
-        working-directory: frontend
-        run: npm ci
-      
-      - name: Lint Frontend
-        working-directory: frontend
-        run: npm run lint || echo "Linting completed"
+    lint:
+        name: Lint Code
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
 
-  unit-tests:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
-    env:
-      # Test environment variables
-      GMAIL_MOCK_MODE: 'true'
-      FEATURE_FLAG_EMAIL_INTEGRATION: 'true'
-      NODE_ENV: test
-      ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
-      REDIS_URL: 'redis://localhost:6379'
-      SUPABASE_URL: 'https://test.supabase.co'
-      SUPABASE_ANON_KEY: 'test-anon-key'
-      SUPABASE_SERVICE_KEY: 'test-service-key'
-      GOOGLE_CLIENT_ID: 'test-client-id'
-      GOOGLE_CLIENT_SECRET: 'test-client-secret'
-      GOOGLE_REDIRECT_URI: 'http://localhost:3000/auth/callback'
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: backend/services/gmail-service/package-lock.json
-      
-      - name: Install Dependencies
-        working-directory: backend/services/gmail-service
-        run: npm ci
-      
-      - name: Run Unit Tests
-        working-directory: backend/services/gmail-service
-        run: npm test -- --coverage --maxWorkers=2
-      
-      - name: Upload Coverage
-        uses: codecov/codecov-action@v3
-        with:
-          files: backend/services/gmail-service/coverage/lcov.info
-          flags: gmail-service
-          name: gmail-service-coverage
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+                  cache: "npm"
+                  cache-dependency-path: |
+                      backend/services/gmail-service/package-lock.json
+                      frontend/package-lock.json
 
-  integration-tests:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: [unit-tests]
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-      postgres:
-        image: postgres:15-alpine
+            - name: Install Backend Dependencies
+              working-directory: backend/services/gmail-service
+              run: npm ci
+
+            - name: Lint Backend
+              working-directory: backend/services/gmail-service
+              run: npm run lint || echo "Linting completed"
+
+            - name: Install Frontend Dependencies
+              working-directory: frontend
+              run: npm ci
+
+            - name: Lint Frontend
+              working-directory: frontend
+              run: npm run lint || echo "Linting completed"
+
+    unit-tests:
+        name: Unit Tests
+        runs-on: ubuntu-latest
+        services:
+            redis:
+                image: redis:7-alpine
+                ports:
+                    - 6379:6379
+                options: >-
+                    --health-cmd "redis-cli ping"
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+
         env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_db
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
-    env:
-      GMAIL_MOCK_MODE: 'true'
-      FEATURE_FLAG_EMAIL_INTEGRATION: 'true'
-      NODE_ENV: test
-      ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
-      REDIS_URL: 'redis://localhost:6379'
-      SUPABASE_URL: 'http://localhost:5432'
-      SUPABASE_SERVICE_KEY: 'test-service-key'
-      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/test_db'
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: backend/services/gmail-service/package-lock.json
-      
-      - name: Install Dependencies
-        working-directory: backend/services/gmail-service
-        run: npm ci
-      
-      - name: Run Integration Tests
-        working-directory: backend/services/gmail-service
-        run: npm test -- --testPathPattern="(e2e|integration)" --maxWorkers=1
+            # Test environment variables
+            GMAIL_MOCK_MODE: "true"
+            FEATURE_FLAG_EMAIL_INTEGRATION: "true"
+            NODE_ENV: test
+            ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            REDIS_URL: "redis://localhost:6379"
+            SUPABASE_URL: "https://test.supabase.co"
+            SUPABASE_ANON_KEY: "test-anon-key"
+            SUPABASE_SERVICE_KEY: "test-service-key"
+            GOOGLE_CLIENT_ID: "test-client-id"
+            GOOGLE_CLIENT_SECRET: "test-client-secret"
+            GOOGLE_REDIRECT_URI: "http://localhost:3000/auth/callback"
 
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      
-      - name: Run npm audit (Backend)
-        working-directory: backend/services/gmail-service
-        run: npm audit --audit-level=high || echo "Audit completed"
-      
-      - name: Run npm audit (Frontend)
-        working-directory: frontend
-        run: npm audit --audit-level=high || echo "Audit completed"
+        steps:
+            - uses: actions/checkout@v4
 
-  build-test:
-    name: Build Test
-    runs-on: ubuntu-latest
-    needs: [lint, unit-tests]
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: |
-            backend/services/gmail-service/package-lock.json
-            frontend/package-lock.json
-      
-      - name: Install Backend Dependencies
-        working-directory: backend/services/gmail-service
-        run: npm ci
-      
-      - name: Build Backend
-        working-directory: backend/services/gmail-service
-        run: npm run build || tsc --noEmit
-      
-      - name: Install Frontend Dependencies
-        working-directory: frontend
-        run: npm ci
-      
-      - name: Build Frontend
-        working-directory: frontend
-        run: npm run build
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+                  cache: "npm"
+                  cache-dependency-path: backend/services/gmail-service/package-lock.json
+
+            - name: Install Dependencies
+              working-directory: backend/services/gmail-service
+              run: npm ci
+
+            - name: Run Unit Tests
+              working-directory: backend/services/gmail-service
+              run: npm test -- --coverage --maxWorkers=2
+
+            - name: Upload Coverage
+              uses: codecov/codecov-action@v3
+              with:
+                  files: backend/services/gmail-service/coverage/lcov.info
+                  flags: gmail-service
+                  name: gmail-service-coverage
+
+    integration-tests:
+        name: Integration Tests
+        runs-on: ubuntu-latest
+        needs: [unit-tests]
+        services:
+            redis:
+                image: redis:7-alpine
+                ports:
+                    - 6379:6379
+            postgres:
+                image: postgres:15-alpine
+                env:
+                    POSTGRES_PASSWORD: postgres
+                    POSTGRES_DB: test_db
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+
         env:
-          NEXT_PUBLIC_API_URL: 'http://localhost:3001'
+            GMAIL_MOCK_MODE: "true"
+            FEATURE_FLAG_EMAIL_INTEGRATION: "true"
+            NODE_ENV: test
+            ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            REDIS_URL: "redis://localhost:6379"
+            SUPABASE_URL: "http://localhost:5432"
+            SUPABASE_SERVICE_KEY: "test-service-key"
+            DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test_db"
 
-  e2e-smoke-test:
-    name: E2E Smoke Test
-    runs-on: ubuntu-latest
-    needs: [integration-tests, build-test]
-    if: github.event_name == 'pull_request'
-    
-    env:
-      GMAIL_MOCK_MODE: 'true'
-      FEATURE_FLAG_EMAIL_INTEGRATION: 'true'
-      NODE_ENV: test
-      ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
-      REDIS_URL: 'redis://localhost:6379'
-    
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      
-      - name: Install Dependencies
-        working-directory: backend/services/gmail-service
-        run: npm ci
-      
-      - name: Run E2E Smoke Tests
-        working-directory: backend/services/gmail-service
-        run: npm test -- --testPathPattern="phase2-simple-e2e" --maxWorkers=1
+        steps:
+            - uses: actions/checkout@v4
 
-  all-tests-passed:
-    name: All Tests Passed
-    runs-on: ubuntu-latest
-    needs: [lint, unit-tests, integration-tests, security-scan, build-test]
-    if: always()
-    steps:
-      - name: Check Test Results
-        run: |
-          if [ "${{ needs.lint.result }}" != "success" ] || \
-             [ "${{ needs.unit-tests.result }}" != "success" ] || \
-             [ "${{ needs.integration-tests.result }}" != "success" ] || \
-             [ "${{ needs.build-test.result }}" != "success" ]; then
-            echo "One or more test jobs failed"
-            exit 1
-          fi
-          echo "All tests passed successfully!"
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+                  cache: "npm"
+                  cache-dependency-path: backend/services/gmail-service/package-lock.json
+
+            - name: Install Dependencies
+              working-directory: backend/services/gmail-service
+              run: npm ci
+
+            - name: Run Integration Tests
+              working-directory: backend/services/gmail-service
+              run: npm test -- --testPathPattern="(e2e|integration)" --maxWorkers=1
+
+    security-scan:
+        name: Security Scan
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+
+            - name: Run npm audit (Backend)
+              working-directory: backend/services/gmail-service
+              run: npm audit --audit-level=high || echo "Audit completed"
+
+            - name: Run npm audit (Frontend)
+              working-directory: frontend
+              run: npm audit --audit-level=high || echo "Audit completed"
+
+    build-test:
+        name: Build Test
+        runs-on: ubuntu-latest
+        needs: [lint, unit-tests]
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+                  cache: "npm"
+                  cache-dependency-path: |
+                      backend/services/gmail-service/package-lock.json
+                      frontend/package-lock.json
+
+            - name: Install Backend Dependencies
+              working-directory: backend/services/gmail-service
+              run: npm ci
+
+            - name: Build Backend
+              working-directory: backend/services/gmail-service
+              run: npm run build || tsc --noEmit
+
+            - name: Install Frontend Dependencies
+              working-directory: frontend
+              run: npm ci
+
+            - name: Build Frontend
+              working-directory: frontend
+              run: npm run build
+              env:
+                  NEXT_PUBLIC_API_URL: "http://localhost:3001"
+
+    e2e-smoke-test:
+        name: E2E Smoke Test
+        runs-on: ubuntu-latest
+        needs: [integration-tests, build-test]
+        if: github.event_name == 'pull_request'
+
+        env:
+            GMAIL_MOCK_MODE: "true"
+            FEATURE_FLAG_EMAIL_INTEGRATION: "true"
+            NODE_ENV: test
+            ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            REDIS_URL: "redis://localhost:6379"
+
+        services:
+            redis:
+                image: redis:7-alpine
+                ports:
+                    - 6379:6379
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+
+            - name: Install Dependencies
+              working-directory: backend/services/gmail-service
+              run: npm ci
+
+            - name: Run E2E Smoke Tests
+              working-directory: backend/services/gmail-service
+              run: npm test -- --testPathPattern="phase2-simple-e2e" --maxWorkers=1
+
+    all-tests-passed:
+        name: All Tests Passed
+        runs-on: ubuntu-latest
+        needs: [lint, unit-tests, integration-tests, security-scan, build-test]
+        if: always()
+        steps:
+            - name: Check Test Results
+              run: |
+                  if [ "${{ needs.lint.result }}" != "success" ] || \
+                     [ "${{ needs.unit-tests.result }}" != "success" ] || \
+                     [ "${{ needs.integration-tests.result }}" != "success" ] || \
+                     [ "${{ needs.build-test.result }}" != "success" ]; then
+                    echo "One or more test jobs failed"
+                    exit 1
+                  fi
+                  echo "All tests passed successfully!"

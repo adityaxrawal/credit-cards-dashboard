@@ -2,6 +2,7 @@ import { gmailClient } from "../gmail-client";
 import { emailFetcher } from "../email-fetcher";
 import { emailClassifier } from "../classifier/email-classifier";
 import { transactionExtractor } from "../extractor/transaction-extractor";
+import { notificationService } from "../notifications/notification-service";
 import { logger } from "../utils/logger";
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
@@ -311,16 +312,28 @@ export class HistoricalScanner {
         },
         "Scan job completed"
       );
+
+      // Send completion notification
+      await notificationService.notifyScanCompletion(config.userId, jobId, {
+        totalMessages: processedCount,
+        extractedTransactions: extractedCount,
+        failedMessages: failedCount,
+      });
     } catch (error) {
       logger.error({ error, jobId }, "Scan job failed");
+
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
       await this.supabase
         .from("historical_scan_jobs")
         .update({
           status: "failed",
-          error_message: error instanceof Error ? error.message : "Unknown error",
+          error_message: errorMessage,
         })
         .eq("id", jobId);
+
+      // Send failure notification
+      await notificationService.notifyScanFailure(config.userId, jobId, errorMessage);
     }
   }
 

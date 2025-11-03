@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { Check, X, Edit2, AlertTriangle } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { Check, X, Edit2, AlertTriangle } from "lucide-react";
 
 interface ReviewItem {
   id: string;
@@ -24,7 +24,9 @@ export default function ManualReviewQueue() {
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editedData, setEditedData] = useState<ReviewItem['extracted_data'] | null>(null);
+  const [editedData, setEditedData] = useState<
+    ReviewItem["extracted_data"] | null
+  >(null);
 
   useEffect(() => {
     fetchPendingReviews();
@@ -32,23 +34,26 @@ export default function ManualReviewQueue() {
 
   const fetchPendingReviews = async () => {
     try {
-      const response = await fetch('/api/review/pending');
+      const response = await fetch("/api/review/pending");
       if (response.ok) {
         const data = await response.json();
         setItems(data.items);
       }
     } catch (error) {
-      console.error('Failed to fetch reviews:', error);
+      console.error("Failed to fetch reviews:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleApprove = async (id: string, editedTransaction?: ReviewItem['extracted_data']) => {
+  const handleApprove = async (
+    id: string,
+    editedTransaction?: ReviewItem["extracted_data"]
+  ) => {
     try {
       const response = await fetch(`/api/review/${id}/approve`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ editedTransaction }),
       });
 
@@ -58,15 +63,15 @@ export default function ManualReviewQueue() {
         setEditedData(null);
       }
     } catch (error) {
-      console.error('Failed to approve:', error);
+      console.error("Failed to approve:", error);
     }
   };
 
   const handleReject = async (id: string, reason: string) => {
     try {
       const response = await fetch(`/api/review/${id}/reject`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason }),
       });
 
@@ -74,7 +79,7 @@ export default function ManualReviewQueue() {
         setItems(items.filter((item) => item.id !== id));
       }
     } catch (error) {
-      console.error('Failed to reject:', error);
+      console.error("Failed to reject:", error);
     }
   };
 
@@ -106,7 +111,9 @@ export default function ManualReviewQueue() {
     return (
       <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
         <Check className="w-12 h-12 text-green-500 mx-auto mb-3" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">All Caught Up!</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          All Caught Up!
+        </h3>
         <p className="text-gray-600">No transactions require manual review.</p>
       </div>
     );
@@ -115,7 +122,9 @@ export default function ManualReviewQueue() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-gray-900">Manual Review Queue</h2>
+        <h2 className="text-2xl font-bold text-gray-900">
+          Manual Review Queue
+        </h2>
         <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
           {items.length} pending
         </span>
@@ -123,7 +132,8 @@ export default function ManualReviewQueue() {
 
       {items.map((item) => {
         const isEditing = editingId === item.id;
-        const data = (isEditing ? editedData : item.extracted_data) || item.extracted_data;
+        const data =
+          (isEditing ? editedData : item.extracted_data) || item.extracted_data;
 
         return (
           <div
@@ -155,13 +165,18 @@ export default function ManualReviewQueue() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Amount</label>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    Amount
+                  </label>
                   {isEditing ? (
                     <input
                       type="number"
                       value={data.amount}
                       onChange={(e) =>
-                        setEditedData({ ...data, amount: parseFloat(e.target.value) })
+                        setEditedData({
+                          ...data,
+                          amount: parseFloat(e.target.value),
+                        })
                       }
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
@@ -173,7 +188,9 @@ export default function ManualReviewQueue() {
                 </div>
 
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Merchant</label>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    Merchant
+                  </label>
                   {isEditing ? (
                     <input
                       type="text"
@@ -184,16 +201,20 @@ export default function ManualReviewQueue() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   ) : (
-                    <div className="text-gray-900 font-medium">{data.merchant}</div>
+                    <div className="text-gray-900 font-medium">
+                      {data.merchant}
+                    </div>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Card Last 4</label>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    Card Last 4
+                  </label>
                   {isEditing ? (
                     <input
                       type="text"
-                      value={data.cardLast4 || ''}
+                      value={data.cardLast4 || ""}
                       onChange={(e) =>
                         setEditedData({ ...data, cardLast4: e.target.value })
                       }
@@ -201,17 +222,24 @@ export default function ManualReviewQueue() {
                       maxLength={4}
                     />
                   ) : (
-                    <div className="text-gray-900">****{data.cardLast4 || '----'}</div>
+                    <div className="text-gray-900">
+                      ****{data.cardLast4 || "----"}
+                    </div>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Type</label>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    Type
+                  </label>
                   {isEditing ? (
                     <select
                       value={data.transactionType}
                       onChange={(e) =>
-                        setEditedData({ ...data, transactionType: e.target.value })
+                        setEditedData({
+                          ...data,
+                          transactionType: e.target.value,
+                        })
                       }
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     >
@@ -230,7 +258,9 @@ export default function ManualReviewQueue() {
 
               {data.date && (
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Date</label>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    Date
+                  </label>
                   <div className="text-gray-900">{data.date}</div>
                 </div>
               )}
@@ -271,7 +301,9 @@ export default function ManualReviewQueue() {
                     Edit
                   </button>
                   <button
-                    onClick={() => handleReject(item.id, 'Incorrect extraction')}
+                    onClick={() =>
+                      handleReject(item.id, "Incorrect extraction")
+                    }
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-colors"
                   >
                     <X className="w-4 h-4" />
