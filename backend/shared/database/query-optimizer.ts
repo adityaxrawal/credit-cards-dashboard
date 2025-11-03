@@ -3,9 +3,9 @@
  * Phase 6: Backend Performance Optimization
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
-import { metricsCollector } from '../../../monitoring/metrics-collector';
-import { logger } from '../../../monitoring/logger';
+import { SupabaseClient } from "@supabase/supabase-js";
+import { metricsCollector } from "../../../monitoring/metrics-collector";
+import { logger } from "../../../monitoring/logger";
 
 interface QueryOptions {
   enableCache?: boolean;
@@ -32,8 +32,8 @@ export async function executeOptimizedQuery<T>(
     // Record metrics
     const duration = Date.now() - startTime;
     await metricsCollector.recordPerformance({
-      service: 'database',
-      operation: 'query',
+      service: "database",
+      operation: "query",
       duration,
       success: !error,
       timestamp: Date.now(),
@@ -41,7 +41,7 @@ export async function executeOptimizedQuery<T>(
 
     // Log slow queries
     if (duration > 1000) {
-      logger.warn('Slow query detected', {
+      logger.warn("Slow query detected", {
         queryId,
         duration,
         query: queryBuilder.toString(),
@@ -51,15 +51,15 @@ export async function executeOptimizedQuery<T>(
     return { data, error };
   } catch (error: any) {
     const duration = Date.now() - startTime;
-    
-    logger.error('Query execution failed', error, {
+
+    logger.error("Query execution failed", error, {
       queryId,
       duration,
     });
 
     await metricsCollector.recordPerformance({
-      service: 'database',
-      operation: 'query',
+      service: "database",
+      operation: "query",
       duration,
       success: false,
       timestamp: Date.now(),
@@ -79,13 +79,13 @@ export async function batchInsert<T>(
   batchSize: number = 100
 ): Promise<{ success: boolean; errors: any[] }> {
   const errors: any[] = [];
-  
+
   for (let i = 0; i < records.length; i += batchSize) {
     const batch = records.slice(i, i + batchSize);
-    
+
     try {
       const { error } = await supabase.from(table).insert(batch);
-      
+
       if (error) {
         errors.push({ batch: i / batchSize, error });
       }
@@ -119,8 +119,8 @@ export async function paginateQuery<T>(
   hasMore: boolean;
 }> {
   const {
-    select = '*',
-    orderBy = { column: 'created_at', ascending: false },
+    select = "*",
+    orderBy = { column: "created_at", ascending: false },
     pageSize = 50,
     cursor,
     filters = {},
@@ -140,7 +140,9 @@ export async function paginateQuery<T>(
   // Apply cursor for pagination
   if (cursor) {
     const ascending = orderBy.ascending ?? false;
-    query = ascending ? query.gt(orderBy.column, cursor) : query.lt(orderBy.column, cursor);
+    query = ascending
+      ? query.gt(orderBy.column, cursor)
+      : query.lt(orderBy.column, cursor);
   }
 
   const { data, error } = await query;
@@ -151,9 +153,10 @@ export async function paginateQuery<T>(
 
   const hasMore = (data?.length || 0) > pageSize;
   const results = hasMore ? data!.slice(0, pageSize) : data || [];
-  const nextCursor = hasMore && results.length > 0 
-    ? results[results.length - 1][orderBy.column] 
-    : null;
+  const nextCursor =
+    hasMore && results.length > 0
+      ? results[results.length - 1][orderBy.column]
+      : null;
 
   return {
     data: results as T[],
@@ -170,7 +173,10 @@ export async function aggregateQuery(
   table: string,
   options: {
     groupBy: string[];
-    aggregates: { column: string; function: 'sum' | 'avg' | 'count' | 'min' | 'max' }[];
+    aggregates: {
+      column: string;
+      function: "sum" | "avg" | "count" | "min" | "max";
+    }[];
     filters?: Record<string, any>;
   }
 ): Promise<any[]> {
@@ -182,9 +188,7 @@ export async function aggregateQuery(
     ...aggregates.map((agg) => `${agg.column}.${agg.function}()`),
   ];
 
-  let query = supabase
-    .from(table)
-    .select(selectParts.join(', '));
+  let query = supabase.from(table).select(selectParts.join(", "));
 
   // Apply filters
   Object.entries(filters).forEach(([key, value]) => {
@@ -216,7 +220,7 @@ class QueryCache {
 
   get(key: string): any | null {
     const cached = this.cache.get(key);
-    
+
     if (!cached) {
       return null;
     }

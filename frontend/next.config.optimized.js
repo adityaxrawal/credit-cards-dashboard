@@ -10,15 +10,18 @@ const nextConfig = {
   // Compiler optimizations
   compiler: {
     // Remove console logs in production
-    removeConsole: process.env.NODE_ENV === 'production' ? {
-      exclude: ['error', 'warn'],
-    } : false,
+    removeConsole:
+      process.env.NODE_ENV === "production"
+        ? {
+            exclude: ["error", "warn"],
+          }
+        : false,
   },
 
   // Image optimization
   images: {
-    domains: ['lh3.googleusercontent.com'], // Google profile images
-    formats: ['image/avif', 'image/webp'],
+    domains: ["lh3.googleusercontent.com"], // Google profile images
+    formats: ["image/avif", "image/webp"],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     minimumCacheTTL: 60 * 60 * 24 * 30, // 30 days
@@ -35,7 +38,11 @@ const nextConfig = {
     // Enable optimized font loading
     optimizeFonts: true,
     // Modern bundling
-    optimizePackageImports: ['lucide-react', 'date-fns', '@tanstack/react-query'],
+    optimizePackageImports: [
+      "lucide-react",
+      "date-fns",
+      "@tanstack/react-query",
+    ],
   },
 
   // Webpack optimizations
@@ -43,12 +50,12 @@ const nextConfig = {
     // Production optimizations
     if (!dev && !isServer) {
       // Bundle analyzer (disabled by default)
-      if (process.env.ANALYZE === 'true') {
-        const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
+      if (process.env.ANALYZE === "true") {
+        const { BundleAnalyzerPlugin } = require("webpack-bundle-analyzer");
         config.plugins.push(
           new BundleAnalyzerPlugin({
-            analyzerMode: 'static',
-            reportFilename: './analyze.html',
+            analyzerMode: "static",
+            reportFilename: "./analyze.html",
           })
         );
       }
@@ -58,32 +65,32 @@ const nextConfig = {
         ...config.optimization,
         usedExports: true,
         sideEffects: true,
-        moduleIds: 'deterministic',
-        runtimeChunk: 'single',
+        moduleIds: "deterministic",
+        runtimeChunk: "single",
         splitChunks: {
-          chunks: 'all',
+          chunks: "all",
           cacheGroups: {
             default: false,
             vendors: false,
             // Vendor chunk for node_modules
             vendor: {
-              name: 'vendor',
-              chunks: 'all',
+              name: "vendor",
+              chunks: "all",
               test: /node_modules/,
               priority: 20,
             },
             // Common chunk for shared code
             common: {
-              name: 'common',
+              name: "common",
               minChunks: 2,
-              chunks: 'all',
+              chunks: "all",
               priority: 10,
               reuseExistingChunk: true,
               enforce: true,
             },
             // Framework chunk for React and Next.js
             framework: {
-              name: 'framework',
+              name: "framework",
               test: /[\\/]node_modules[\\/](react|react-dom|next)[\\/]/,
               priority: 30,
               reuseExistingChunk: true,
@@ -100,51 +107,51 @@ const nextConfig = {
   async headers() {
     return [
       {
-        source: '/:path*',
+        source: "/:path*",
         headers: [
           {
-            key: 'X-DNS-Prefetch-Control',
-            value: 'on',
+            key: "X-DNS-Prefetch-Control",
+            value: "on",
           },
           {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=63072000; includeSubDomains; preload',
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
           },
           {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
+            key: "X-Content-Type-Options",
+            value: "nosniff",
           },
           {
-            key: 'X-Frame-Options',
-            value: 'DENY',
+            key: "X-Frame-Options",
+            value: "DENY",
           },
           {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
+            key: "X-XSS-Protection",
+            value: "1; mode=block",
           },
           {
-            key: 'Referrer-Policy',
-            value: 'origin-when-cross-origin',
+            key: "Referrer-Policy",
+            value: "origin-when-cross-origin",
           },
         ],
       },
       {
         // Cache static assets
-        source: '/static/:path*',
+        source: "/static/:path*",
         headers: [
           {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
           },
         ],
       },
       {
         // Cache images
-        source: '/_next/image/:path*',
+        source: "/_next/image/:path*",
         headers: [
           {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
           },
         ],
       },
@@ -155,8 +162,10 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/:path*`,
+        source: "/api/:path*",
+        destination: `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+        }/:path*`,
       },
     ];
   },

@@ -3,8 +3,8 @@
  * Phase 6: Post-Launch & Optimization
  */
 
-import { createClient } from 'redis';
-import { performance } from 'perf_hooks';
+import { createClient } from "redis";
+import { performance } from "perf_hooks";
 
 export interface MetricData {
   name: string;
@@ -45,17 +45,17 @@ export class MetricsCollector {
   private async initializeRedis(): Promise<void> {
     try {
       this.redisClient = createClient({
-        url: process.env.REDIS_URL || 'redis://localhost:6379',
+        url: process.env.REDIS_URL || "redis://localhost:6379",
       });
 
-      this.redisClient.on('error', (err) => {
-        console.error('Redis Client Error:', err);
+      this.redisClient.on("error", (err) => {
+        console.error("Redis Client Error:", err);
       });
 
       await this.redisClient.connect();
-      console.log('✅ Metrics Collector: Redis connected');
+      console.log("✅ Metrics Collector: Redis connected");
     } catch (error) {
-      console.error('Failed to connect to Redis for metrics:', error);
+      console.error("Failed to connect to Redis for metrics:", error);
     }
   }
 
@@ -70,7 +70,7 @@ export class MetricsCollector {
    */
   async recordPerformance(metric: PerformanceMetric): Promise<void> {
     const metricData: MetricData = {
-      name: 'performance',
+      name: "performance",
       value: metric.duration,
       timestamp: metric.timestamp,
       tags: {
@@ -100,7 +100,7 @@ export class MetricsCollector {
    */
   async recordUsage(metric: UsageMetric): Promise<void> {
     const metricData: MetricData = {
-      name: 'api_usage',
+      name: "api_usage",
       value: metric.responseTime,
       timestamp: metric.timestamp,
       tags: {
@@ -129,7 +129,11 @@ export class MetricsCollector {
   /**
    * Record custom metric
    */
-  async recordMetric(name: string, value: number, tags?: Record<string, string>): Promise<void> {
+  async recordMetric(
+    name: string,
+    value: number,
+    tags?: Record<string, string>
+  ): Promise<void> {
     const metricData: MetricData = {
       name,
       value,
@@ -150,7 +154,10 @@ export class MetricsCollector {
   /**
    * Increment a counter
    */
-  async incrementCounter(name: string, tags?: Record<string, string>): Promise<void> {
+  async incrementCounter(
+    name: string,
+    tags?: Record<string, string>
+  ): Promise<void> {
     await this.recordMetric(name, 1, tags);
   }
 
@@ -159,7 +166,7 @@ export class MetricsCollector {
    */
   async recordCacheMetric(hit: boolean, key: string): Promise<void> {
     if (this.redisClient) {
-      const metricKey = hit ? 'metrics:cache:hits' : 'metrics:cache:misses';
+      const metricKey = hit ? "metrics:cache:hits" : "metrics:cache:misses";
       await this.redisClient.incr(metricKey);
       await this.redisClient.expire(metricKey, 86400);
     }
@@ -174,12 +181,12 @@ export class MetricsCollector {
     }
 
     const [cacheHits, cacheMisses] = await Promise.all([
-      this.redisClient.get('metrics:cache:hits'),
-      this.redisClient.get('metrics:cache:misses'),
+      this.redisClient.get("metrics:cache:hits"),
+      this.redisClient.get("metrics:cache:misses"),
     ]);
 
-    const hits = parseInt(cacheHits || '0', 10);
-    const misses = parseInt(cacheMisses || '0', 10);
+    const hits = parseInt(cacheHits || "0", 10);
+    const misses = parseInt(cacheMisses || "0", 10);
     const total = hits + misses;
     const hitRate = total > 0 ? (hits / total) * 100 : 0;
 
@@ -188,7 +195,7 @@ export class MetricsCollector {
         hits,
         misses,
         total,
-        hitRate: hitRate.toFixed(2) + '%',
+        hitRate: hitRate.toFixed(2) + "%",
       },
       timestamp: Date.now(),
     };
@@ -212,7 +219,7 @@ export class MetricsCollector {
     if (this.redisClient) {
       const aggregated = this.aggregateMetrics(metrics);
       await this.redisClient.set(
-        'metrics:aggregated:latest',
+        "metrics:aggregated:latest",
         JSON.stringify(aggregated),
         { EX: 3600 }
       );

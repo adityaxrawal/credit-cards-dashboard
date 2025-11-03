@@ -3,14 +3,14 @@
  * Phase 6: Post-Launch & Optimization
  */
 
-import winston from 'winston';
-import { captureError, captureMessage } from './sentry-config';
+import winston from "winston";
+import { captureError, captureMessage } from "./sentry-config";
 
 export enum LogLevel {
-  ERROR = 'error',
-  WARN = 'warn',
-  INFO = 'info',
-  DEBUG = 'debug',
+  ERROR = "error",
+  WARN = "warn",
+  INFO = "info",
+  DEBUG = "debug",
 }
 
 export interface LogContext {
@@ -29,9 +29,9 @@ class Logger {
 
     // Create Winston logger
     this.logger = winston.createLogger({
-      level: process.env.LOG_LEVEL || 'info',
+      level: process.env.LOG_LEVEL || "info",
       format: winston.format.combine(
-        winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
         winston.format.errors({ stack: true }),
         winston.format.splat(),
         winston.format.json()
@@ -43,23 +43,25 @@ class Logger {
           format: winston.format.combine(
             winston.format.colorize(),
             winston.format.printf(({ level, message, timestamp, ...meta }) => {
-              const metaStr = Object.keys(meta).length ? JSON.stringify(meta, null, 2) : '';
+              const metaStr = Object.keys(meta).length
+                ? JSON.stringify(meta, null, 2)
+                : "";
               return `${timestamp} [${level}]: ${message} ${metaStr}`;
             })
           ),
         }),
-        
+
         // File transport for errors
         new winston.transports.File({
-          filename: 'logs/error.log',
-          level: 'error',
+          filename: "logs/error.log",
+          level: "error",
           maxsize: 5242880, // 5MB
           maxFiles: 5,
         }),
-        
+
         // File transport for all logs
         new winston.transports.File({
-          filename: 'logs/combined.log',
+          filename: "logs/combined.log",
           maxsize: 5242880, // 5MB
           maxFiles: 10,
         }),
@@ -67,12 +69,12 @@ class Logger {
     });
 
     // Add production transports
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV === "production") {
       // You can add cloud logging here (e.g., Google Cloud Logging, CloudWatch)
       this.logger.add(
         new winston.transports.File({
-          filename: 'logs/production.log',
-          level: 'info',
+          filename: "logs/production.log",
+          level: "info",
           maxsize: 10485760, // 10MB
           maxFiles: 20,
         })
@@ -85,7 +87,7 @@ class Logger {
    */
   error(message: string, error?: Error, context?: Partial<LogContext>): void {
     const logContext = { ...this.defaultContext, ...context };
-    
+
     if (error) {
       this.logger.error(message, {
         error: {
@@ -95,12 +97,12 @@ class Logger {
         },
         ...logContext,
       });
-      
+
       // Send to Sentry
       captureError(error, logContext);
     } else {
       this.logger.error(message, logContext);
-      captureMessage(message, 'error', logContext);
+      captureMessage(message, "error", logContext);
     }
   }
 
@@ -110,9 +112,9 @@ class Logger {
   warn(message: string, context?: Partial<LogContext>): void {
     const logContext = { ...this.defaultContext, ...context };
     this.logger.warn(message, logContext);
-    
-    if (process.env.NODE_ENV === 'production') {
-      captureMessage(message, 'warning', logContext);
+
+    if (process.env.NODE_ENV === "production") {
+      captureMessage(message, "warning", logContext);
     }
   }
 
@@ -135,10 +137,17 @@ class Logger {
   /**
    * Log HTTP request
    */
-  logRequest(method: string, path: string, statusCode: number, duration: number, context?: Partial<LogContext>): void {
-    const level = statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'info';
+  logRequest(
+    method: string,
+    path: string,
+    statusCode: number,
+    duration: number,
+    context?: Partial<LogContext>
+  ): void {
+    const level =
+      statusCode >= 500 ? "error" : statusCode >= 400 ? "warn" : "info";
     const message = `${method} ${path} ${statusCode} - ${duration}ms`;
-    
+
     this.logger.log(level, message, {
       ...this.defaultContext,
       ...context,
@@ -154,8 +163,13 @@ class Logger {
   /**
    * Log database query
    */
-  logQuery(query: string, duration: number, success: boolean, context?: Partial<LogContext>): void {
-    this.logger.debug('Database query', {
+  logQuery(
+    query: string,
+    duration: number,
+    success: boolean,
+    context?: Partial<LogContext>
+  ): void {
+    this.logger.debug("Database query", {
       ...this.defaultContext,
       ...context,
       query: {
@@ -182,4 +196,4 @@ export function createLogger(service: string): Logger {
 }
 
 // Default logger instance
-export const logger = createLogger('credit-card-dashboard');
+export const logger = createLogger("credit-card-dashboard");

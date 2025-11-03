@@ -3,20 +3,20 @@
  * Phase 6: Post-Launch & Optimization
  */
 
-import { createClient } from '@supabase/supabase-js';
-import { logger } from '../../../monitoring/logger';
-import { analyticsService } from '../../analytics-service/src/analytics.service';
+import { createClient } from "@supabase/supabase-js";
+import { logger } from "../../../monitoring/logger";
+import { analyticsService } from "../../analytics-service/src/analytics.service";
 
 const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+  process.env.SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 );
 
 export interface Feedback {
   id?: string;
   userId: string;
-  feedbackType: 'bug' | 'feature' | 'improvement' | 'general' | 'complaint';
-  priority?: 'low' | 'medium' | 'high' | 'critical';
+  feedbackType: "bug" | "feature" | "improvement" | "general" | "complaint";
+  priority?: "low" | "medium" | "high" | "critical";
   title: string;
   description: string;
   pageUrl?: string;
@@ -48,17 +48,17 @@ export class FeedbackService {
   async submitFeedback(feedback: Feedback): Promise<any> {
     try {
       const { data, error } = await supabase
-        .from('user_feedback')
+        .from("user_feedback")
         .insert({
           user_id: feedback.userId,
           feedback_type: feedback.feedbackType,
-          priority: feedback.priority || 'medium',
+          priority: feedback.priority || "medium",
           title: feedback.title,
           description: feedback.description,
           page_url: feedback.pageUrl,
           browser_info: feedback.browserInfo,
           screenshot_url: feedback.screenshotUrl,
-          status: 'submitted',
+          status: "submitted",
         })
         .select()
         .single();
@@ -66,12 +66,12 @@ export class FeedbackService {
       if (error) throw error;
 
       // Track event
-      await analyticsService.trackEvent(feedback.userId, 'feedback_submitted', {
+      await analyticsService.trackEvent(feedback.userId, "feedback_submitted", {
         feedbackType: feedback.feedbackType,
         feedbackId: data.id,
       });
 
-      logger.info('Feedback submitted', {
+      logger.info("Feedback submitted", {
         userId: feedback.userId,
         feedbackId: data.id,
         type: feedback.feedbackType,
@@ -79,7 +79,7 @@ export class FeedbackService {
 
       return data;
     } catch (error: any) {
-      logger.error('Failed to submit feedback', error, {
+      logger.error("Failed to submit feedback", error, {
         userId: feedback.userId,
       });
       throw error;
@@ -92,7 +92,7 @@ export class FeedbackService {
   async submitFeatureRequest(request: FeatureRequest): Promise<any> {
     try {
       const { data, error } = await supabase
-        .from('feature_requests')
+        .from("feature_requests")
         .insert({
           user_id: request.userId,
           title: request.title,
@@ -100,25 +100,29 @@ export class FeedbackService {
           use_case: request.useCase,
           expected_behavior: request.expectedBehavior,
           alternatives_considered: request.alternativesConsidered,
-          status: 'under_review',
+          status: "under_review",
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      await analyticsService.trackEvent(request.userId, 'feature_request_submitted', {
-        requestId: data.id,
-      });
+      await analyticsService.trackEvent(
+        request.userId,
+        "feature_request_submitted",
+        {
+          requestId: data.id,
+        }
+      );
 
-      logger.info('Feature request submitted', {
+      logger.info("Feature request submitted", {
         userId: request.userId,
         requestId: data.id,
       });
 
       return data;
     } catch (error: any) {
-      logger.error('Failed to submit feature request', error, {
+      logger.error("Failed to submit feature request", error, {
         userId: request.userId,
       });
       throw error;
@@ -131,7 +135,7 @@ export class FeedbackService {
   async submitNPSSurvey(survey: NPSSurvey): Promise<any> {
     try {
       const { data, error } = await supabase
-        .from('nps_surveys')
+        .from("nps_surveys")
         .insert({
           user_id: survey.userId,
           score: survey.score,
@@ -143,18 +147,18 @@ export class FeedbackService {
 
       if (error) throw error;
 
-      await analyticsService.trackEvent(survey.userId, 'nps_survey_submitted', {
+      await analyticsService.trackEvent(survey.userId, "nps_survey_submitted", {
         score: survey.score,
       });
 
-      logger.info('NPS survey submitted', {
+      logger.info("NPS survey submitted", {
         userId: survey.userId,
         score: survey.score,
       });
 
       return data;
     } catch (error: any) {
-      logger.error('Failed to submit NPS survey', error, {
+      logger.error("Failed to submit NPS survey", error, {
         userId: survey.userId,
       });
       throw error;
@@ -166,27 +170,25 @@ export class FeedbackService {
    */
   async upvoteFeedback(feedbackId: string, userId: string): Promise<void> {
     try {
-      const { error } = await supabase
-        .from('feedback_upvotes')
-        .insert({
-          feedback_id: feedbackId,
-          user_id: userId,
-        });
+      const { error } = await supabase.from("feedback_upvotes").insert({
+        feedback_id: feedbackId,
+        user_id: userId,
+      });
 
       if (error) {
         // Already upvoted, remove upvote
-        if (error.code === '23505') {
+        if (error.code === "23505") {
           await supabase
-            .from('feedback_upvotes')
+            .from("feedback_upvotes")
             .delete()
-            .eq('feedback_id', feedbackId)
-            .eq('user_id', userId);
+            .eq("feedback_id", feedbackId)
+            .eq("user_id", userId);
         } else {
           throw error;
         }
       }
     } catch (error: any) {
-      logger.error('Failed to upvote feedback', error, {
+      logger.error("Failed to upvote feedback", error, {
         feedbackId,
         userId,
       });
@@ -200,16 +202,16 @@ export class FeedbackService {
   async getUserFeedback(userId: string): Promise<any[]> {
     try {
       const { data, error } = await supabase
-        .from('user_feedback')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .from("user_feedback")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
 
       return data || [];
     } catch (error: any) {
-      logger.error('Failed to get user feedback', error, { userId });
+      logger.error("Failed to get user feedback", error, { userId });
       throw error;
     }
   }
@@ -225,20 +227,20 @@ export class FeedbackService {
   }): Promise<any[]> {
     try {
       let query = supabase
-        .from('user_feedback')
-        .select('*, users(name, email)')
-        .order('created_at', { ascending: false });
+        .from("user_feedback")
+        .select("*, users(name, email)")
+        .order("created_at", { ascending: false });
 
       if (filters?.status) {
-        query = query.eq('status', filters.status);
+        query = query.eq("status", filters.status);
       }
 
       if (filters?.type) {
-        query = query.eq('feedback_type', filters.type);
+        query = query.eq("feedback_type", filters.type);
       }
 
       if (filters?.priority) {
-        query = query.eq('priority', filters.priority);
+        query = query.eq("priority", filters.priority);
       }
 
       if (filters?.limit) {
@@ -251,7 +253,7 @@ export class FeedbackService {
 
       return data || [];
     } catch (error: any) {
-      logger.error('Failed to get all feedback', error);
+      logger.error("Failed to get all feedback", error);
       throw error;
     }
   }
@@ -275,25 +277,25 @@ export class FeedbackService {
         updates.admin_notes = adminNotes;
       }
 
-      if (status === 'resolved' && resolvedBy) {
+      if (status === "resolved" && resolvedBy) {
         updates.resolved_by = resolvedBy;
         updates.resolved_at = new Date().toISOString();
       }
 
       const { error } = await supabase
-        .from('user_feedback')
+        .from("user_feedback")
         .update(updates)
-        .eq('id', feedbackId);
+        .eq("id", feedbackId);
 
       if (error) throw error;
 
-      logger.info('Feedback status updated', {
+      logger.info("Feedback status updated", {
         feedbackId,
         status,
         resolvedBy,
       });
     } catch (error: any) {
-      logger.error('Failed to update feedback status', error, { feedbackId });
+      logger.error("Failed to update feedback status", error, { feedbackId });
       throw error;
     }
   }
@@ -309,7 +311,7 @@ export class FeedbackService {
   ): Promise<any> {
     try {
       const { data, error } = await supabase
-        .from('feedback_comments')
+        .from("feedback_comments")
         .insert({
           feedback_id: feedbackId,
           user_id: userId,
@@ -323,7 +325,7 @@ export class FeedbackService {
 
       return data;
     } catch (error: any) {
-      logger.error('Failed to add comment', error, { feedbackId, userId });
+      logger.error("Failed to add comment", error, { feedbackId, userId });
       throw error;
     }
   }
@@ -334,12 +336,12 @@ export class FeedbackService {
   async getFeedbackStats(): Promise<any> {
     try {
       const { data: feedbackData } = await supabase
-        .from('user_feedback')
-        .select('feedback_type, status, priority');
+        .from("user_feedback")
+        .select("feedback_type, status, priority");
 
       const { data: npsData } = await supabase
-        .from('nps_surveys')
-        .select('score');
+        .from("nps_surveys")
+        .select("score");
 
       // Calculate NPS
       let promoters = 0,
@@ -354,7 +356,8 @@ export class FeedbackService {
       }
 
       const totalNPS = promoters + passives + detractors;
-      const npsScore = totalNPS > 0 ? ((promoters - detractors) / totalNPS) * 100 : 0;
+      const npsScore =
+        totalNPS > 0 ? ((promoters - detractors) / totalNPS) * 100 : 0;
 
       // Group feedback by type and status
       const byType = feedbackData?.reduce((acc, item) => {
@@ -380,7 +383,7 @@ export class FeedbackService {
         },
       };
     } catch (error: any) {
-      logger.error('Failed to get feedback stats', error);
+      logger.error("Failed to get feedback stats", error);
       throw error;
     }
   }
