@@ -3,10 +3,22 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Mail, CheckCircle, XCircle, RefreshCw, AlertCircle } from "lucide-react";
+import {
+  Mail,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
+  AlertCircle,
+} from "lucide-react";
 
 // Simple card components since we're using Tailwind
-const Card = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
+const Card = ({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) => (
   <div className={`bg-white rounded-lg shadow ${className}`}>{children}</div>
 );
 
@@ -14,20 +26,40 @@ const CardHeader = ({ children }: { children: React.ReactNode }) => (
   <div className="p-6 border-b border-gray-200">{children}</div>
 );
 
-const CardTitle = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <h3 className={`text-lg font-semibold ${className}`}>{children}</h3>
-);
+const CardTitle = ({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) => <h3 className={`text-lg font-semibold ${className}`}>{children}</h3>;
 
 const CardDescription = ({ children }: { children: React.ReactNode }) => (
   <p className="text-sm text-gray-600 mt-1">{children}</p>
 );
 
-const CardContent = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <div className={`p-6 ${className}`}>{children}</div>
-);
+const CardContent = ({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) => <div className={`p-6 ${className}`}>{children}</div>;
 
-const Alert = ({ children, variant = "default" }: { children: React.ReactNode; variant?: "default" | "destructive" }) => (
-  <div className={`p-4 rounded-lg border ${variant === "destructive" ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"}`}>
+const Alert = ({
+  children,
+  variant = "default",
+}: {
+  children: React.ReactNode;
+  variant?: "default" | "destructive";
+}) => (
+  <div
+    className={`p-4 rounded-lg border ${
+      variant === "destructive"
+        ? "bg-red-50 border-red-200"
+        : "bg-blue-50 border-blue-200"
+    }`}
+  >
     {children}
   </div>
 );
@@ -101,7 +133,11 @@ export default function GmailIntegrationCard() {
   }
 
   async function handleDisconnect() {
-    if (!confirm("Are you sure you want to disconnect Gmail? Transaction extraction will stop.")) {
+    if (
+      !confirm(
+        "Are you sure you want to disconnect Gmail? Transaction extraction will stop."
+      )
+    ) {
       return;
     }
 
@@ -124,7 +160,9 @@ export default function GmailIntegrationCard() {
       setStatus(null);
       await fetchGmailStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to disconnect Gmail");
+      setError(
+        err instanceof Error ? err.message : "Failed to disconnect Gmail"
+      );
     } finally {
       setLoading(false);
     }
@@ -136,7 +174,8 @@ export default function GmailIntegrationCard() {
   }
 
   const isWatchExpiring = status?.watchExpiration
-    ? new Date(status.watchExpiration).getTime() - Date.now() < 24 * 60 * 60 * 1000
+    ? new Date(status.watchExpiration).getTime() - Date.now() <
+      24 * 60 * 60 * 1000
     : false;
 
   const isWatchExpired = status?.watchExpiration
@@ -169,7 +208,8 @@ export default function GmailIntegrationCard() {
           Gmail Integration
         </CardTitle>
         <CardDescription>
-          Connect your Gmail account to automatically extract transactions from bank emails
+          Connect your Gmail account to automatically extract transactions from
+          bank emails
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -187,15 +227,23 @@ export default function GmailIntegrationCard() {
               <ul className="text-sm text-gray-600 space-y-1">
                 <li className="flex items-start gap-2">
                   <span className="text-blue-600 mt-0.5">•</span>
-                  <span>We&apos;ll securely connect to your Gmail with read-only access</span>
+                  <span>
+                    We&apos;ll securely connect to your Gmail with read-only
+                    access
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-blue-600 mt-0.5">•</span>
-                  <span>Bank transaction emails will be automatically detected and extracted</span>
+                  <span>
+                    Bank transaction emails will be automatically detected and
+                    extracted
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-blue-600 mt-0.5">•</span>
-                  <span>Transactions appear in your dashboard within minutes</span>
+                  <span>
+                    Transactions appear in your dashboard within minutes
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-blue-600 mt-0.5">•</span>
@@ -233,7 +281,11 @@ export default function GmailIntegrationCard() {
                   <p className="text-sm text-gray-600">{status.email}</p>
                 </div>
               </div>
-              <Badge label="Active" variant="success" className="bg-green-100 text-green-800 border-green-200" />
+              <Badge
+                label="Active"
+                variant="success"
+                className="bg-green-100 text-green-800 border-green-200"
+              />
             </div>
 
             <div className="space-y-2 text-sm">
@@ -256,7 +308,9 @@ export default function GmailIntegrationCard() {
                   ) : isWatchExpiring ? (
                     <>
                       <AlertCircle className="w-4 h-4 text-yellow-500" />
-                      <span className="text-yellow-600 font-medium">Expiring Soon</span>
+                      <span className="text-yellow-600 font-medium">
+                        Expiring Soon
+                      </span>
                     </>
                   ) : (
                     <>
@@ -280,7 +334,8 @@ export default function GmailIntegrationCard() {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Your Gmail watch is {isWatchExpired ? "expired" : "expiring soon"}. Click
+                  Your Gmail watch is{" "}
+                  {isWatchExpired ? "expired" : "expiring soon"}. Click
                   Reauthorize to renew real-time sync.
                 </AlertDescription>
               </Alert>

@@ -9,11 +9,13 @@ This PR implements **Phase 2: Email Integration & Automation** for the Credit Ca
 ## ✅ Completed: Week 5 - Gmail API Integration
 
 ### Scope
+
 Full OAuth2 authentication, secure token management, email fetching infrastructure, and frontend UI.
 
 ### Implemented Components
 
 #### 1. **Token Manager** (`backend/services/gmail-service/src/token-manager.ts`)
+
 - ✅ AES-256-GCM encryption for refresh token storage
 - ✅ Automatic token refresh with 5-minute expiry buffer
 - ✅ Token revocation and cleanup
@@ -21,12 +23,14 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 - ✅ 100% test coverage
 
 **Key Features**:
+
 - 32-byte encryption key with randomized IV
 - Auth tag for integrity verification
 - Automatic refresh before expiry
 - Error handling for invalid/expired tokens
 
 #### 2. **Email Fetcher** (`backend/services/gmail-service/src/email-fetcher.ts`)
+
 - ✅ Fetch single or batch emails
 - ✅ Base64url decoding
 - ✅ Normalized email structure (From, To, Subject, Body, etc.)
@@ -34,32 +38,45 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 - ✅ Message listing with Gmail query syntax
 
 **Normalized Output**:
+
 ```typescript
 {
-  id, threadId, historyId,
-  from, to, subject, date,
-  bodyPlain, bodyHtml,
-  labels, snippet, internalDate
+  id,
+    threadId,
+    historyId,
+    from,
+    to,
+    subject,
+    date,
+    bodyPlain,
+    bodyHtml,
+    labels,
+    snippet,
+    internalDate;
 }
 ```
 
 #### 3. **PII-Masked Logger** (`backend/services/gmail-service/src/utils/logger.ts`)
+
 - ✅ Pino-based structured logging
 - ✅ Automatic PII redaction (emails, cards, phones)
 - ✅ Sensitive field masking (passwords, tokens)
 - ✅ Pretty printing in dev, JSON in production
 
 **Masked Patterns**:
+
 - Emails → `[EMAIL]`
 - Card numbers → `[CARD]`
 - Tokens → `[REDACTED]`
 
 #### 4. **Enhanced Gmail Client** (`backend/services/gmail-service/src/gmail-client.ts`)
+
 - ✅ Integrated TokenManager for auto-refresh
 - ✅ Simplified API initialization
 - ✅ Improved error logging with PII masking
 
 #### 5. **Database Schema** (`backend/database/migrations/002_phase2_email_integration.sql`)
+
 - ✅ `email_processing_queue` - Pub/Sub message queue
 - ✅ `email_processing_dlq` - Dead letter queue
 - ✅ `manual_review_queue` - Low-confidence extractions
@@ -67,6 +84,7 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 - ✅ `fingerprint` column on `transactions` - Deduplication
 
 #### 6. **Frontend Gmail UI** (`frontend/src/components/settings/GmailIntegrationCard.tsx`)
+
 - ✅ Connection status display
 - ✅ Connect/Disconnect/Reauthorize flows
 - ✅ Watch expiration warnings
@@ -74,12 +92,14 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 - ✅ Error handling with user feedback
 
 #### 7. **Configuration & Testing**
+
 - ✅ `.env.sample` with all required variables
 - ✅ Jest configuration (80% coverage threshold)
 - ✅ Comprehensive token manager tests (100% coverage)
 - ✅ Test setup with mocks and environment
 
 #### 8. **Documentation**
+
 - ✅ Week 5 comprehensive guide (`docs/phase2/week5-gmail-integration.md`)
 - ✅ API endpoints documented
 - ✅ Security considerations
@@ -93,6 +113,7 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 ### Week 5 Commits
 
 1. **feat(gmail): add token manager with encryption and auto-refresh** ([`7815e29`](commit-link))
+
    - TokenManager with AES-256-GCM encryption
    - Automatic token refresh logic
    - EmailFetcher for normalized retrieval
@@ -101,6 +122,7 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
    - Updated migration with queue tables
 
 2. **test(gmail): add comprehensive token manager tests** ([`05e8833`](commit-link))
+
    - 100% coverage for TokenManager
    - Encryption/decryption tests
    - Token refresh and expiry tests
@@ -119,6 +141,7 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 ## 🔜 Next Steps: Weeks 6-8 (In Progress)
 
 ### Week 6: Pub/Sub & Real-time Processing
+
 - [ ] Pub/Sub emulator setup
 - [ ] Listener service for Gmail notifications
 - [ ] Redis-based message queue
@@ -128,6 +151,7 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 - [ ] DLQ handling
 
 ### Week 7: Transaction Extraction
+
 - [ ] Bank-specific regex patterns (HDFC, ICICI, SBI, Axis, etc.)
 - [ ] Template matcher
 - [ ] Confidence scorer
@@ -136,6 +160,7 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 - [ ] Pattern unit tests
 
 ### Week 8: Historical Scanning
+
 - [ ] Batch email processor
 - [ ] Progress tracker with checkpoints
 - [ ] Deduplication logic
@@ -144,6 +169,7 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 - [ ] CLI command
 
 ### Cross-Cutting Concerns
+
 - [ ] Rate limiting and circuit breakers
 - [ ] Prometheus metrics
 - [ ] Grafana dashboards
@@ -155,6 +181,7 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 ## 🧪 Testing Status
 
 ### Unit Tests
+
 - ✅ **TokenManager**: 100% coverage
   - Encryption/decryption
   - Token refresh
@@ -163,11 +190,13 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
   - Error handling
 
 ### Integration Tests
+
 - 🚧 Gmail API mocking (Week 6)
 - 🚧 Pub/Sub emulator tests (Week 6)
 - 🚧 End-to-end flow (Week 8)
 
 ### Test Coverage
+
 - Current: **100%** for implemented modules
 - Target: **>80%** for all new code
 
@@ -176,6 +205,7 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 ## 📋 Acceptance Criteria Checklist
 
 ### Week 5: Gmail Integration
+
 - ✅ OAuth connect/disconnect + token refresh works (mocked in CI)
 - ✅ Gmail API client initialized with auto-refresh
 - ✅ Email fetcher returns normalized emails
@@ -187,6 +217,7 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 - ✅ Sample env file provided
 
 ### Week 6: Pub/Sub (🚧 In Progress)
+
 - [ ] Pub/Sub emulator receives notifications
 - [ ] Queue supports retries and DLQ
 - [ ] Worker processes messages idempotently
@@ -194,6 +225,7 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 - [ ] Metrics emitted for processing pipeline
 
 ### Week 7: Extraction (🚧 Pending)
+
 - [ ] Bank patterns extract transactions
 - [ ] Confidence scoring implemented
 - [ ] Manual review queue integrated
@@ -201,6 +233,7 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 - [ ] Pattern tests cover edge cases
 
 ### Week 8: Historical Scan (🚧 Pending)
+
 - [ ] Scanner with resume/progress works
 - [ ] Deduplication prevents duplicates
 - [ ] Frontend shows live progress
@@ -212,16 +245,19 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 ## 🔒 Security Highlights
 
 1. **Token Encryption**:
+
    - AES-256-GCM with randomized IV
    - Auth tag for integrity
    - 32-byte encryption key
 
 2. **PII Protection**:
+
    - All logs masked (emails, cards, phones)
    - Tokens never logged
    - No email content in production logs
 
 3. **OAuth Scopes**:
+
    - Read-only Gmail access
    - Minimal necessary permissions
    - User-revocable anytime
@@ -236,13 +272,16 @@ Full OAuth2 authentication, secure token management, email fetching infrastructu
 ## 🚀 Deployment Notes
 
 ### Prerequisites
+
 1. Google Cloud Project with Gmail API enabled
 2. OAuth 2.0 credentials (Client ID + Secret)
 3. Supabase project
 4. Redis instance (Upstash or local)
 
 ### Environment Variables
+
 See `.env.sample` for full list. Key variables:
+
 ```env
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
@@ -253,12 +292,14 @@ FEATURE_FLAG_EMAIL_INTEGRATION=true
 ```
 
 ### Database Migration
+
 ```bash
 cd backend/database
 npm run migrate up
 ```
 
 ### Running Tests
+
 ```bash
 cd backend/services/gmail-service
 npm install
@@ -270,12 +311,14 @@ npm test
 ## 📊 Metrics & Monitoring
 
 ### Key Metrics (Implemented)
+
 - Token operations (store, refresh, revoke)
 - Email fetch operations
 - Gmail API calls and errors
 - Processing queue depth
 
 ### Logging
+
 - Structured JSON logs in production
 - PII automatically masked
 - Request-level tracing (Week 6)
@@ -303,6 +346,7 @@ npm test
 ## 👥 Reviewers
 
 Please review:
+
 1. **Security**: Token encryption, PII masking, OAuth scopes
 2. **Testing**: Test coverage and edge cases
 3. **Code Quality**: TypeScript types, error handling, logging

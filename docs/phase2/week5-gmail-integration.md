@@ -11,12 +11,14 @@ Week 5 implements the foundational Gmail integration infrastructure including OA
 **Purpose**: Securely manage Gmail OAuth tokens with encryption and automatic refresh.
 
 **Features**:
+
 - AES-256-GCM encryption for refresh token storage
 - Automatic token refresh with expiry detection (5-minute buffer)
 - Token revocation and cleanup
 - Secure decryption on retrieval
 
 **Key Methods**:
+
 - `storeTokens()` - Encrypt and store OAuth tokens
 - `getTokens()` - Retrieve and decrypt tokens
 - `isTokenExpired()` - Check if token needs refresh
@@ -26,6 +28,7 @@ Week 5 implements the foundational Gmail integration infrastructure including OA
 - `hasValidTokens()` - Check if user has valid tokens
 
 **Security**:
+
 - 32-byte encryption key (AES-256)
 - IV (Initialization Vector) randomized per encryption
 - Auth tag for integrity verification
@@ -36,6 +39,7 @@ Week 5 implements the foundational Gmail integration infrastructure including OA
 **Purpose**: Fetch and normalize Gmail messages into consistent structure.
 
 **Features**:
+
 - Fetch single or batch emails
 - Base64url decoding for email content
 - Header extraction (From, To, Subject, Date)
@@ -44,12 +48,14 @@ Week 5 implements the foundational Gmail integration infrastructure including OA
 - Message listing with Gmail query syntax
 
 **Key Methods**:
+
 - `fetchEmail()` - Fetch single email by ID
 - `fetchEmailsBatch()` - Fetch multiple emails (batched in groups of 50)
 - `listMessages()` - List message IDs matching query
 - `getHistory()` - Get messages added since historyId
 
 **Normalized Email Structure**:
+
 ```typescript
 interface NormalizedEmail {
   id: string;
@@ -72,6 +78,7 @@ interface NormalizedEmail {
 **Purpose**: Structured logging with automatic PII redaction.
 
 **Features**:
+
 - Pino-based structured logging
 - Automatic PII masking (emails, card numbers, phone numbers)
 - Sensitive field redaction (passwords, tokens)
@@ -79,6 +86,7 @@ interface NormalizedEmail {
 - JSON logging in production
 
 **Masked Patterns**:
+
 - Email addresses → `[EMAIL]`
 - Card numbers → `[CARD]`
 - Phone numbers → `[PHONE]`
@@ -87,6 +95,7 @@ interface NormalizedEmail {
 ### 4. Enhanced Gmail Client
 
 **Improvements**:
+
 - Integrated with TokenManager for automatic token refresh
 - Simplified initialization (no manual token handling)
 - Improved error logging with PII masking
@@ -95,6 +104,7 @@ interface NormalizedEmail {
 ### 5. Database Schema Enhancements
 
 **New Tables**:
+
 - `email_processing_queue` - Queue for Pub/Sub messages
 - `email_processing_dlq` - Dead letter queue for failed processing
 - `manual_review_queue` - Low-confidence extractions requiring review
@@ -106,6 +116,7 @@ interface NormalizedEmail {
 **Component**: `GmailIntegrationCard.tsx`
 
 **Features**:
+
 - Connection status display
 - Connect/Disconnect Gmail
 - Watch expiration warnings
@@ -114,6 +125,7 @@ interface NormalizedEmail {
 - Error handling and user feedback
 
 **States**:
+
 - Not connected - Shows connect button with explanation
 - Connected - Shows email, status, watch expiration
 - Watch expiring - Shows warning and reauthorize button
@@ -159,6 +171,7 @@ LOG_LEVEL=debug
 ### Unit Tests
 
 **Token Manager Tests** (`tests/token-manager.test.ts`):
+
 - ✅ Encryption/decryption consistency
 - ✅ Token storage with encryption
 - ✅ Token retrieval and decryption
@@ -191,9 +204,11 @@ npm run test:coverage
 ### Backend (Gmail Service)
 
 #### `GET /health`
+
 Health check endpoint.
 
 **Response**:
+
 ```json
 {
   "status": "ok",
@@ -203,9 +218,11 @@ Health check endpoint.
 ```
 
 #### `GET /auth-url`
+
 Get Gmail OAuth authorization URL.
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -216,9 +233,11 @@ Get Gmail OAuth authorization URL.
 ```
 
 #### `POST /connect`
+
 Connect Gmail account.
 
 **Request**:
+
 ```json
 {
   "userId": "uuid",
@@ -227,6 +246,7 @@ Connect Gmail account.
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -240,9 +260,11 @@ Connect Gmail account.
 ```
 
 #### `POST /disconnect`
+
 Disconnect Gmail account.
 
 **Request**:
+
 ```json
 {
   "userId": "uuid"
@@ -250,6 +272,7 @@ Disconnect Gmail account.
 ```
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -264,11 +287,13 @@ Disconnect Gmail account.
 These endpoints should be proxied through the API Gateway with authentication.
 
 #### `GET /api/gmail/status`
+
 Get current Gmail connection status for authenticated user.
 
 **Headers**: `Authorization: Bearer {token}`
 
 **Response**:
+
 ```json
 {
   "connected": true,
@@ -280,12 +305,15 @@ Get current Gmail connection status for authenticated user.
 ```
 
 #### `GET /api/gmail/auth-url`
+
 Get authorization URL (proxied from gmail-service).
 
 #### `POST /api/gmail/connect`
+
 Connect Gmail (proxied from gmail-service).
 
 #### `POST /api/gmail/disconnect`
+
 Disconnect Gmail (proxied from gmail-service).
 
 ## Security Considerations
@@ -293,11 +321,13 @@ Disconnect Gmail (proxied from gmail-service).
 ### Token Security
 
 1. **Encryption at Rest**:
+
    - Refresh tokens encrypted with AES-256-GCM
    - 16-byte random IV per encryption
    - Auth tag for integrity verification
 
 2. **Access Tokens**:
+
    - Stored in plaintext (short-lived, 1 hour)
    - Auto-refresh 5 minutes before expiry
 
@@ -309,6 +339,7 @@ Disconnect Gmail (proxied from gmail-service).
 ### PII Protection
 
 1. **Logging**:
+
    - Email addresses masked as `[EMAIL]`
    - Card numbers masked as `[CARD]`
    - Tokens always `[REDACTED]`
@@ -322,12 +353,14 @@ Disconnect Gmail (proxied from gmail-service).
 ### OAuth Scopes
 
 **Required Scopes**:
+
 - `https://www.googleapis.com/auth/gmail.readonly` - Read-only email access
 - `openid` - User identification
 - `email` - User email address
 - `profile` - User profile info
 
 **Principles**:
+
 - Read-only access (no send/delete)
 - Minimal scope necessary
 - User can revoke anytime
@@ -344,6 +377,7 @@ npm run migrate up
 ### Migration File
 
 `002_phase2_email_integration.sql` adds:
+
 - Gmail columns to `users` table
 - `email_processing_queue` table
 - `email_processing_dlq` table
@@ -355,12 +389,14 @@ npm run migrate up
 ## Next Steps (Week 6)
 
 1. **Pub/Sub Listener Service**:
+
    - Set up local Pub/Sub emulator
    - Create listener service
    - Implement message queue with Redis
    - Handle visibility timeout and retries
 
 2. **Email Processor Worker**:
+
    - Classify emails (transaction vs. other)
    - Extract transaction data
    - Write to database
@@ -378,6 +414,7 @@ npm run migrate up
 **Symptom**: Errors like "Token refresh failed" or "Invalid grant"
 
 **Solutions**:
+
 1. User needs to reauthorize (refresh token may be revoked)
 2. Check OAuth consent screen settings (must request offline access)
 3. Verify `prompt: consent` in OAuth URL generation
@@ -387,6 +424,7 @@ npm run migrate up
 **Symptom**: "Invalid encrypted token format" or "Decryption failed"
 
 **Solutions**:
+
 1. Verify `ENCRYPTION_KEY` is consistent (32 bytes minimum)
 2. Check if encryption key changed (re-encrypt all tokens)
 3. Validate encrypted format: `iv:authTag:encryptedData`
@@ -394,10 +432,12 @@ npm run migrate up
 ### Gmail API Rate Limits
 
 **Limits**:
+
 - 250 quota units per user per second
 - 1 billion quota units per day
 
 **Solutions**:
+
 1. Implement exponential backoff
 2. Batch requests where possible
 3. Use caching for repeated lookups
@@ -407,6 +447,7 @@ npm run migrate up
 **Symptom**: No new emails processed after 7 days
 
 **Solutions**:
+
 1. Implement automatic watch renewal (background job)
 2. Check watch expiration in database
 3. Reauthorize if watch expired
@@ -416,11 +457,13 @@ npm run migrate up
 ### Key Metrics
 
 1. **Token Operations**:
+
    - `tokens_stored_total` - Total tokens stored
    - `tokens_refreshed_total` - Total refreshes
    - `tokens_refresh_errors_total` - Refresh failures
 
 2. **Email Fetching**:
+
    - `emails_fetched_total` - Total emails fetched
    - `emails_fetch_errors_total` - Fetch failures
    - `email_fetch_duration_ms` - Fetch latency
@@ -433,12 +476,14 @@ npm run migrate up
 ### Logging
 
 **Log Levels**:
+
 - `error` - Errors requiring attention
 - `warn` - Warnings (e.g., token revocation failed but continued)
 - `info` - Important operations (token stored, email fetched)
 - `debug` - Detailed debugging (set `LOG_LEVEL=debug`)
 
 **Structured Logs**:
+
 ```json
 {
   "level": "info",
