@@ -3,20 +3,26 @@
  * Phase 6: Post-Launch & Optimization
  */
 
-import { Request, Response, NextFunction } from 'express';
-import { metricsCollector } from '../../../monitoring/metrics-collector';
-import { logger } from '../../../monitoring/logger';
-import { Sentry } from '../../../monitoring/sentry-config';
+import { Request, Response, NextFunction } from "express";
+import { metricsCollector } from "../../../monitoring/metrics-collector";
+import { logger } from "../../../monitoring/logger";
+import { Sentry } from "../../../monitoring/sentry-config";
 
 /**
  * Request tracking middleware
  */
-export function requestTrackingMiddleware(req: Request, res: Response, next: NextFunction): void {
+export function requestTrackingMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
   const startTime = Date.now();
-  const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}-${Math.random()}`;
+  const requestId =
+    (req.headers["x-request-id"] as string) ||
+    `req-${Date.now()}-${Math.random()}`;
 
   // Add request ID to response headers
-  res.setHeader('X-Request-Id', requestId);
+  res.setHeader("X-Request-Id", requestId);
 
   // Create request logger
   const requestLogger = logger.child({ requestId });
@@ -26,7 +32,7 @@ export function requestTrackingMiddleware(req: Request, res: Response, next: Nex
     method: req.method,
     path: req.path,
     ip: req.ip,
-    userAgent: req.headers['user-agent'],
+    userAgent: req.headers["user-agent"],
   });
 
   // Capture original end function
@@ -62,11 +68,16 @@ export function requestTrackingMiddleware(req: Request, res: Response, next: Nex
 /**
  * Error tracking middleware
  */
-export function errorTrackingMiddleware(err: Error, req: Request, res: Response, next: NextFunction): void {
-  const requestId = res.getHeader('X-Request-Id') as string;
+export function errorTrackingMiddleware(
+  err: Error,
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  const requestId = res.getHeader("X-Request-Id") as string;
 
   // Log error
-  logger.error('Request error', err, {
+  logger.error("Request error", err, {
     requestId,
     method: req.method,
     path: req.path,
@@ -75,15 +86,15 @@ export function errorTrackingMiddleware(err: Error, req: Request, res: Response,
 
   // Send to Sentry with request context
   Sentry.withScope((scope: any) => {
-    scope.setTag('request_id', requestId);
-    scope.setContext('request', {
+    scope.setTag("request_id", requestId);
+    scope.setContext("request", {
       method: req.method,
       path: req.path,
       headers: req.headers,
       query: req.query,
       body: req.body,
     });
-    
+
     if ((req as any).user) {
       scope.setUser({
         id: (req as any).user.userId,
@@ -108,9 +119,13 @@ export function errorTrackingMiddleware(err: Error, req: Request, res: Response,
 /**
  * Performance monitoring middleware
  */
-export function performanceMiddleware(req: Request, res: Response, next: NextFunction): void {
+export function performanceMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
   const transaction = Sentry.startTransaction({
-    op: 'http.server',
+    op: "http.server",
     name: `${req.method} ${req.path}`,
   });
 
@@ -132,12 +147,16 @@ export function performanceMiddleware(req: Request, res: Response, next: NextFun
 /**
  * Rate limiting metrics middleware
  */
-export async function rateLimitMetricsMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function rateLimitMetricsMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   const userId = (req as any).user?.userId;
   const endpoint = req.path;
 
   if (userId) {
-    await metricsCollector.incrementCounter('rate_limit_check', {
+    await metricsCollector.incrementCounter("rate_limit_check", {
       userId,
       endpoint,
     });

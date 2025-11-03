@@ -1,15 +1,21 @@
-'use client';
+"use client";
 
 /**
  * System Health Dashboard
  * Phase 6: Post-Launch & Optimization
  */
 
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 interface HealthStatus {
-  status: 'healthy' | 'degraded' | 'unhealthy';
+  status: "healthy" | "degraded" | "unhealthy";
   timestamp: number;
   services: {
     database: ServiceHealth;
@@ -21,7 +27,7 @@ interface HealthStatus {
 }
 
 interface ServiceHealth {
-  status: 'up' | 'down' | 'degraded';
+  status: "up" | "down" | "degraded";
   latency?: number;
   message?: string;
 }
@@ -54,10 +60,10 @@ export default function SystemHealthDashboard() {
   async function fetchHealthData() {
     try {
       const [healthRes, metricsRes] = await Promise.all([
-        fetch('/api/monitoring/health'),
-        fetch('/api/monitoring/metrics', {
+        fetch("/api/monitoring/health"),
+        fetch("/api/monitoring/metrics", {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           },
         }),
       ]);
@@ -72,7 +78,7 @@ export default function SystemHealthDashboard() {
         setMetrics(metricsData.data);
       }
     } catch (error) {
-      console.error('Failed to fetch health data:', error);
+      console.error("Failed to fetch health data:", error);
     } finally {
       setLoading(false);
     }
@@ -80,16 +86,16 @@ export default function SystemHealthDashboard() {
 
   function getStatusColor(status: string): string {
     switch (status) {
-      case 'healthy':
-      case 'up':
-        return 'text-green-600 bg-green-100';
-      case 'degraded':
-        return 'text-yellow-600 bg-yellow-100';
-      case 'unhealthy':
-      case 'down':
-        return 'text-red-600 bg-red-100';
+      case "healthy":
+      case "up":
+        return "text-green-600 bg-green-100";
+      case "degraded":
+        return "text-yellow-600 bg-yellow-100";
+      case "unhealthy":
+      case "down":
+        return "text-red-600 bg-red-100";
       default:
-        return 'text-gray-600 bg-gray-100';
+        return "text-gray-600 bg-gray-100";
     }
   }
 
@@ -145,7 +151,9 @@ export default function SystemHealthDashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Overall System Status</CardTitle>
-            <CardDescription>Last updated: {new Date(health.timestamp).toLocaleString()}</CardDescription>
+            <CardDescription>
+              Last updated: {new Date(health.timestamp).toLocaleString()}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -160,7 +168,9 @@ export default function SystemHealthDashboard() {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Uptime</p>
-                <p className="text-2xl font-bold">{formatUptime(health.uptime)}</p>
+                <p className="text-2xl font-bold">
+                  {formatUptime(health.uptime)}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Version</p>
@@ -169,8 +179,12 @@ export default function SystemHealthDashboard() {
               <div>
                 <p className="text-sm text-gray-600">Services</p>
                 <p className="text-2xl font-bold">
-                  {Object.values(health.services).filter((s) => s.status === 'up').length}/
-                  {Object.keys(health.services).length}
+                  {
+                    Object.values(health.services).filter(
+                      (s) => s.status === "up"
+                    ).length
+                  }
+                  /{Object.keys(health.services).length}
                 </p>
               </div>
             </div>
@@ -201,7 +215,9 @@ export default function SystemHealthDashboard() {
                   {service.latency !== undefined && (
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">Latency</span>
-                      <span className="text-sm font-medium">{service.latency}ms</span>
+                      <span className="text-sm font-medium">
+                        {service.latency}ms
+                      </span>
                     </div>
                   )}
                   {service.message && (
@@ -227,11 +243,15 @@ export default function SystemHealthDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <p className="text-sm text-gray-600">Hit Rate</p>
-                <p className="text-3xl font-bold text-green-600">{metrics.cache.hitRate}</p>
+                <p className="text-3xl font-bold text-green-600">
+                  {metrics.cache.hitRate}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Total Requests</p>
-                <p className="text-2xl font-bold">{metrics.cache.total.toLocaleString()}</p>
+                <p className="text-2xl font-bold">
+                  {metrics.cache.total.toLocaleString()}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Cache Hits</p>
@@ -251,7 +271,9 @@ export default function SystemHealthDashboard() {
                 <div
                   className="bg-green-600 h-4 rounded-full transition-all"
                   style={{
-                    width: `${(metrics.cache.hits / metrics.cache.total) * 100}%`,
+                    width: `${
+                      (metrics.cache.hits / metrics.cache.total) * 100
+                    }%`,
                   }}
                 ></div>
               </div>
@@ -310,7 +332,9 @@ export default function SystemHealthDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
               <p className="text-gray-600">Environment</p>
-              <p className="font-medium">{process.env.NODE_ENV || 'production'}</p>
+              <p className="font-medium">
+                {process.env.NODE_ENV || "production"}
+              </p>
             </div>
             <div>
               <p className="text-gray-600">Region</p>

@@ -3,13 +3,13 @@
  * Phase 6: Post-Launch & Optimization
  */
 
-import { createClient } from '@supabase/supabase-js';
-import { metricsCollector } from '../../../monitoring/metrics-collector';
-import { logger } from '../../../monitoring/logger';
+import { createClient } from "@supabase/supabase-js";
+import { metricsCollector } from "../../../monitoring/metrics-collector";
+import { logger } from "../../../monitoring/logger";
 
 const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+  process.env.SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 );
 
 export interface SessionMetrics {
@@ -46,21 +46,24 @@ export class AnalyticsService {
   /**
    * Track user session start
    */
-  async trackSessionStart(userId: string, metadata?: Record<string, any>): Promise<void> {
+  async trackSessionStart(
+    userId: string,
+    metadata?: Record<string, any>
+  ): Promise<void> {
     try {
-      await supabase.from('user_sessions').insert({
+      await supabase.from("user_sessions").insert({
         user_id: userId,
         session_start: new Date().toISOString(),
         metadata: metadata || {},
       });
 
-      await metricsCollector.incrementCounter('sessions_started', {
+      await metricsCollector.incrementCounter("sessions_started", {
         userId,
       });
 
-      logger.info('Session started', { userId });
+      logger.info("Session started", { userId });
     } catch (error: any) {
-      logger.error('Failed to track session start', error, { userId });
+      logger.error("Failed to track session start", error, { userId });
     }
   }
 
@@ -70,51 +73,55 @@ export class AnalyticsService {
   async trackSessionEnd(userId: string, sessionId: string): Promise<void> {
     try {
       const { data: session } = await supabase
-        .from('user_sessions')
-        .select('session_start')
-        .eq('id', sessionId)
+        .from("user_sessions")
+        .select("session_start")
+        .eq("id", sessionId)
         .single();
 
       if (session) {
         const duration = Date.now() - new Date(session.session_start).getTime();
 
         await supabase
-          .from('user_sessions')
+          .from("user_sessions")
           .update({
             session_end: new Date().toISOString(),
             duration_ms: duration,
           })
-          .eq('id', sessionId);
+          .eq("id", sessionId);
 
-        await metricsCollector.recordMetric('session_duration', duration, {
+        await metricsCollector.recordMetric("session_duration", duration, {
           userId,
         });
       }
 
-      logger.info('Session ended', { userId, sessionId });
+      logger.info("Session ended", { userId, sessionId });
     } catch (error: any) {
-      logger.error('Failed to track session end', error, { userId, sessionId });
+      logger.error("Failed to track session end", error, { userId, sessionId });
     }
   }
 
   /**
    * Track page view
    */
-  async trackPageView(userId: string, page: string, metadata?: Record<string, any>): Promise<void> {
+  async trackPageView(
+    userId: string,
+    page: string,
+    metadata?: Record<string, any>
+  ): Promise<void> {
     try {
-      await supabase.from('page_views').insert({
+      await supabase.from("page_views").insert({
         user_id: userId,
         page,
         timestamp: new Date().toISOString(),
         metadata: metadata || {},
       });
 
-      await metricsCollector.incrementCounter('page_views', {
+      await metricsCollector.incrementCounter("page_views", {
         userId,
         page,
       });
     } catch (error: any) {
-      logger.error('Failed to track page view', error, { userId, page });
+      logger.error("Failed to track page view", error, { userId, page });
     }
   }
 
@@ -127,34 +134,37 @@ export class AnalyticsService {
     eventData?: Record<string, any>
   ): Promise<void> {
     try {
-      await supabase.from('user_events').insert({
+      await supabase.from("user_events").insert({
         user_id: userId,
         event_name: eventName,
         event_data: eventData || {},
         timestamp: new Date().toISOString(),
       });
 
-      await metricsCollector.incrementCounter('user_events', {
+      await metricsCollector.incrementCounter("user_events", {
         userId,
         eventName,
       });
 
-      logger.debug('Event tracked', { userId, eventName, eventData });
+      logger.debug("Event tracked", { userId, eventName, eventData });
     } catch (error: any) {
-      logger.error('Failed to track event', error, { userId, eventName });
+      logger.error("Failed to track event", error, { userId, eventName });
     }
   }
 
   /**
    * Get session metrics for a period
    */
-  async getSessionMetrics(startDate: Date, endDate: Date): Promise<SessionMetrics> {
+  async getSessionMetrics(
+    startDate: Date,
+    endDate: Date
+  ): Promise<SessionMetrics> {
     try {
       const { data: sessions } = await supabase
-        .from('user_sessions')
-        .select('*')
-        .gte('session_start', startDate.toISOString())
-        .lte('session_start', endDate.toISOString());
+        .from("user_sessions")
+        .select("*")
+        .gte("session_start", startDate.toISOString())
+        .lte("session_start", endDate.toISOString());
 
       if (!sessions || sessions.length === 0) {
         return {
@@ -167,13 +177,18 @@ export class AnalyticsService {
 
       const now = Date.now();
       const activeSessions = sessions.filter((s) => {
-        return !s.session_end || (now - new Date(s.session_end).getTime() < 30 * 60 * 1000);
+        return (
+          !s.session_end ||
+          now - new Date(s.session_end).getTime() < 30 * 60 * 1000
+        );
       }).length;
 
       const completedSessions = sessions.filter((s) => s.duration_ms);
-      const avgDuration = completedSessions.length > 0
-        ? completedSessions.reduce((sum, s) => sum + s.duration_ms, 0) / completedSessions.length
-        : 0;
+      const avgDuration =
+        completedSessions.length > 0
+          ? completedSessions.reduce((sum, s) => sum + s.duration_ms, 0) /
+            completedSessions.length
+          : 0;
 
       const uniqueUsers = new Set(sessions.map((s) => s.user_id)).size;
 
@@ -184,7 +199,7 @@ export class AnalyticsService {
         uniqueUsers,
       };
     } catch (error: any) {
-      logger.error('Failed to get session metrics', error);
+      logger.error("Failed to get session metrics", error);
       throw error;
     }
   }
@@ -195,7 +210,7 @@ export class AnalyticsService {
   async getAPIMetrics(): Promise<APIMetrics> {
     try {
       const summary = await metricsCollector.getMetricsSummary();
-      
+
       // This would aggregate from Redis metrics
       return {
         totalRequests: 0, // TODO: Implement counter
@@ -205,7 +220,7 @@ export class AnalyticsService {
         requestsByEndpoint: {},
       };
     } catch (error: any) {
-      logger.error('Failed to get API metrics', error);
+      logger.error("Failed to get API metrics", error);
       throw error;
     }
   }
@@ -216,7 +231,7 @@ export class AnalyticsService {
   async getPerformanceMetrics(): Promise<PerformanceMetrics> {
     try {
       const summary = await metricsCollector.getMetricsSummary();
-      
+
       return {
         avgLoadTime: summary?.performance?.avg || 0,
         p95LoadTime: summary?.performance?.p95 || 0,
@@ -224,7 +239,7 @@ export class AnalyticsService {
         slowestEndpoints: [],
       };
     } catch (error: any) {
-      logger.error('Failed to get performance metrics', error);
+      logger.error("Failed to get performance metrics", error);
       throw error;
     }
   }
@@ -232,18 +247,20 @@ export class AnalyticsService {
   /**
    * Get comprehensive usage analytics
    */
-  async getUsageAnalytics(period: 'day' | 'week' | 'month' = 'day'): Promise<UsageAnalytics> {
+  async getUsageAnalytics(
+    period: "day" | "week" | "month" = "day"
+  ): Promise<UsageAnalytics> {
     const endDate = new Date();
     const startDate = new Date();
 
     switch (period) {
-      case 'day':
+      case "day":
         startDate.setDate(startDate.getDate() - 1);
         break;
-      case 'week':
+      case "week":
         startDate.setDate(startDate.getDate() - 7);
         break;
-      case 'month':
+      case "month":
         startDate.setMonth(startDate.getMonth() - 1);
         break;
     }
@@ -266,27 +283,30 @@ export class AnalyticsService {
   /**
    * Get user engagement metrics
    */
-  async getUserEngagementMetrics(userId: string, days: number = 30): Promise<any> {
+  async getUserEngagementMetrics(
+    userId: string,
+    days: number = 30
+  ): Promise<any> {
     try {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
       const [sessions, pageViews, events] = await Promise.all([
         supabase
-          .from('user_sessions')
-          .select('*')
-          .eq('user_id', userId)
-          .gte('session_start', startDate.toISOString()),
+          .from("user_sessions")
+          .select("*")
+          .eq("user_id", userId)
+          .gte("session_start", startDate.toISOString()),
         supabase
-          .from('page_views')
-          .select('page')
-          .eq('user_id', userId)
-          .gte('timestamp', startDate.toISOString()),
+          .from("page_views")
+          .select("page")
+          .eq("user_id", userId)
+          .gte("timestamp", startDate.toISOString()),
         supabase
-          .from('user_events')
-          .select('event_name')
-          .eq('user_id', userId)
-          .gte('timestamp', startDate.toISOString()),
+          .from("user_events")
+          .select("event_name")
+          .eq("user_id", userId)
+          .gte("timestamp", startDate.toISOString()),
       ]);
 
       return {
@@ -295,13 +315,16 @@ export class AnalyticsService {
         totalEvents: events.data?.length || 0,
         avgSessionDuration:
           sessions.data && sessions.data.length > 0
-            ? sessions.data.reduce((sum, s) => sum + (s.duration_ms || 0), 0) / sessions.data.length
+            ? sessions.data.reduce((sum, s) => sum + (s.duration_ms || 0), 0) /
+              sessions.data.length
             : 0,
         topPages: this.getTopItems(pageViews.data?.map((p) => p.page) || []),
-        topEvents: this.getTopItems(events.data?.map((e) => e.event_name) || []),
+        topEvents: this.getTopItems(
+          events.data?.map((e) => e.event_name) || []
+        ),
       };
     } catch (error: any) {
-      logger.error('Failed to get user engagement metrics', error, { userId });
+      logger.error("Failed to get user engagement metrics", error, { userId });
       throw error;
     }
   }

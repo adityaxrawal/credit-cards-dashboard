@@ -3,7 +3,7 @@
  * Phase 6: Post-Launch & Optimization
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from "react";
 
 /**
  * Debounce hook to prevent excessive function calls
@@ -72,17 +72,14 @@ export function useIntersectionObserver(
     const element = ref.current;
     if (!element) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            callback();
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      options
-    );
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          callback();
+          observer.unobserve(entry.target);
+        }
+      });
+    }, options);
 
     observer.observe(element);
 
@@ -160,9 +157,10 @@ export function useLocalStorage<T>(
   const setValue = useCallback(
     (value: T | ((val: T) => T)) => {
       try {
-        const valueToStore = value instanceof Function ? value(storedValue) : value;
+        const valueToStore =
+          value instanceof Function ? value(storedValue) : value;
         setStoredValue(valueToStore);
-        if (typeof window !== 'undefined') {
+        if (typeof window !== "undefined") {
           window.localStorage.setItem(key, JSON.stringify(valueToStore));
         }
       } catch (error) {
@@ -206,8 +204,11 @@ export function lazyWithPreload<T extends React.ComponentType<any>>(
 /**
  * Request idle callback polyfill
  */
-export function requestIdleCallbackPolyfill(callback: () => void, timeout: number = 1000) {
-  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+export function requestIdleCallbackPolyfill(
+  callback: () => void,
+  timeout: number = 1000
+) {
+  if (typeof window !== "undefined" && "requestIdleCallback" in window) {
     return window.requestIdleCallback(callback, { timeout });
   }
   return setTimeout(callback, 0);
@@ -217,10 +218,10 @@ export function requestIdleCallbackPolyfill(callback: () => void, timeout: numbe
  * Cancel idle callback polyfill
  */
 export function cancelIdleCallbackPolyfill(id: number) {
-  if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+  if (typeof window !== "undefined" && "cancelIdleCallback" in window) {
     return window.cancelIdleCallback(id);
   }
   return clearTimeout(id);
 }
 
-import { useState } from 'react';
+import { useState } from "react";

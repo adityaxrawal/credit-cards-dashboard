@@ -3,11 +3,11 @@
  * Phase 6: Post-Launch & Optimization
  */
 
-import { createClient } from 'redis';
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { createClient } from "redis";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 export interface HealthStatus {
-  status: 'healthy' | 'degraded' | 'unhealthy';
+  status: "healthy" | "degraded" | "unhealthy";
   timestamp: number;
   services: {
     database: ServiceHealth;
@@ -19,7 +19,7 @@ export interface HealthStatus {
 }
 
 export interface ServiceHealth {
-  status: 'up' | 'down' | 'degraded';
+  status: "up" | "down" | "degraded";
   latency?: number;
   message?: string;
 }
@@ -31,32 +31,32 @@ const startTime = Date.now();
  */
 async function checkDatabase(): Promise<ServiceHealth> {
   const start = Date.now();
-  
+
   try {
     const supabase = createSupabaseClient(
-      process.env.SUPABASE_URL || '',
-      process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+      process.env.SUPABASE_URL || "",
+      process.env.SUPABASE_SERVICE_ROLE_KEY || ""
     );
 
-    const { error } = await supabase.from('users').select('count').limit(1);
-    
+    const { error } = await supabase.from("users").select("count").limit(1);
+
     const latency = Date.now() - start;
 
     if (error) {
       return {
-        status: 'down',
+        status: "down",
         latency,
         message: error.message,
       };
     }
 
     return {
-      status: latency < 100 ? 'up' : 'degraded',
+      status: latency < 100 ? "up" : "degraded",
       latency,
     };
   } catch (error: any) {
     return {
-      status: 'down',
+      status: "down",
       latency: Date.now() - start,
       message: error.message,
     };
@@ -68,10 +68,10 @@ async function checkDatabase(): Promise<ServiceHealth> {
  */
 async function checkRedis(): Promise<ServiceHealth> {
   const start = Date.now();
-  
+
   try {
     const redis = createClient({
-      url: process.env.REDIS_URL || 'redis://localhost:6379',
+      url: process.env.REDIS_URL || "redis://localhost:6379",
     });
 
     await redis.connect();
@@ -81,12 +81,12 @@ async function checkRedis(): Promise<ServiceHealth> {
     const latency = Date.now() - start;
 
     return {
-      status: latency < 50 ? 'up' : 'degraded',
+      status: latency < 50 ? "up" : "degraded",
       latency,
     };
   } catch (error: any) {
     return {
-      status: 'down',
+      status: "down",
       latency: Date.now() - start,
       message: error.message,
     };
@@ -102,13 +102,13 @@ function checkAPI(): ServiceHealth {
 
   if (heapUsedPercent > 90) {
     return {
-      status: 'degraded',
+      status: "degraded",
       message: `High memory usage: ${heapUsedPercent.toFixed(2)}%`,
     };
   }
 
   return {
-    status: 'up',
+    status: "up",
   };
 }
 
@@ -116,22 +116,19 @@ function checkAPI(): ServiceHealth {
  * Perform comprehensive health check
  */
 export async function healthCheck(): Promise<HealthStatus> {
-  const [database, redis] = await Promise.all([
-    checkDatabase(),
-    checkRedis(),
-  ]);
+  const [database, redis] = await Promise.all([checkDatabase(), checkRedis()]);
 
   const api = checkAPI();
 
   const services = { database, redis, api };
 
   // Determine overall status
-  let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+  let status: "healthy" | "degraded" | "unhealthy" = "healthy";
 
-  if (Object.values(services).some((s) => s.status === 'down')) {
-    status = 'unhealthy';
-  } else if (Object.values(services).some((s) => s.status === 'degraded')) {
-    status = 'degraded';
+  if (Object.values(services).some((s) => s.status === "down")) {
+    status = "unhealthy";
+  } else if (Object.values(services).some((s) => s.status === "degraded")) {
+    status = "degraded";
   }
 
   return {
@@ -139,6 +136,6 @@ export async function healthCheck(): Promise<HealthStatus> {
     timestamp: Date.now(),
     services,
     uptime: Date.now() - startTime,
-    version: process.env.APP_VERSION || '1.0.0',
+    version: process.env.APP_VERSION || "1.0.0",
   };
 }

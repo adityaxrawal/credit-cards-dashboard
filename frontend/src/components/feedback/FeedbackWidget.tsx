@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
 /**
  * Feedback Widget - Floating feedback button
  * Phase 6: Post-Launch & Optimization
  */
 
-import React, { useState } from 'react';
-import { X, MessageCircle, Send } from 'lucide-react';
+import React, { useState } from "react";
+import { X, MessageCircle, Send } from "lucide-react";
 
 interface FeedbackData {
-  feedbackType: 'bug' | 'feature' | 'improvement' | 'general' | 'complaint';
+  feedbackType: "bug" | "feature" | "improvement" | "general" | "complaint";
   title: string;
   description: string;
   pageUrl: string;
@@ -20,11 +20,11 @@ export default function FeedbackWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  
+
   const [formData, setFormData] = useState<Partial<FeedbackData>>({
-    feedbackType: 'general',
-    title: '',
-    description: '',
+    feedbackType: "general",
+    title: "",
+    description: "",
   });
 
   async function handleSubmit(e: React.FormEvent) {
@@ -44,17 +44,17 @@ export default function FeedbackWidget() {
         },
       };
 
-      const response = await fetch('/api/feedback', {
-        method: 'POST',
+      const response = await fetch("/api/feedback", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
         },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to submit feedback');
+        throw new Error("Failed to submit feedback");
       }
 
       setSubmitted(true);
@@ -62,14 +62,14 @@ export default function FeedbackWidget() {
         setIsOpen(false);
         setSubmitted(false);
         setFormData({
-          feedbackType: 'general',
-          title: '',
-          description: '',
+          feedbackType: "general",
+          title: "",
+          description: "",
         });
       }, 2000);
     } catch (error) {
-      console.error('Failed to submit feedback:', error);
-      alert('Failed to submit feedback. Please try again.');
+      console.error("Failed to submit feedback:", error);
+      alert("Failed to submit feedback. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -105,12 +105,24 @@ export default function FeedbackWidget() {
         {submitted ? (
           <div className="text-center py-8">
             <div className="mb-4 text-green-600">
-              <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              <svg
+                className="w-16 h-16 mx-auto"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
               </svg>
             </div>
             <h4 className="text-lg font-semibold mb-2">Thank you!</h4>
-            <p className="text-gray-600">Your feedback has been submitted successfully.</p>
+            <p className="text-gray-600">
+              Your feedback has been submitted successfully.
+            </p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -122,7 +134,10 @@ export default function FeedbackWidget() {
               <select
                 value={formData.feedbackType}
                 onChange={(e) =>
-                  setFormData({ ...formData, feedbackType: e.target.value as any })
+                  setFormData({
+                    ...formData,
+                    feedbackType: e.target.value as any,
+                  })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
@@ -143,7 +158,9 @@ export default function FeedbackWidget() {
               <input
                 type="text"
                 value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, title: e.target.value })
+                }
                 placeholder="Brief summary"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
@@ -157,7 +174,9 @@ export default function FeedbackWidget() {
               </label>
               <textarea
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
                 placeholder="Please provide as much detail as possible..."
                 rows={4}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"

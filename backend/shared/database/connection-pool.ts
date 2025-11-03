@@ -3,7 +3,7 @@
  * Phase 6: Backend Performance Optimization
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 interface PoolConfig {
   max: number;
@@ -13,10 +13,13 @@ interface PoolConfig {
 }
 
 const poolConfig: PoolConfig = {
-  max: parseInt(process.env.DB_POOL_MAX || '20', 10),
-  min: parseInt(process.env.DB_POOL_MIN || '5', 10),
-  idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT || '30000', 10),
-  connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT || '5000', 10),
+  max: parseInt(process.env.DB_POOL_MAX || "20", 10),
+  min: parseInt(process.env.DB_POOL_MIN || "5", 10),
+  idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT || "30000", 10),
+  connectionTimeoutMillis: parseInt(
+    process.env.DB_CONNECTION_TIMEOUT || "5000",
+    10
+  ),
 };
 
 class DatabasePool {
@@ -26,11 +29,11 @@ class DatabasePool {
 
   private constructor() {
     this.client = createClient(
-      process.env.SUPABASE_URL || '',
-      process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+      process.env.SUPABASE_URL || "",
+      process.env.SUPABASE_SERVICE_ROLE_KEY || "",
       {
         db: {
-          schema: 'public',
+          schema: "public",
         },
         auth: {
           persistSession: false,
@@ -38,13 +41,13 @@ class DatabasePool {
         },
         global: {
           headers: {
-            'x-connection-pool': 'true',
+            "x-connection-pool": "true",
           },
         },
       }
     );
 
-    console.log('✅ Database connection pool initialized', poolConfig);
+    console.log("✅ Database connection pool initialized", poolConfig);
   }
 
   public static getInstance(): DatabasePool {
@@ -66,8 +69,8 @@ class DatabasePool {
   public async healthCheck(): Promise<boolean> {
     try {
       const { error } = await this.client
-        .from('users')
-        .select('count')
+        .from("users")
+        .select("count")
         .limit(1)
         .single();
 
