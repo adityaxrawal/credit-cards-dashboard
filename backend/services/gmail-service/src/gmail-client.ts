@@ -3,6 +3,8 @@ import { google } from "googleapis";
 import { OAuth2Client } from "google-auth-library";
 import { gmail_v1 } from "googleapis";
 import { createClient } from "@supabase/supabase-js";
+import { createTokenManager, TokenManager } from "./token-manager";
+import { logger } from "./utils/logger";
 
 // Load environment variables
 dotenv.config();
@@ -15,6 +17,7 @@ export class GmailClient {
   private oauth2Client: OAuth2Client;
   private gmail: gmail_v1.Gmail | null = null;
   private supabase;
+  private tokenManager: TokenManager;
 
   constructor() {
     // Initialize OAuth2 client
@@ -29,6 +32,9 @@ export class GmailClient {
       process.env.SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_KEY!
     );
+
+    // Initialize token manager
+    this.tokenManager = createTokenManager(this.oauth2Client);
   }
 
   /**
@@ -65,7 +71,7 @@ export class GmailClient {
         expiryDate: tokens.expiry_date!,
       };
     } catch (error) {
-      console.error("Error exchanging code for tokens:", error);
+      logger.error({ error }, "Error exchanging code for tokens");
       throw new Error("Failed to exchange authorization code for tokens");
     }
   }
@@ -77,52 +83,22 @@ export class GmailClient {
    */
   async initializeForUser(userId: string): Promise<gmail_v1.Gmail> {
     try {
-      // Fetch user's Gmail tokens from database
-      const { data: user, error } = await this.supabase
-        .from("users")
-        .select("gmail_refresh_token, gmail_access_token, gmail_token_expiry")
-        .eq("id", userId)
-        .single();
-
-      if (error || !user) {
-        throw new Error("User not found or Gmail not connected");
-      }
-
-      if (!user.gmail_refresh_token) {
-        throw new Error("Gmail not connected for this user");
-      }
+      // Get valid access token (refreshes if needed)
+      const accessToken = await this.tokenManager.getValidAccessToken(userId);
 
       // Set credentials
       this.oauth2Client.setCredentials({
-        refresh_token: user.gmail_refresh_token,
-        access_token: user.gmail_access_token || undefined,
-        expiry_date: user.gmail_token_expiry || undefined,
+        access_token: accessToken,
       });
 
       // Initialize Gmail API
       this.gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
 
-      // Set up token refresh callback
-      this.oauth2Client.on("tokens", async (tokens) => {
-        if (tokens.refresh_token) {
-          // Update refresh token if provided
-          await this.updateUserTokens(userId, {
-            refreshToken: tokens.refresh_token,
-            accessToken: tokens.access_token!,
-            expiryDate: tokens.expiry_date!,
-          });
-        } else if (tokens.access_token) {
-          // Update only access token
-          await this.updateUserTokens(userId, {
-            accessToken: tokens.access_token,
-            expiryDate: tokens.expiry_date!,
-          });
-        }
-      });
+      logger.info({ userId }, "Gmail API initialized for user");
 
       return this.gmail;
     } catch (error) {
-      console.error("Error initializing Gmail for user:", error);
+      logger.error({ error, userId }, "Error initializing Gmail for user");
       throw error;
     }
   }
@@ -179,7 +155,7 @@ export class GmailClient {
       expiryDate: number;
     }
   ): Promise<void> {
-    await this.updateUserTokens(userId, tokens);
+    await this.tokenManager.storeTokens(userId, tokens);
   }
 
   /**
@@ -350,17 +326,7 @@ export class GmailClient {
    * @returns True if connected
    */
   async isConnected(userId: string): Promise<boolean> {
-    try {
-      const { data: user } = await this.supabase
-        .from("users")
-        .select("gmail_refresh_token")
-        .eq("id", userId)
-        .single();
-
-      return !!user?.gmail_refresh_token;
-    } catch (error) {
-      return false;
-    }
+    return this.tokenManager.hasValidTokens(userId);
   }
 
   /**
@@ -370,28 +336,10 @@ export class GmailClient {
    */
   async disconnect(userId: string): Promise<void> {
     try {
-      // Revoke OAuth tokens
-      const gmail = await this.initializeForUser(userId);
-      await this.oauth2Client.revokeCredentials();
-
-      // Remove tokens from database
-      const { error } = await this.supabase
-        .from("users")
-        .update({
-          gmail_refresh_token: null,
-          gmail_access_token: null,
-          gmail_token_expiry: null,
-          gmail_watch_expiration: null,
-          gmail_history_id: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId);
-
-      if (error) {
-        throw error;
-      }
+      await this.tokenManager.revokeTokens(userId);
+      logger.info({ userId }, "Gmail disconnected successfully");
     } catch (error) {
-      console.error("Error disconnecting Gmail:", error);
+      logger.error({ error, userId }, "Error disconnecting Gmail");
       throw new Error("Failed to disconnect Gmail");
     }
   }

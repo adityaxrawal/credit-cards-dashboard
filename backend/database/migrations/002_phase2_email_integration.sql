@@ -92,3 +92,89 @@ COMMENT ON COLUMN scan_jobs.job_id IS 'Unique identifier for the scan job';
 COMMENT ON COLUMN scan_jobs.total_emails IS 'Estimated total emails to process';
 COMMENT ON COLUMN scan_jobs.processed_emails IS 'Number of emails processed so far';
 COMMENT ON COLUMN scan_jobs.extracted_transactions IS 'Number of transactions successfully extracted';
+
+-- Add fingerprint column to transactions for deduplication
+ALTER TABLE transactions 
+ADD COLUMN IF NOT EXISTS fingerprint VARCHAR(64);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_fingerprint 
+ON transactions(fingerprint) WHERE fingerprint IS NOT NULL;
+
+-- Email processing queue table for Pub/Sub messages
+CREATE TABLE IF NOT EXISTS email_processing_queue (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    email_message_id VARCHAR(255) NOT NULL,
+    gmail_history_id VARCHAR(100),
+    status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'processed', 'failed', 'retry')),
+    attempts INTEGER DEFAULT 0,
+    max_attempts INTEGER DEFAULT 3,
+    last_error TEXT,
+    visibility_timeout TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    processed_at TIMESTAMP,
+    UNIQUE(user_id, email_message_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_queue_status ON email_processing_queue(status, visibility_timeout);
+CREATE INDEX IF NOT EXISTS idx_email_queue_user ON email_processing_queue(user_id, status);
+
+-- Dead letter queue for failed messages
+CREATE TABLE IF NOT EXISTS email_processing_dlq (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    queue_item_id UUID,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    email_message_id VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL,
+    error_message TEXT,
+    attempts INTEGER,
+    moved_to_dlq_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_dlq_user ON email_processing_dlq(user_id);
+
+-- Manual review queue for low-confidence extractions
+CREATE TABLE IF NOT EXISTS manual_review_queue (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    email_message_id VARCHAR(255) NOT NULL,
+    email_subject VARCHAR(500),
+    email_from VARCHAR(255),
+    email_date TIMESTAMP,
+    extracted_data JSONB NOT NULL,
+    confidence_score DECIMAL(3, 2),
+    extraction_method VARCHAR(50),
+    status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'edited')),
+    reviewed_at TIMESTAMP,
+    final_transaction_id UUID REFERENCES transactions(id),
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_manual_review_user_status ON manual_review_queue(user_id, status);
+
+-- Metrics table for monitoring
+CREATE TABLE IF NOT EXISTS email_processing_metrics (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    metric_type VARCHAR(100) NOT NULL,
+    metric_value DECIMAL(15, 2),
+    dimensions JSONB,
+    timestamp TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_metrics_type_timestamp ON email_processing_metrics(metric_type, timestamp DESC);
+
+-- Triggers for new tables
+DROP TRIGGER IF EXISTS update_email_queue_updated_at ON email_processing_queue;
+CREATE TRIGGER update_email_queue_updated_at
+  BEFORE UPDATE ON email_processing_queue
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_manual_review_updated_at ON manual_review_queue;
+CREATE TRIGGER update_manual_review_updated_at
+  BEFORE UPDATE ON manual_review_queue
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
