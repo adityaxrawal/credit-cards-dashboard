@@ -151,7 +151,9 @@ export class BillReminderService {
           if (result.updated) updated++;
         } catch (error) {
           errors.push(
-            `Card ${card.id}: ${error instanceof Error ? error.message : String(error)}`
+            `Card ${card.id}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
           );
         }
       }
@@ -159,7 +161,9 @@ export class BillReminderService {
       return { generated, updated, errors };
     } catch (error) {
       throw new Error(
-        `Failed to generate bills: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to generate bills: ${
+          error instanceof Error ? error.message : String(error)
+        }`
       );
     }
   }
@@ -600,7 +604,9 @@ export class BillReminderService {
             userId: bill.user_id,
             type: "bill_reminder",
             title: `Bill Due in ${daysBefore} Day${daysBefore > 1 ? "s" : ""}`,
-            message: `Your ${cardName} bill of ₹${bill.total_amount.toLocaleString()} is due on ${dueDate.toLocaleDateString("en-IN")}. Minimum payment: ₹${bill.minimum_amount.toLocaleString()}.`,
+            message: `Your ${cardName} bill of ₹${bill.total_amount.toLocaleString()} is due on ${dueDate.toLocaleDateString(
+              "en-IN"
+            )}. Minimum payment: ₹${bill.minimum_amount.toLocaleString()}.`,
             priority: daysBefore <= 1 ? "high" : "medium",
             metadata: {
               billId: bill.id,
@@ -704,5 +710,326 @@ export class BillReminderService {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Create a bill reminder
+   */
+  static async createBillReminder(
+    userId: string,
+    reminderData: {
+      cardId?: string;
+      title: string;
+      description?: string;
+      amount?: number;
+      dueDate: Date;
+      reminderDate: Date;
+      isRecurring?: boolean;
+      recurrencePattern?: "monthly" | "biweekly" | "quarterly" | "annually";
+      recurrenceDay?: number;
+    }
+  ) {
+    const { data, error } = await supabase
+      .from("bill_reminders")
+      .insert({
+        user_id: userId,
+        card_id: reminderData.cardId,
+        title: reminderData.title,
+        description: reminderData.description,
+        amount: reminderData.amount,
+        due_date: reminderData.dueDate.toISOString(),
+        reminder_date: reminderData.reminderDate.toISOString(),
+        is_recurring: reminderData.isRecurring || false,
+        recurrence_pattern: reminderData.recurrencePattern,
+        recurrence_day: reminderData.recurrenceDay,
+        status: "pending",
+      })
+      .select()
+      .single();
+
+    if (error)
+      throw new Error(`Failed to create bill reminder: ${error.message}`);
+    return data;
+  }
+
+  /**
+   * Get bill reminders for a user
+   */
+  static async getBillReminders(
+    userId: string,
+    filters?: {
+      status?: string;
+      startDate?: Date;
+      endDate?: Date;
+      isRecurring?: boolean;
+    }
+  ) {
+    let query = supabase
+      .from("bill_reminders")
+      .select("*, credit_cards(card_name)")
+      .eq("user_id", userId);
+
+    if (filters?.status) {
+      query = query.eq("status", filters.status);
+    }
+    if (filters?.startDate) {
+      query = query.gte("due_date", filters.startDate.toISOString());
+    }
+    if (filters?.endDate) {
+      query = query.lte("due_date", filters.endDate.toISOString());
+    }
+    if (filters?.isRecurring !== undefined) {
+      query = query.eq("is_recurring", filters.isRecurring);
+    }
+
+    const { data, error } = await query.order("due_date", { ascending: true });
+
+    if (error)
+      throw new Error(`Failed to fetch bill reminders: ${error.message}`);
+    return data || [];
+  }
+
+  /**
+   * Mark bill as paid
+   */
+  static async markBillAsPaid(
+    userId: string,
+    reminderId: string,
+    paidData: {
+      amount: number;
+      paymentDate?: Date;
+      paymentMethod?: string;
+      notes?: string;
+    }
+  ) {
+    const paidAt = paidData.paymentDate || new Date();
+
+    // Update bill reminder
+    const { error: updateError } = await supabase
+      .from("bill_reminders")
+      .update({
+        status: "paid",
+        paid_at: paidAt.toISOString(),
+        paid_amount: paidData.amount,
+      })
+      .eq("id", reminderId)
+      .eq("user_id", userId);
+
+    if (updateError)
+      throw new Error(`Failed to update bill: ${updateError.message}`);
+
+    // Record payment history
+    const { error: historyError } = await supabase
+      .from("bill_payment_history")
+      .insert({
+        bill_reminder_id: reminderId,
+        user_id: userId,
+        payment_date: paidAt.toISOString(),
+        amount: paidData.amount,
+        payment_method: paidData.paymentMethod,
+        notes: paidData.notes,
+      });
+
+    if (historyError)
+      throw new Error(`Failed to record payment: ${historyError.message}`);
+
+    // Create calendar event
+    const { data: reminder } = await supabase
+      .from("bill_reminders")
+      .select("title, description")
+      .eq("id", reminderId)
+      .single();
+
+    if (reminder) {
+      await supabase.from("bill_calendar_events").insert({
+        user_id: userId,
+        bill_reminder_id: reminderId,
+        event_type: "payment_made",
+        event_date: paidAt.toISOString(),
+        title: `${reminder.title} - Paid`,
+        description: reminder.description,
+        color: "#00CC00",
+        icon: "check-circle",
+      });
+    }
+  }
+
+  /**
+   * Get calendar events for bills
+   */
+  static async getBillCalendarEvents(
+    userId: string,
+    startDate: Date,
+    endDate: Date
+  ) {
+    const { data, error } = await supabase
+      .from("bill_calendar_events")
+      .select("*, bill_reminders(title, amount, status)")
+      .eq("user_id", userId)
+      .gte("event_date", startDate.toISOString())
+      .lte("event_date", endDate.toISOString())
+      .order("event_date", { ascending: true });
+
+    if (error)
+      throw new Error(`Failed to fetch calendar events: ${error.message}`);
+    return data || [];
+  }
+
+  /**
+   * Create recurring bill template
+   */
+  static async createRecurringTemplate(
+    userId: string,
+    templateData: {
+      cardId?: string;
+      merchant?: string;
+      title: string;
+      description?: string;
+      typicalAmount?: number;
+      recurrencePattern: "monthly" | "quarterly" | "annually";
+      recurrenceDay: number;
+      reminderDaysBefore?: number;
+    }
+  ) {
+    const nextGenDate = new Date();
+    nextGenDate.setDate(templateData.recurrenceDay);
+    if (nextGenDate < new Date()) {
+      nextGenDate.setMonth(nextGenDate.getMonth() + 1);
+    }
+
+    const { data, error } = await supabase
+      .from("recurring_bill_templates")
+      .insert({
+        user_id: userId,
+        card_id: templateData.cardId,
+        merchant: templateData.merchant,
+        title: templateData.title,
+        description: templateData.description,
+        typical_amount: templateData.typicalAmount,
+        recurrence_pattern: templateData.recurrencePattern,
+        recurrence_day: templateData.recurrenceDay,
+        reminder_days_before: templateData.reminderDaysBefore || 3,
+        next_generation_date: nextGenDate.toISOString(),
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (error)
+      throw new Error(`Failed to create recurring template: ${error.message}`);
+    return data;
+  }
+
+  /**
+   * Get recurring bill templates
+   */
+  static async getRecurringTemplates(
+    userId: string,
+    activeOnly: boolean = true
+  ) {
+    let query = supabase
+      .from("recurring_bill_templates")
+      .select("*")
+      .eq("user_id", userId);
+
+    if (activeOnly) {
+      query = query.eq("is_active", true);
+    }
+
+    const { data, error } = await query.order("created_at", {
+      ascending: false,
+    });
+
+    if (error)
+      throw new Error(`Failed to fetch recurring templates: ${error.message}`);
+    return data || [];
+  }
+
+  /**
+   * Detect recurring bills from transaction history
+   */
+  static async detectRecurringBills(userId: string) {
+    const { data, error } = await supabase.rpc("detect_recurring_bills", {
+      p_user_id: userId,
+    });
+
+    if (error)
+      throw new Error(`Failed to detect recurring bills: ${error.message}`);
+    return { detectedCount: data };
+  }
+
+  /**
+   * Generate bills from recurring templates (cron job)
+   */
+  static async generateRecurringBills() {
+    const { data, error } = await supabase.rpc("generate_recurring_bills");
+    if (error)
+      throw new Error(`Failed to generate recurring bills: ${error.message}`);
+    return { generatedCount: data };
+  }
+
+  /**
+   * Check and mark overdue bills (cron job)
+   */
+  static async checkOverdueBills() {
+    const { error } = await supabase.rpc("check_overdue_bills");
+    if (error)
+      throw new Error(`Failed to check overdue bills: ${error.message}`);
+  }
+
+  /**
+   * Send bill reminders for upcoming due dates
+   */
+  static async sendUpcomingReminders() {
+    // Get reminders that need to be sent today
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const { data: reminders, error } = await supabase
+      .from("bill_reminders")
+      .select("*, users(email)")
+      .eq("status", "pending")
+      .gte("reminder_date", today.toISOString())
+      .lt("reminder_date", tomorrow.toISOString())
+      .is("last_sent_at", null);
+
+    if (error) {
+      console.error("Error fetching reminders:", error);
+      return { sent: 0, failed: 0 };
+    }
+
+    let sent = 0;
+    let failed = 0;
+
+    for (const reminder of reminders || []) {
+      try {
+        // Create alert
+        await AlertService.createAlert({
+          userId: reminder.user_id,
+          type: "bill_reminder",
+          priority: "high",
+          title: `Bill Reminder: ${reminder.title}`,
+          message: `Your bill of ${
+            reminder.amount ? `$${reminder.amount}` : "unknown amount"
+          } is due on ${new Date(reminder.due_date).toLocaleDateString()}`,
+          actionLabel: "View Bill",
+          actionUrl: `/bills/${reminder.id}`,
+        });
+
+        // Update last_sent_at
+        await supabase
+          .from("bill_reminders")
+          .update({ last_sent_at: new Date().toISOString() })
+          .eq("id", reminder.id);
+
+        sent++;
+      } catch (err) {
+        console.error(`Failed to send reminder ${reminder.id}:`, err);
+        failed++;
+      }
+    }
+
+    return { sent, failed };
   }
 }

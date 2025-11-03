@@ -1,6 +1,10 @@
 import { Router, Request, Response } from "express";
 import { authenticate, AuthRequest } from "../middleware/auth";
 import { BudgetService } from "../services/budget.service";
+import {
+  EnhancedBudgetService,
+  PeriodType,
+} from "../services/budget-enhanced.service";
 
 const router = Router();
 
@@ -344,6 +348,396 @@ router.put("/alerts/settings", async (req: AuthRequest, res: Response) => {
       error instanceof Error
         ? error.message
         : "Failed to update alert settings";
+    res.status(500).json({
+      success: false,
+      error: message,
+    });
+  }
+});
+
+/**
+ * POST /budget/categories
+ * Create a category-level budget
+ */
+router.post("/categories", async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { categoryName, budgetLimit, periodType, startDate } = req.body;
+
+    // Validation
+    if (!categoryName || typeof categoryName !== "string") {
+      return res.status(400).json({
+        success: false,
+        error: "Valid category name is required",
+      });
+    }
+
+    if (!budgetLimit || typeof budgetLimit !== "number" || budgetLimit <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Valid budget limit is required",
+      });
+    }
+
+    if (
+      periodType &&
+      !["monthly", "quarterly", "annual"].includes(periodType)
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: "Period type must be monthly, quarterly, or annual",
+      });
+    }
+
+    const category = await EnhancedBudgetService.createCategoryBudget(
+      userId,
+      categoryName,
+      budgetLimit,
+      (periodType as PeriodType) || "monthly",
+      startDate ? new Date(startDate) : undefined,
+      { ip_address: req.ip, user_agent: req.get("user-agent") }
+    );
+
+    res.status(201).json({
+      success: true,
+      data: { category },
+    });
+  } catch (error) {
+    console.error("Error creating category budget:", error);
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to create category budget";
+    res.status(500).json({
+      success: false,
+      error: message,
+    });
+  }
+});
+
+/**
+ * GET /budget/categories
+ * Get all category budgets
+ */
+router.get("/categories", async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const periodType = req.query.periodType as PeriodType | undefined;
+
+    const categories = await EnhancedBudgetService.getCategoryBudgets(
+      userId,
+      periodType
+    );
+
+    // Get current spending for each category
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    const categorySpending = await EnhancedBudgetService.getCategorySpending(
+      userId,
+      startOfMonth,
+      endOfMonth
+    );
+
+    res.json({
+      success: true,
+      data: {
+        categories,
+        spending: categorySpending,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching category budgets:", error);
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to fetch category budgets";
+    res.status(500).json({
+      success: false,
+      error: message,
+    });
+  }
+});
+
+/**
+ * PUT /budget/categories/:categoryId
+ * Update category budget
+ */
+router.put(
+  "/categories/:categoryId",
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const { categoryId } = req.params;
+      const updates = req.body;
+
+      const category = await EnhancedBudgetService.updateCategoryBudget(
+        userId,
+        categoryId,
+        updates,
+        { ip_address: req.ip, user_agent: req.get("user-agent") }
+      );
+
+      res.json({
+        success: true,
+        data: { category },
+      });
+    } catch (error) {
+      console.error("Error updating category budget:", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update category budget";
+      res.status(500).json({
+        success: false,
+        error: message,
+      });
+    }
+  }
+);
+
+/**
+ * POST /budget/cards
+ * Set budget for a specific card
+ */
+router.post("/cards", async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { cardId, month, year, budgetLimit } = req.body;
+
+    // Validation
+    if (!cardId) {
+      return res.status(400).json({
+        success: false,
+        error: "Card ID is required",
+      });
+    }
+
+    if (!month || month < 1 || month > 12) {
+      return res.status(400).json({
+        success: false,
+        error: "Valid month (1-12) is required",
+      });
+    }
+
+    if (!year || year < 2000 || year > 2100) {
+      return res.status(400).json({
+        success: false,
+        error: "Valid year is required",
+      });
+    }
+
+    if (!budgetLimit || budgetLimit <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Valid budget limit is required",
+      });
+    }
+
+    const cardBudget = await EnhancedBudgetService.setCardBudget(
+      userId,
+      cardId,
+      month,
+      year,
+      budgetLimit,
+      { ip_address: req.ip, user_agent: req.get("user-agent") }
+    );
+
+    res.json({
+      success: true,
+      data: { cardBudget },
+    });
+  } catch (error) {
+    console.error("Error setting card budget:", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to set card budget";
+    res.status(500).json({
+      success: false,
+      error: message,
+    });
+  }
+});
+
+/**
+ * GET /budget/cards
+ * Get card budgets for a specific month
+ */
+router.get("/cards", async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const now = new Date();
+    const month = req.query.month
+      ? parseInt(req.query.month as string)
+      : now.getMonth() + 1;
+    const year = req.query.year
+      ? parseInt(req.query.year as string)
+      : now.getFullYear();
+
+    const cardBudgets = await EnhancedBudgetService.getCardBudgets(
+      userId,
+      month,
+      year
+    );
+
+    res.json({
+      success: true,
+      data: { cardBudgets },
+    });
+  } catch (error) {
+    console.error("Error fetching card budgets:", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch card budgets";
+    res.status(500).json({
+      success: false,
+      error: message,
+    });
+  }
+});
+
+/**
+ * GET /budget/analytics
+ * Get comprehensive budget analytics
+ */
+router.get("/analytics", async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+
+    const analytics =
+      await EnhancedBudgetService.getComprehensiveBudgetAnalytics(userId);
+
+    res.json({
+      success: true,
+      data: analytics,
+    });
+  } catch (error) {
+    console.error("Error fetching budget analytics:", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch analytics";
+    res.status(500).json({
+      success: false,
+      error: message,
+    });
+  }
+});
+
+/**
+ * GET /budget/audit-log
+ * Get budget audit trail
+ */
+router.get("/audit-log", async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const options = {
+      limit: req.query.limit ? parseInt(req.query.limit as string) : 50,
+      offset: req.query.offset ? parseInt(req.query.offset as string) : 0,
+      actionType: req.query.actionType as string | undefined,
+      startDate: req.query.startDate as string | undefined,
+      endDate: req.query.endDate as string | undefined,
+    };
+
+    const result = await EnhancedBudgetService.getBudgetAuditLog(
+      userId,
+      options
+    );
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error fetching audit log:", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch audit log";
+    res.status(500).json({
+      success: false,
+      error: message,
+    });
+  }
+});
+
+/**
+ * GET /budget/alert-config
+ * Get budget alert configuration
+ */
+router.get("/alert-config", async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const config = await EnhancedBudgetService.getBudgetAlertConfig(userId);
+
+    res.json({
+      success: true,
+      data: { config },
+    });
+  } catch (error) {
+    console.error("Error fetching alert config:", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch alert config";
+    res.status(500).json({
+      success: false,
+      error: message,
+    });
+  }
+});
+
+/**
+ * PUT /budget/alert-config
+ * Update budget alert configuration
+ */
+router.put("/alert-config", async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const updates = req.body;
+
+    const config = await EnhancedBudgetService.updateBudgetAlertConfig(
+      userId,
+      updates
+    );
+
+    res.json({
+      success: true,
+      data: { config },
+    });
+  } catch (error) {
+    console.error("Error updating alert config:", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to update alert config";
+    res.status(500).json({
+      success: false,
+      error: message,
+    });
+  }
+});
+
+/**
+ * POST /budget/forecasts/generate
+ * Generate spending forecasts
+ */
+router.post("/forecasts/generate", async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { days = 30 } = req.body;
+
+    if (days < 1 || days > 90) {
+      return res.status(400).json({
+        success: false,
+        error: "Forecast days must be between 1 and 90",
+      });
+    }
+
+    const forecasts = await EnhancedBudgetService.generateSpendingForecast(
+      userId,
+      days
+    );
+
+    res.json({
+      success: true,
+      data: { forecasts },
+    });
+  } catch (error) {
+    console.error("Error generating forecasts:", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to generate forecasts";
     res.status(500).json({
       success: false,
       error: message,
