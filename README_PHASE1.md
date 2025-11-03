@@ -13,12 +13,14 @@
 ### Environment Setup
 
 1. **Clone the repository**
+
    ```bash
    git clone <repository-url>
    cd credit-card-dashboard
    ```
 
 2. **Install dependencies**
+
    ```bash
    # Backend shared utilities
    cd backend/shared
@@ -34,10 +36,11 @@
    ```
 
 3. **Configure environment variables**
-   
+
    Create `.env` files based on `.env.example`:
-   
+
    **Backend (`backend/services/api-gateway/.env`)**:
+
    ```env
    # Google OAuth
    GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
@@ -47,7 +50,7 @@
    # JWT Secrets (generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
    JWT_SECRET=your-jwt-secret-min-32-characters
    JWT_REFRESH_SECRET=your-jwt-refresh-secret-min-32-characters
-   
+
    # Encryption Key (64 hex characters for AES-256)
    ENCRYPTION_KEY=your-64-char-hex-encryption-key
 
@@ -65,6 +68,7 @@
    ```
 
    **Frontend (`frontend/.env.local`)**:
+
    ```env
    NEXT_PUBLIC_API_URL=http://localhost:4000
    NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
@@ -83,22 +87,27 @@
 #### Development Mode
 
 **Backend:**
+
 ```bash
 cd backend/services/api-gateway
 npm run dev
 ```
+
 Server will start on http://localhost:4000
 
 **Frontend:**
+
 ```bash
 cd frontend
 npm run dev
 ```
+
 Application will be available at http://localhost:3000
 
 #### Production Mode
 
 **Backend:**
+
 ```bash
 cd backend/services/api-gateway
 npm run build
@@ -106,6 +115,7 @@ npm start
 ```
 
 **Frontend:**
+
 ```bash
 cd frontend
 npm run build
@@ -115,6 +125,7 @@ npm start
 ### Running Tests
 
 **Backend Unit & Integration Tests:**
+
 ```bash
 cd backend/services/api-gateway
 npm test                    # Watch mode
@@ -122,6 +133,7 @@ npm run test:ci            # CI mode with coverage
 ```
 
 **Frontend Tests:**
+
 ```bash
 cd frontend
 npm test                    # Watch mode
@@ -129,6 +141,7 @@ npm run test:ci            # CI mode
 ```
 
 **Run all tests locally (CI simulation):**
+
 ```bash
 npm run ci
 ```
@@ -136,6 +149,7 @@ npm run ci
 ### Code Quality
 
 **Linting:**
+
 ```bash
 # Backend
 cd backend/services/api-gateway
@@ -147,6 +161,7 @@ npm run lint
 ```
 
 **Type Checking:**
+
 ```bash
 # Backend
 cd backend/services/api-gateway
@@ -160,6 +175,7 @@ npm run type-check
 ## 📋 Phase 1 Features Implemented
 
 ### ✅ Authentication System
+
 - Google OAuth 2.0 integration
 - JWT-based authentication (access + refresh tokens)
 - Session management with Redis
@@ -168,18 +184,21 @@ npm run type-check
 - Token refresh mechanism
 
 **Endpoints:**
+
 - `POST /api/auth/google` - Authenticate with Google OAuth code
 - `POST /api/auth/refresh` - Refresh access token
 - `POST /api/auth/logout` - Logout user
 - `GET /api/auth/me` - Get current user info
 
 ### ✅ Card Management
+
 - Full CRUD operations for credit cards
 - Card statistics and utilization tracking
 - Pagination and filtering
 - Validation and error handling
 
 **Endpoints:**
+
 - `GET /api/cards` - List all cards
 - `GET /api/cards/:id` - Get card details
 - `POST /api/cards` - Create new card
@@ -188,6 +207,7 @@ npm run type-check
 - `GET /api/cards/:id/statistics` - Get card statistics
 
 ### ✅ Transaction Management
+
 - Transaction CRUD operations
 - Billing cycle calculation
 - Advanced filtering (by card, date range, amount, category)
@@ -196,6 +216,7 @@ npm run type-check
 - Budget tracking integration
 
 **Endpoints:**
+
 - `GET /api/transactions` - List transactions with filters
 - `GET /api/transactions/:id` - Get transaction details
 - `POST /api/transactions` - Create transaction
@@ -203,6 +224,7 @@ npm run type-check
 - `DELETE /api/transactions/:id` - Delete transaction
 
 ### ✅ Dashboard & Analytics
+
 - Overview statistics (total spending, cards, transactions)
 - Card-wise spending breakdown
 - Recent transactions
@@ -211,22 +233,26 @@ npm run type-check
 - Spending trends
 
 **Endpoints:**
+
 - `GET /api/dashboard/overview` - Dashboard overview stats
 - `GET /api/analytics/summary` - Analytics summary
 - `GET /api/transactions/recent` - Recent transactions
 
 ### ✅ Health & Monitoring
+
 - Health check endpoint
 - Service status monitoring (DB, Redis)
 - Structured error responses
 - Request logging
 
 **Endpoints:**
+
 - `GET /api/health` - Health check
 
 ## 🧪 Testing Strategy
 
 ### Coverage Requirements
+
 - **Minimum Coverage**: 90% for lines, branches, functions, and statements
 - **Unit Tests**: Service layer methods, utilities, helpers
 - **Integration Tests**: API endpoints with mocked dependencies
@@ -315,6 +341,7 @@ frontend/
 ## 📊 Database Schema
 
 Key tables:
+
 - `users` - User accounts and preferences
 - `credit_cards` - Credit card details
 - `transactions` - Transaction records with billing cycle
@@ -361,16 +388,19 @@ Or connect your GitHub repository to Vercel for automatic deployments.
 ### Common Issues
 
 1. **"Session expired" errors**
+
    - Check Redis connection
    - Verify JWT secrets are consistent
    - Ensure token refresh flow is working
 
 2. **Database connection failures**
+
    - Verify Supabase URL and service role key
    - Check network connectivity
    - Review Row Level Security policies
 
 3. **OAuth errors**
+
    - Verify Google OAuth credentials
    - Check redirect URI matches Google Console
    - Ensure correct scopes are requested

@@ -1,23 +1,23 @@
-import crypto from 'crypto';
+import crypto from "crypto";
 
 /**
  * Encrypts a value using AES-256-GCM
  */
 export function encryptValue(value: string): string {
   if (!process.env.ENCRYPTION_KEY) {
-    throw new Error('ENCRYPTION_KEY environment variable is required');
+    throw new Error("ENCRYPTION_KEY environment variable is required");
   }
 
-  const algorithm = 'aes-256-gcm';
-  const key = Buffer.from(process.env.ENCRYPTION_KEY, 'hex');
+  const algorithm = "aes-256-gcm";
+  const key = Buffer.from(process.env.ENCRYPTION_KEY, "hex");
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv(algorithm, key, iv);
 
-  let encrypted = cipher.update(value, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
+  let encrypted = cipher.update(value, "utf8", "hex");
+  encrypted += cipher.final("hex");
   const authTag = cipher.getAuthTag();
 
-  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+  return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted}`;
 }
 
 /**
@@ -25,24 +25,24 @@ export function encryptValue(value: string): string {
  */
 export function decryptValue(encryptedValue: string): string {
   if (!process.env.ENCRYPTION_KEY) {
-    throw new Error('ENCRYPTION_KEY environment variable is required');
+    throw new Error("ENCRYPTION_KEY environment variable is required");
   }
 
-  const [ivHex, authTagHex, encrypted] = encryptedValue.split(':');
+  const [ivHex, authTagHex, encrypted] = encryptedValue.split(":");
   if (!ivHex || !authTagHex || !encrypted) {
-    throw new Error('Invalid encrypted value format');
+    throw new Error("Invalid encrypted value format");
   }
 
-  const algorithm = 'aes-256-gcm';
-  const key = Buffer.from(process.env.ENCRYPTION_KEY, 'hex');
-  const iv = Buffer.from(ivHex, 'hex');
-  const authTag = Buffer.from(authTagHex, 'hex');
+  const algorithm = "aes-256-gcm";
+  const key = Buffer.from(process.env.ENCRYPTION_KEY, "hex");
+  const iv = Buffer.from(ivHex, "hex");
+  const authTag = Buffer.from(authTagHex, "hex");
 
   const decipher = crypto.createDecipheriv(algorithm, key, iv);
   decipher.setAuthTag(authTag);
 
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
+  let decrypted = decipher.update(encrypted, "hex", "utf8");
+  decrypted += decipher.final("utf8");
 
   return decrypted;
 }
@@ -61,15 +61,17 @@ export function isValidEmail(email: string): boolean {
 export function sanitizeError(error: unknown): string {
   if (error instanceof Error) {
     // Don't leak sensitive information
-    if (error.message.toLowerCase().includes('password') || 
-        error.message.toLowerCase().includes('token') ||
-        error.message.toLowerCase().includes('secret') ||
-        error.message.toLowerCase().includes('key')) {
-      return 'An authentication error occurred';
+    if (
+      error.message.toLowerCase().includes("password") ||
+      error.message.toLowerCase().includes("token") ||
+      error.message.toLowerCase().includes("secret") ||
+      error.message.toLowerCase().includes("key")
+    ) {
+      return "An authentication error occurred";
     }
     return error.message;
   }
-  return 'An unexpected error occurred';
+  return "An unexpected error occurred";
 }
 
 /**
