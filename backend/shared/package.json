@@ -12,9 +12,13 @@
   "license": "ISC",
   "dependencies": {
     "@supabase/supabase-js": "^2.42.0",
-    "ioredis": "^5.3.2",
-    "zod": "^3.22.4",
-    "dotenv": "^16.4.5"
+    "anthropic": "^0.0.0",
+    "bull": "^4.16.5",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.8.2",
+    "openai": "^6.7.0",
+    "winston": "^3.18.3",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
