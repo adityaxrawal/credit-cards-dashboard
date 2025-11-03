@@ -22,6 +22,7 @@ import subscriptionRoutes from "./routes/subscriptions.routes";
 import reportsRoutes from "./routes/reports.routes";
 import rewardsRoutes from "./routes/rewards.routes";
 import statementUploadRoutes from "./routes/statement-upload.routes";
+import recurringTransactionsRoutes from "./routes/recurring-transactions.routes";
 import { BackgroundJobService } from "./services/background-jobs.service";
 
 dotenv.config();
@@ -62,6 +63,7 @@ app.use("/subscriptions", subscriptionRoutes);
 app.use("/reports", reportsRoutes);
 app.use("/rewards", rewardsRoutes);
 app.use("/api/statements", statementUploadRoutes);
+app.use("/recurring-transactions", recurringTransactionsRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

@@ -4,14 +4,41 @@ A comprehensive personal credit card management dashboard for tracking 10+ credi
 
 ## 🎯 Features
 
+### Core Features
+
 - **Multi-Card Management**: Track unlimited credit cards with individual bill dates and due dates
 - **Automated Transaction Extraction**: Gmail integration with Pub/Sub for real-time transaction capture
 - **Budget Tracking**: Set monthly spending limits with intelligent alerts
 - **Analytics & Insights**: Comprehensive spending analytics, trends, and KPIs
 - **Bill Reminders**: Automated reminders for upcoming bills and due dates
-- **Reward Points Tracking**: Monitor and optimize credit card reward points
-- **Statement Upload & OCR**: Upload PDF statements for automatic transaction extraction
-- **Recurring Transaction Detection**: Identify and manage subscription payments
+
+### Phase 4 - Enhanced Features (NEW)
+
+- **Recurring Transactions**: Automate subscription payments with smart scheduling
+  - Weekly, biweekly, monthly, quarterly, and annual frequencies
+  - Automatic execution with duplicate prevention
+  - Pause/resume/cancel functionality
+  - Weekend skipping for business days
+  - Execution history and tracking
+- **Advanced Reporting**: Export financial reports in multiple formats
+  - PDF reports with charts and visualizations
+  - CSV export for spreadsheet analysis
+  - Excel-compatible exports with UTF-8 BOM
+  - Category breakdown and trend analysis
+  - Top merchants and spending patterns
+- **Rewards & Gamification**: Track achievements and optimize rewards
+  - Level progression system with experience points
+  - Achievement badges (Bronze, Silver, Gold, Platinum)
+  - Category-specific challenges
+  - Reward optimization recommendations
+  - Personalized spending insights
+- **Accessibility & Performance**: Enterprise-grade UX
+  - Full ARIA labels and keyboard navigation
+  - Screen reader support
+  - Focus management and announcements
+  - Memoized calculations for performance
+  - Loading states and success/error animations
+  - Responsive design for all devices
 
 ## 🏗️ Architecture
 
@@ -175,7 +202,117 @@ npm test              # Run tests in watch mode
 npm run test:ci       # Run tests in CI mode with coverage
 ```
 
-## 🚢 Deployment
+## � API Documentation
+
+### Recurring Transactions API
+
+#### Create Recurring Transaction
+
+```
+POST /recurring-transactions
+Authorization: Bearer <token>
+
+Body:
+{
+  "card_id": "uuid",
+  "merchant_name": "Netflix",
+  "amount": 999,
+  "frequency": "monthly",
+  "start_date": "2024-11-01",
+  "category": "Entertainment",
+  "auto_execute": true,
+  "notification_enabled": true
+}
+```
+
+#### Get All Recurring Transactions
+
+```
+GET /recurring-transactions?status=active
+Authorization: Bearer <token>
+```
+
+#### Pause/Resume/Cancel
+
+```
+POST /recurring-transactions/:id/pause
+POST /recurring-transactions/:id/resume
+POST /recurring-transactions/:id/cancel
+Authorization: Bearer <token>
+```
+
+### Reports & Export API
+
+#### Generate Report
+
+```
+POST /reports/generate
+Authorization: Bearer <token>
+
+Body:
+{
+  "type": "spending_summary",
+  "format": "pdf",
+  "startDate": "2024-01-01",
+  "endDate": "2024-12-31"
+}
+
+Response: Binary file download
+```
+
+#### Export Transactions
+
+```
+GET /reports/export/transactions?format=csv&startDate=2024-01-01&endDate=2024-12-31
+Authorization: Bearer <token>
+```
+
+### Rewards & Achievements API
+
+#### Get Rewards Analytics
+
+```
+GET /rewards/analytics?months=12
+Authorization: Bearer <token>
+
+Response:
+{
+  "totalEarned": 25000,
+  "totalRedeemed": 10000,
+  "currentBalance": 15000,
+  "projectedAnnual": 30000
+}
+```
+
+#### Get Optimization Recommendations
+
+```
+GET /rewards/optimization
+Authorization: Bearer <token>
+
+Response:
+{
+  "recommendations": [
+    {
+      "type": "card_suggestion",
+      "priority": "high",
+      "message": "Use Chase Sapphire for dining",
+      "potentialBenefit": 5000
+    }
+  ]
+}
+```
+
+#### Get Achievements
+
+```
+GET /rewards/achievements
+Authorization: Bearer <token>
+```
+
+For complete API documentation, see [API Reference](./docs/API.md).
+
+## �🚢 Deployment
 
 ### Frontend (Vercel)
 
@@ -217,11 +354,14 @@ This is a personal project, but feedback and suggestions are welcome!
 ## 📝 Development Phases
 
 - [x] **Phase 0**: Pre-Development Setup (Week 0)
-- [ ] **Phase 1**: Foundation & Core Features (Weeks 1-4)
-- [ ] **Phase 2**: Email Integration & Automation (Weeks 5-8)
-- [ ] **Phase 3**: Advanced Analytics & Intelligence (Weeks 9-12)
-- [ ] **Phase 4**: Enhanced Features & Polish (Weeks 13-14)
-- [ ] **Phase 5**: Testing & Launch Preparation (Weeks 15-16)
+- [x] **Phase 1**: Foundation & Core Features (Weeks 1-4)
+- [x] **Phase 2**: Email Integration & Automation (Weeks 5-8)
+- [x] **Phase 3**: Advanced Analytics & Intelligence (Weeks 9-12)
+- [x] **Phase 4**: Enhanced Features & Polish (Weeks 13-15) ✨ **COMPLETED**
+  - [x] Week 13: Recurring Transactions & Subscriptions
+  - [x] Week 14: Reports & Export Functionality
+  - [x] Week 15: Rewards System & UI Polish
+- [ ] **Phase 5**: Testing & Launch Preparation (Weeks 16-17)
 - [ ] **Phase 6**: Post-Launch & Optimization (Ongoing)
 
 See [DEVELOPMENT_PHASES.md](./docs/DEVELOPMENT_PHASES.md) for detailed phase breakdown.
