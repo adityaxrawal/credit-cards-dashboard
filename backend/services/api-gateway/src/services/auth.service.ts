@@ -2,7 +2,8 @@ import { google } from "googleapis";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { supabase } from "shared/database/supabase";
-import { redis } from "shared/cache/redis";
+import { logger } from "../utils/logger";
+import redis from "shared/cache/redis";
 
 /**
  * AuthService handles all authentication-related operations

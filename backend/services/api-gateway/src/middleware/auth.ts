@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { AppError } from "./errorHandler";
-import { redis } from "shared/cache/redis";
+import redis from "shared/cache/redis";
 
 export interface AuthRequest extends Request {
   userId?: string;

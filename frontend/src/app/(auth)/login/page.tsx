@@ -79,10 +79,10 @@ function LoginPageContent() {
   // Show loading state
   if (loading || isProcessing) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="min-h-screen flex items-center justify-center bg-primary-bg">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-green mx-auto"></div>
+          <p className="mt-4 text-secondary-text">
             {isProcessing ? "Authenticating..." : "Loading..."}
           </p>
         </div>
@@ -91,30 +91,40 @@ function LoginPageContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-xl shadow-2xl">
-        {/* Header */}
-        <div className="text-center">
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-            Credit Card Dashboard
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Manage your credit cards and track transactions
-          </p>
-        </div>
-
-        {/* Error Message */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded relative">
-            <span className="block sm:inline">{error}</span>
+    <div className="min-h-screen bg-primary-bg flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="bg-card-bg rounded-xl p-8 shadow-lg">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-primary-green rounded-lg flex items-center justify-center mx-auto mb-4">
+              <svg
+                className="w-8 h-8 text-white"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M2 5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5z" />
+                <path d="M8 11V9h8v2H8zm0 4v-2h6v2H8z" fill="white" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-primary-text mb-2">
+              Credit Card Tracker
+            </h1>
+            <p className="text-secondary-text">
+              Sign in with your Google account to get started
+            </p>
           </div>
-        )}
 
-        {/* Login Button */}
-        <div className="mt-8">
+          {/* Error Message */}
+          {error && (
+            <div className="bg-error/10 border border-error/20 text-error px-4 py-3 rounded-lg mb-6">
+              <span className="block sm:inline">{error}</span>
+            </div>
+          )}
+
+          {/* Login Button */}
           <button
             onClick={handleGoogleLogin}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+            className="w-full bg-white hover:bg-gray-50 text-gray-900 border border-gray-300 flex items-center justify-center space-x-3 py-3 px-4 rounded-lg font-medium transition-colors"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path
@@ -134,73 +144,22 @@ function LoginPageContent() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
               />
             </svg>
-            Continue with Google
+            <span>Continue with Google</span>
           </button>
-        </div>
 
-        {/* Features List */}
-        <div className="mt-8 pt-8 border-t border-gray-200">
-          <h3 className="text-sm font-medium text-gray-900 mb-4">
-            Features included:
-          </h3>
-          <ul className="space-y-2 text-sm text-gray-600">
-            <li className="flex items-center">
-              <svg
-                className="w-4 h-4 mr-2 text-green-500"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              Track multiple credit cards
-            </li>
-            <li className="flex items-center">
-              <svg
-                className="w-4 h-4 mr-2 text-green-500"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              Automated transaction extraction
-            </li>
-            <li className="flex items-center">
-              <svg
-                className="w-4 h-4 mr-2 text-green-500"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              Spending analytics and alerts
-            </li>
-            <li className="flex items-center">
-              <svg
-                className="w-4 h-4 mr-2 text-green-500"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              Bill payment reminders
-            </li>
-          </ul>
+          {/* Footer */}
+          <div className="mt-6 text-center">
+            <p className="text-xs text-muted-text">
+              By signing in, you agree to our{" "}
+              <a href="#" className="text-primary-green hover:underline">
+                Terms of Service
+              </a>{" "}
+              and{" "}
+              <a href="#" className="text-primary-green hover:underline">
+                Privacy Policy
+              </a>
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -214,8 +173,8 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-          <div className="text-gray-600">Loading...</div>
+        <div className="min-h-screen bg-primary-bg flex items-center justify-center">
+          <div className="text-secondary-text">Loading...</div>
         </div>
       }
     >
