@@ -68,6 +68,12 @@ export class BackgroundJobService {
       await this.runOverdueBillCheck();
     });
 
+    // Recurring transactions processor - runs every hour
+    this.scheduleJob("recurring-transactions", "0 * * * *", async () => {
+      console.log("Processing recurring transactions...");
+      await this.processRecurringTransactions();
+    });
+
     console.log(`Started ${this.jobs.size} background jobs`);
   }
 
@@ -540,6 +546,25 @@ export class BackgroundJobService {
       const result = await BillReminderService.checkOverdueBills();
       console.log(
         `Overdue bill check completed. Updated: ${result.updated}, Notified: ${result.notified}`
+      );
+    } catch (error) {
+      console.error("Error in overdue bill check:", error);
+    }
+  }
+
+  /**
+   * Process recurring transactions
+   */
+  private static async processRecurringTransactions(): Promise<void> {
+    try {
+      console.log("Starting recurring transaction processing...");
+      const { RecurringTransactionService } = await import(
+        "./recurring-transaction.service"
+      );
+      const result =
+        await RecurringTransactionService.processDueRecurringTransactions();
+      console.log(
+        `Recurring transactions processed: ${result.processed}, Succeeded: ${result.succeeded}, Failed: ${result.failed}`
       );
     } catch (error) {
       console.error("Error in overdue bill check:", error);
