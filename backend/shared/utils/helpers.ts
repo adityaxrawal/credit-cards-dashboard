@@ -1,3 +1,77 @@
+import crypto from 'crypto';
+
+/**
+ * Encrypts a value using AES-256-GCM
+ */
+export function encryptValue(value: string): string {
+  if (!process.env.ENCRYPTION_KEY) {
+    throw new Error('ENCRYPTION_KEY environment variable is required');
+  }
+
+  const algorithm = 'aes-256-gcm';
+  const key = Buffer.from(process.env.ENCRYPTION_KEY, 'hex');
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(algorithm, key, iv);
+
+  let encrypted = cipher.update(value, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const authTag = cipher.getAuthTag();
+
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+}
+
+/**
+ * Decrypts a value encrypted with encryptValue
+ */
+export function decryptValue(encryptedValue: string): string {
+  if (!process.env.ENCRYPTION_KEY) {
+    throw new Error('ENCRYPTION_KEY environment variable is required');
+  }
+
+  const [ivHex, authTagHex, encrypted] = encryptedValue.split(':');
+  if (!ivHex || !authTagHex || !encrypted) {
+    throw new Error('Invalid encrypted value format');
+  }
+
+  const algorithm = 'aes-256-gcm';
+  const key = Buffer.from(process.env.ENCRYPTION_KEY, 'hex');
+  const iv = Buffer.from(ivHex, 'hex');
+  const authTag = Buffer.from(authTagHex, 'hex');
+
+  const decipher = crypto.createDecipheriv(algorithm, key, iv);
+  decipher.setAuthTag(authTag);
+
+  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+
+  return decrypted;
+}
+
+/**
+ * Validate email format
+ */
+export function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+/**
+ * Sanitize error message for client response
+ */
+export function sanitizeError(error: unknown): string {
+  if (error instanceof Error) {
+    // Don't leak sensitive information
+    if (error.message.toLowerCase().includes('password') || 
+        error.message.toLowerCase().includes('token') ||
+        error.message.toLowerCase().includes('secret') ||
+        error.message.toLowerCase().includes('key')) {
+      return 'An authentication error occurred';
+    }
+    return error.message;
+  }
+  return 'An unexpected error occurred';
+}
+
 /**
  * Format currency in INR
  */

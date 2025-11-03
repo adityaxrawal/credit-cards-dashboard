@@ -7,7 +7,7 @@
 3. [Phase 0: Pre-Development Setup](#phase-0-pre-development-setup)
 4. [Phase 1: Foundation & Core Features](#phase-1-foundation--core-features)
 5. [Phase 2: Email Integration & Automation](#phase-2-email-integration--automation)
-6. [Phase 3: Advanced Analytics & Intelligence](#phase-3-advanced-analytics--intelligence)
+6. [Phase 3: Analytics & Alerts](#phase-3-analytics--alerts)
 7. [Phase 4: Enhanced Features & Polish](#phase-4-enhanced-features--polish)
 8. [Phase 5: Testing & Launch Preparation](#phase-5-testing--launch-preparation)
 9. [Phase 6: Post-Launch & Optimization](#phase-6-post-launch--optimization)
@@ -21,8 +21,8 @@ This document provides a complete, step-by-step development plan for building th
 
 ### Project Timeline
 
-- **Total Duration**: 20 weeks (5 months)
-- **Development**: 16 weeks
+- **Total Duration**: 19 weeks (~4.5 months)
+- **Development**: 15 weeks
 - **Testing & QA**: 2 weeks
 - **Launch Preparation**: 2 weeks
 
@@ -1578,7 +1578,7 @@ _(Due to length constraints, I'll provide an overview. The detailed implementati
 #### Objectives
 
 1. Regex patterns for all banks
-2. LLM integration
+2. Bank-specific template matching
 3. Confidence scoring
 4. Manual review queue
 
@@ -1595,7 +1595,7 @@ _(Due to length constraints, I'll provide an overview. The detailed implementati
 
 ---
 
-## 📊 Phase 3: Advanced Analytics & Intelligence
+## 📊 Phase 3: Analytics & Alerts
 
 **Duration**: 4 weeks (Weeks 9-12)
 
@@ -1603,7 +1603,7 @@ _(Due to length constraints, I'll provide an overview. The detailed implementati
 
 ### Week 10: Alert System
 
-### Week 11: Analytics Engine
+### Week 11: Data-Driven Analytics Engine
 
 ### Week 12: Bill Reminders
 
@@ -1611,30 +1611,28 @@ _(Due to length constraints, I'll provide an overview. The detailed implementati
 
 ## ✨ Phase 4: Enhanced Features & Polish
 
-**Duration**: 4 weeks (Weeks 13-16)
+**Duration**: 3 weeks (Weeks 13-15)
 
-### Week 13: AI Insights
+### Week 13: Recurring Transactions & Subscriptions
 
-### Week 14: Subscriptions
+### Week 14: Reports & Export
 
-### Week 15: Reports & Export
-
-### Week 16: Rewards & Polish
+### Week 15: Rewards & Polish
 
 ---
 
 ## 🧪 Phase 5: Testing & Launch Preparation
 
-**Duration**: 2 weeks (Weeks 17-18)
+**Duration**: 2 weeks (Weeks 16-17)
 
-### Week 17: Comprehensive Testing
+### Week 16: Comprehensive Testing
 
 - Load testing
 - Security audit
 - Performance optimization
 - Bug fixes
 
-### Week 18: Launch Prep
+### Week 17: Launch Prep
 
 - Documentation finalization
 - User guide creation
@@ -1645,9 +1643,9 @@ _(Due to length constraints, I'll provide an overview. The detailed implementati
 
 ## 🚀 Phase 6: Post-Launch & Optimization
 
-**Duration**: Ongoing (Weeks 19-20 and beyond)
+**Duration**: Ongoing (Weeks 18-19 and beyond)
 
-### Week 19-20: Monitoring & Improvements
+### Week 18-19: Monitoring & Improvements
 
 - Monitor metrics
 - Gather feedback

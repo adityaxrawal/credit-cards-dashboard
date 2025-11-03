@@ -54,7 +54,7 @@ This document catalogs all missing features, incomplete implementations, and kno
 2. Implement analytics-service microservice
 3. Implement extraction-service microservice
 4. Complete email-to-transaction pipeline
-5. Add LLM integration for transaction extraction
+5. Add regex-based transaction extraction patterns for all banks
 6. Implement confidence scoring system
 7. Create manual review queue for low-confidence transactions
 
@@ -351,13 +351,10 @@ This document catalogs all missing features, incomplete implementations, and kno
 
 #### Missing Components:
 
-- ❌ LLM integration (OpenAI/Anthropic)
-  - API setup
-  - Prompt engineering
-  - Cost management
 - ❌ Bank-specific extraction patterns
   - Only basic patterns implemented
-  - Need patterns for 50+ banks
+  - Need regex patterns for 50+ banks
+  - Template matching for known formats
 - ❌ Confidence scoring algorithm
 - ❌ Duplicate detection
   - Cross-email deduplication
@@ -369,7 +366,7 @@ This document catalogs all missing features, incomplete implementations, and kno
 
 ## 📊 Analytics & Insights (Phase 3-4)
 
-### 14. **Advanced Analytics**
+### 14. **Data-Driven Analytics**
 
 **Priority:** MEDIUM
 
@@ -381,39 +378,38 @@ This document catalogs all missing features, incomplete implementations, and kno
 
 #### Missing Features:
 
-- ❌ Predictive analytics
-  - Spending forecasts
-  - Budget recommendations
-  - Anomaly detection
+- ❌ Historical analytics
+  - Spending patterns over time
+  - Seasonal trend identification
+  - Budget performance tracking
 - ❌ Comparative analytics
-  - Month-over-month
-  - Year-over-year
-  - Peer benchmarking
+  - Month-over-month comparisons
+  - Year-over-year comparisons
+  - Category-wise comparisons
 - ❌ Custom reports builder
 - ❌ Saved report templates
 - ❌ Scheduled report delivery
 - ❌ Interactive visualizations
   - Drill-down capabilities
-  - Filter by clicking chart elements
+  - Chart filtering
   - Custom date ranges on charts
 
 ---
 
-### 15. **AI Insights** (Phase 4)
+### 15. **Rule-Based Insights** (Phase 4)
 
 **Priority:** LOW
 
 #### Missing Implementation:
 
-- ❌ AI service integration (OpenAI/Claude)
-- ❌ Natural language insights generation
-- ❌ Spending pattern recognition
-- ❌ Savings recommendations
-- ❌ Bill negotiation suggestions
-- ❌ Subscription optimization advice
-- ❌ Investment suggestions (if scope expanded)
-- ❌ Financial health scoring
-- ❌ Personalized tips
+- ❌ Rule-based insights generation
+- ❌ Spending pattern detection (threshold-based)
+- ❌ Budget recommendations based on history
+- ❌ Savings opportunities identification
+- ❌ Subscription optimization suggestions
+- ❌ Financial health scoring (formula-based)
+- ❌ Personalized tips based on spending data
+- ❌ Unused card detection
 
 ---
 

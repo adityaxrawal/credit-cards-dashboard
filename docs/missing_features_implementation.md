@@ -36,11 +36,11 @@ This guide provides step-by-step instructions to implement all missing features 
 ### Implementation Timeline
 
 - **Critical Features (Weeks 1-4):** Backend services, authentication, database
-- **Email Integration (Weeks 5-8):** Gmail pipeline, transaction extraction
+- **Email Integration (Weeks 5-8):** Gmail pipeline, regex-based transaction extraction
 - **Frontend Integration (Weeks 9-10):** Connect UI to APIs
-- **Advanced Features (Weeks 11-14):** Analytics, AI, reports
-- **Testing & QA (Weeks 15-16):** Comprehensive testing
-- **Deployment (Week 17):** Production deployment
+- **Advanced Features (Weeks 11-13):** Data-driven analytics, reports
+- **Testing & QA (Weeks 14-15):** Comprehensive testing
+- **Deployment (Week 16):** Production deployment
 
 ---
 
@@ -53,12 +53,12 @@ This guide provides step-by-step instructions to implement all missing features 
 ```bash
 # Backend - API Gateway
 cd backend/services/api-gateway
-npm install puppeteer pdf-parse sharp openai anthropic
+npm install puppeteer pdf-parse sharp
 npm install -D @types/puppeteer
 
 # Backend - Shared
 cd ../../shared
-npm install openai anthropic winston bull ioredis
+npm install winston bull ioredis
 
 # Frontend
 cd ../../../frontend
@@ -96,9 +96,6 @@ GOOGLE_REDIRECT_URI=http://localhost:3001/auth/google/callback
 # Google Cloud
 GCP_PROJECT_ID=your_gcp_project_id
 GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account.json
-
-# OpenAI (for transaction extraction)
-OPENAI_API_KEY=your_openai_key
 
 # Services
 FRONTEND_URL=http://localhost:3000
@@ -567,12 +564,20 @@ function generateEmailHTML(alert: Alert): string {
         </div>
         <div class="content">
           <p>${alert.message}</p>
-          ${alert.data ? `<pre>${JSON.stringify(alert.data, null, 2)}</pre>` : ""}
-          <a href="${process.env.FRONTEND_URL}/alerts/${alert.id}" class="button">View Details</a>
+          ${
+            alert.data
+              ? `<pre>${JSON.stringify(alert.data, null, 2)}</pre>`
+              : ""
+          }
+          <a href="${process.env.FRONTEND_URL}/alerts/${
+    alert.id
+  }" class="button">View Details</a>
         </div>
         <div class="footer">
           <p>Credit Card Tracker - Automated Alert System</p>
-          <p><a href="${process.env.FRONTEND_URL}/settings">Manage Alert Preferences</a></p>
+          <p><a href="${
+            process.env.FRONTEND_URL
+          }/settings">Manage Alert Preferences</a></p>
         </div>
       </div>
     </body>
@@ -1331,8 +1336,8 @@ async function computeSpendingTrends(userId: string, date: Date) {
       trendPercentage > 5
         ? "increasing"
         : trendPercentage < -5
-          ? "decreasing"
-          : "stable",
+        ? "decreasing"
+        : "stable",
     trendPercentage,
     recentAverage: recentAvg,
     previousAverage: previousAvg,
@@ -1373,7 +1378,9 @@ async function generateInsights(userId: string, date: Date) {
   // Top category insight
   if (currentMonth.topCategory) {
     insights.push(
-      `Your top spending category is ${currentMonth.topCategory.name} with $${currentMonth.topCategory.amount.toFixed(2)}`
+      `Your top spending category is ${
+        currentMonth.topCategory.name
+      } with $${currentMonth.topCategory.amount.toFixed(2)}`
     );
   }
 
@@ -1390,11 +1397,15 @@ async function generateInsights(userId: string, date: Date) {
 
     if (percentage >= 90) {
       insights.push(
-        `⚠️ You've used ${percentage.toFixed(0)}% of your ${budget.category} budget`
+        `⚠️ You've used ${percentage.toFixed(0)}% of your ${
+          budget.category
+        } budget`
       );
     } else if (percentage >= 75) {
       insights.push(
-        `You've used ${percentage.toFixed(0)}% of your ${budget.category} budget`
+        `You've used ${percentage.toFixed(0)}% of your ${
+          budget.category
+        } budget`
       );
     }
   });
@@ -1655,20 +1666,10 @@ if (process.env.NODE_ENV !== "test") {
 export default app;
 ```
 
-#### File: `backend/services/extraction-service/src/services/llm-extractor.service.ts`
+#### File: `backend/services/extraction-service/src/services/regex-extractor.service.ts`
 
 ```typescript
-import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../utils/logger";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
 
 export interface ExtractedTransaction {
   amount: number;
@@ -1681,93 +1682,181 @@ export interface ExtractedTransaction {
   confidence: number;
 }
 
-export async function extractTransactionWithLLM(
+export async function extractTransactionWithRegex(
   emailContent: string,
-  provider: "openai" | "anthropic" = "openai"
-): Promise<ExtractedTransaction> {
-  if (provider === "openai") {
-    return extractWithOpenAI(emailContent);
-  } else {
-    return extractWithAnthropic(emailContent);
-  }
-}
-
-async function extractWithOpenAI(
-  emailContent: string
-): Promise<ExtractedTransaction> {
+  emailSubject: string
+): Promise<ExtractedTransaction | null> {
   try {
-    const prompt = `Extract transaction details from this email. Respond ONLY with valid JSON, no additional text.
+    // Try bank-specific patterns first
+    const bankPatterns = getBankPatterns();
 
-Email content:
-${emailContent}
-
-Extract and return ONLY this JSON structure:
-{
-  "amount": <number - positive value>,
-  "currency": "<3-letter currency code>",
-  "merchant_name": "<merchant name>",
-  "transaction_date": "<YYYY-MM-DD format>",
-  "category": "<category like groceries, dining, shopping, etc>",
-  "description": "<brief description>",
-  "transaction_type": "<debit or credit>",
-  "confidence": <0-100 number indicating extraction confidence>
-}
-
-Rules:
-- Amount must be positive number
-- Date must be YYYY-MM-DD format
-- transaction_type must be either "debit" or "credit"
-- confidence is 0-100
-- If unsure about any field, set confidence lower`;
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4-turbo-preview",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a transaction extraction expert. Extract transaction details from emails and return ONLY valid JSON. No markdown, no code blocks, just raw JSON.",
-        },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-    });
-
-    const content = completion.choices[0].message.content;
-    if (!content) {
-      throw new Error("No content in response");
+    for (const pattern of bankPatterns) {
+      const result = tryPattern(pattern, emailContent, emailSubject);
+      if (result && result.confidence > 0.7) {
+        return result;
+      }
     }
 
-    const extracted = JSON.parse(content);
-
-    // Validate
-    if (
-      !extracted.amount ||
-      !extracted.merchant_name ||
-      !extracted.transaction_date
-    ) {
-      throw new Error("Missing required fields in extraction");
-    }
-
-    logger.info("Transaction extracted successfully with OpenAI");
-    return extracted;
+    // Fallback to generic patterns
+    return extractWithGenericPatterns(emailContent, emailSubject);
   } catch (error: any) {
-    logger.error("OpenAI extraction failed:", error);
-    throw error;
+    logger.error("Regex extraction failed:", error);
+    return null;
   }
 }
 
-async function extractWithAnthropic(
-  emailContent: string
-): Promise<ExtractedTransaction> {
-  try {
-    const prompt = `Extract transaction details from this email. Respond ONLY with valid JSON.
+function getBankPatterns() {
+  return [
+    {
+      name: "HDFC Bank",
+      patterns: {
+        amount: /(?:Rs\.?|INR|₹)\s*(\d+(?:,\d+)*(?:\.\d{2})?)/i,
+        merchant: /(?:at|with)\s+([A-Z][A-Za-z\s&.'-]+?)(?:\s+on|\s+for|\.|$)/i,
+        date: /(\d{1,2}[-/]\w{3}[-/]\d{2,4}|\d{4}-\d{2}-\d{2})/i,
+        type: /(debited|credited|spent|received)/i,
+      },
+    },
+    {
+      name: "ICICI Bank",
+      patterns: {
+        amount: /amount\s+(?:Rs\.?|INR|₹)?\s*(\d+(?:,\d+)*(?:\.\d{2})?)/i,
+        merchant: /at\s+([A-Z][A-Za-z\s&.'-]+?)(?:\s+on|\s+for|\.|$)/i,
+        date: /on\s+(\d{1,2}[-/]\w{3}[-/]\d{2,4})/i,
+        type: /(debit|credit|purchase|payment)/i,
+      },
+    },
+    // Add more bank-specific patterns here
+  ];
+}
 
-Email content:
+function tryPattern(pattern: any, emailContent: string, emailSubject: string) {
+  const fullText = `${emailSubject}\n${emailContent}`;
+
+  const amountMatch = fullText.match(pattern.patterns.amount);
+  const merchantMatch = fullText.match(pattern.patterns.merchant);
+  const dateMatch = fullText.match(pattern.patterns.date);
+  const typeMatch = fullText.match(pattern.patterns.type);
+
+  if (!amountMatch || !merchantMatch) {
+    return null;
+  }
+
+  const amount = parseFloat(amountMatch[1].replace(/,/g, ""));
+  const merchant = merchantMatch[1].trim();
+  const date = dateMatch
+    ? parseDate(dateMatch[1])
+    : new Date().toISOString().split("T")[0];
+  const type = determineType(typeMatch ? typeMatch[1] : "");
+
+  return {
+    amount,
+    currency: "INR",
+    merchant_name: merchant,
+    transaction_date: date,
+    transaction_type: type,
+    confidence: calculateConfidence(
+      amountMatch,
+      merchantMatch,
+      dateMatch,
+      typeMatch
+    ),
+  };
+}
+
+function extractWithGenericPatterns(
+  emailContent: string,
+  emailSubject: string
+): ExtractedTransaction | null {
+  // Generic extraction logic
+  const fullText = `${emailSubject}\n${emailContent}`;
+
+  const amountRegex = /(?:Rs\.?|INR|₹)\s*(\d+(?:,\d+)*(?:\.\d{2})?)/i;
+  const merchantRegex =
+    /(?:at|with|from)\s+([A-Z][A-Za-z\s&.'-]+?)(?:\s+on|\s+for|\.|$)/i;
+  const dateRegex = /(\d{1,2}[-/]\w{3}[-/]\d{2,4}|\d{4}-\d{2}-\d{2})/i;
+
+  const amountMatch = fullText.match(amountRegex);
+  const merchantMatch = fullText.match(merchantRegex);
+  const dateMatch = fullText.match(dateRegex);
+
+  if (!amountMatch) {
+    return null;
+  }
+
+  return {
+    amount: parseFloat(amountMatch[1].replace(/,/g, "")),
+    currency: "INR",
+    merchant_name: merchantMatch ? merchantMatch[1].trim() : "Unknown Merchant",
+    transaction_date: dateMatch
+      ? parseDate(dateMatch[1])
+      : new Date().toISOString().split("T")[0],
+    transaction_type: "debit",
+    confidence: merchantMatch ? 0.6 : 0.4,
+  };
+}
+
+function parseDate(dateStr: string): string {
+  // Convert various date formats to YYYY-MM-DD
+  const date = new Date(dateStr);
+  return date.toISOString().split("T")[0];
+}
+
+function determineType(typeStr: string): "debit" | "credit" {
+  const lowerType = typeStr.toLowerCase();
+  return lowerType.includes("credit") || lowerType.includes("received")
+    ? "credit"
+    : "debit";
+}
+
+function calculateConfidence(...matches: any[]): number {
+  const matchCount = matches.filter((m) => m).length;
+  return Math.min(0.5 + matchCount * 0.15, 0.95);
+}
+```
+
+---
+
+## 📝 Implementation Notes
+
+### Regex-Based Extraction Strategy
+
+The transaction extraction now uses a pattern-matching approach:
+
+1. **Bank-Specific Patterns**: Define regex patterns for each major bank's email format
+2. **Generic Fallback**: Use generic patterns when bank-specific ones don't match
+3. **Confidence Scoring**: Calculate confidence based on number of fields successfully extracted
+4. **Template Matching**: For known email formats, use pre-defined templates
+
+### Adding New Bank Patterns
+
+To add support for a new bank, update the `getBankPatterns()` function with the bank's email patterns.
+
+### Testing Extraction Patterns
+
+Create test cases with real email samples (anonymized) to validate patterns:
+
+```typescript
+// tests/extraction.test.ts
+describe("Transaction Extraction", () => {
+  it("should extract from HDFC email", () => {
+    const email =
+      "Your HDFC Credit Card XX1234 has been debited with Rs.1,500.00 at AMAZON on 01-Nov-2025";
+    const result = extractTransactionWithRegex(email, "Transaction Alert");
+    expect(result.amount).toBe(1500);
+    expect(result.merchant_name).toContain("AMAZON");
+  });
+});
+```
+
+---
+
+## 📚 Continue to Next Sections
+
+The remaining sections cover:
 ${emailContent}
 
 Extract these fields:
+
 - amount (positive number)
 - currency (3-letter code)
 - merchant_name
@@ -1777,35 +1866,37 @@ Extract these fields:
 - transaction_type (debit or credit)
 - confidence (0-100)`;
 
-    const message = await anthropic.messages.create({
-      model: "claude-3-sonnet-20240229",
-      max_tokens: 1024,
-      messages: [{ role: "user", content: prompt }],
-    });
+      const message = await anthropic.messages.create({
+        model: "claude-3-sonnet-20240229",
+        max_tokens: 1024,
+        messages: [{ role: "user", content: prompt }],
+      });
 
-    const content = message.content[0];
-    if (content.type !== "text") {
-      throw new Error("Unexpected response type");
-    }
+      const content = message.content[0];
+      if (content.type !== "text") {
+        throw new Error("Unexpected response type");
+      }
 
-    const extracted = JSON.parse(content.text);
+      const extracted = JSON.parse(content.text);
 
-    // Validate
-    if (
-      !extracted.amount ||
-      !extracted.merchant_name ||
-      !extracted.transaction_date
-    ) {
-      throw new Error("Missing required fields in extraction");
-    }
+      // Validate
+      if (
+        !extracted.amount ||
+        !extracted.merchant_name ||
+        !extracted.transaction_date
+      ) {
+        throw new Error("Missing required fields in extraction");
+      }
 
-    logger.info("Transaction extracted successfully with Anthropic");
-    return extracted;
+      logger.info("Transaction extracted successfully with Anthropic");
+      return extracted;
+
   } catch (error: any) {
-    logger.error("Anthropic extraction failed:", error);
-    throw error;
+  logger.error("Anthropic extraction failed:", error);
+  throw error;
   }
-}
+  }
+
 ```
 
 Due to character limits, I'll continue in the next part. Would you like me to continue with the remaining implementation details including:
@@ -1819,3 +1910,4 @@ Due to character limits, I'll continue in the next part. Would you like me to co
 7. Complete implementation checklist
 
 Let me know and I'll continue with the comprehensive guide!
+```
