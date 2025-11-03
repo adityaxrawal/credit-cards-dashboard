@@ -4,8 +4,8 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { logger } from "../../../monitoring/logger";
-import { analyticsService } from "../../analytics-service/src/analytics.service";
+import { logger } from "../../../../shared/monitoring/logger";
+import { analyticsService } from "../../../analytics-service/src/analytics.service";
 
 const supabase = createClient(
   process.env.SUPABASE_URL || "",

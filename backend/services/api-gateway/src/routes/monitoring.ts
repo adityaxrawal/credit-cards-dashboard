@@ -4,9 +4,9 @@
  */
 
 import { Router } from "express";
-import { healthCheck } from "../../../../monitoring/health-check";
-import { metricsCollector } from "../../../../monitoring/metrics-collector";
-import { authenticateToken } from "../middleware/auth.middleware";
+import { healthCheck } from "../../../../shared/monitoring/health-check";
+import { metricsCollector } from "../../../../shared/monitoring/metrics-collector";
+import { requireAuth } from "../middleware/auth.middleware";
 
 const router = Router();
 

@@ -3,7 +3,7 @@
  * Phase 6: Post-Launch & Optimization
  */
 
-import { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
 
 /**
  * Debounce hook to prevent excessive function calls
@@ -67,6 +67,12 @@ export function useIntersectionObserver(
   options?: IntersectionObserverInit
 ) {
   const ref = useRef<HTMLDivElement>(null);
+  const callbackRef = useRef(callback);
+
+  // Keep callback ref up to date
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
 
   useEffect(() => {
     const element = ref.current;
@@ -75,7 +81,7 @@ export function useIntersectionObserver(
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          callback();
+          callbackRef.current();
           observer.unobserve(entry.target);
         }
       });
@@ -88,7 +94,8 @@ export function useIntersectionObserver(
         observer.unobserve(element);
       }
     };
-  }, [callback, options]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options?.threshold, options?.root, options?.rootMargin]);
 
   return ref;
 }
@@ -131,6 +138,7 @@ export function useMemoizedValue<T>(
   factory: () => T,
   deps: React.DependencyList
 ): T {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   return React.useMemo(factory, deps);
 }
 
@@ -193,10 +201,11 @@ export function preloadImages(urls: string[]): Promise<void[]> {
 /**
  * Code splitting helper
  */
-export function lazyWithPreload<T extends React.ComponentType<any>>(
+export function lazyWithPreload<T extends React.ComponentType<Record<string, unknown>>>(
   factory: () => Promise<{ default: T }>
 ) {
   const Component = React.lazy(factory);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (Component as any).preload = factory;
   return Component;
 }
@@ -223,5 +232,3 @@ export function cancelIdleCallbackPolyfill(id: number) {
   }
   return clearTimeout(id);
 }
-
-import { useState } from "react";

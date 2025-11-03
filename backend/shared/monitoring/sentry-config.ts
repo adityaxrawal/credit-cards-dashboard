@@ -44,7 +44,7 @@ export function initializeSentry(serviceName: string): void {
     ],
 
     // Error filtering
-    beforeSend(event, hint) {
+    beforeSend(event: Sentry.Event, hint: Sentry.EventHint): Sentry.Event | null {
       // Filter out specific errors
       const error = hint.originalException;
 
@@ -64,7 +64,7 @@ export function initializeSentry(serviceName: string): void {
     },
 
     // Additional context
-    beforeBreadcrumb(breadcrumb) {
+    beforeBreadcrumb(breadcrumb: Sentry.Breadcrumb): Sentry.Breadcrumb | null {
       // Filter out noisy breadcrumbs
       if (breadcrumb.category === "console" && breadcrumb.level === "log") {
         return null;
@@ -78,16 +78,13 @@ export function initializeSentry(serviceName: string): void {
   );
 }
 
-export function captureError(
-  error: Error,
-  context?: Record<string, any>
-): void {
+export function captureError(error: Error, context?: Record<string, any>): void {
   if (!sentryConfig.enabled) {
-    console.error("Error:", error, context);
+    console.error('Error:', error, context);
     return;
   }
 
-  Sentry.withScope((scope) => {
+  Sentry.withScope((scope: Sentry.Scope) => {
     if (context) {
       Object.entries(context).forEach(([key, value]) => {
         scope.setContext(key, value);
@@ -97,17 +94,13 @@ export function captureError(
   });
 }
 
-export function captureMessage(
-  message: string,
-  level: Sentry.SeverityLevel = "info",
-  context?: Record<string, any>
-): void {
+export function captureMessage(message: string, level: Sentry.SeverityLevel = 'info', context?: Record<string, any>): void {
   if (!sentryConfig.enabled) {
     console.log(message, context);
     return;
   }
 
-  Sentry.withScope((scope) => {
+  Sentry.withScope((scope: Sentry.Scope) => {
     scope.setLevel(level);
     if (context) {
       Object.entries(context).forEach(([key, value]) => {

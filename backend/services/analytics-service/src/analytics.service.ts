@@ -4,8 +4,8 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { metricsCollector } from "../../../monitoring/metrics-collector";
-import { logger } from "../../../monitoring/logger";
+import { metricsCollector } from "../../../shared/monitoring/metrics-collector";
+import { logger } from "../../../shared/monitoring/logger";
 
 const supabase = createClient(
   process.env.SUPABASE_URL || "",

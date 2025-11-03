@@ -4,9 +4,9 @@
  */
 
 import { Request, Response, NextFunction } from "express";
-import { metricsCollector } from "../../../monitoring/metrics-collector";
-import { logger } from "../../../monitoring/logger";
-import { Sentry } from "../../../monitoring/sentry-config";
+import * as Sentry from "@sentry/node";
+import { metricsCollector } from "../../../../shared/monitoring/metrics-collector";
+import { logger } from "../../../../shared/monitoring/logger";
 
 /**
  * Request tracking middleware
