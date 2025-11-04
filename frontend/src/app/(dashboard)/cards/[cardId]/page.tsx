@@ -2,15 +2,7 @@
 
 import React, { useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import {
-  ArrowLeft,
-  Edit3,
-  Trash2,
-  Download,
-  Plus,
-  Filter,
-  Calendar,
-} from "lucide-react";
+import { ArrowLeft, Edit3, Trash2, Plus, Filter, Calendar } from "lucide-react";
 import { AppLayout } from "@/components/layout";
 import { Button, ProgressBar, Modal, Input, Badge } from "@/components/ui";
 import {
@@ -100,7 +92,6 @@ const weeklyData = [
 const tabs = [
   { key: "transactions", label: "Transactions" },
   { key: "insights", label: "Insights" },
-  { key: "statements", label: "Statements" },
 ];
 
 export default function CardDetailPage() {
@@ -251,7 +242,6 @@ export default function CardDetailPage() {
               weeklyData={weeklyData}
             />
           )}
-          {activeTab === "statements" && <StatementsTab />}
         </div>
       </div>
 
@@ -406,46 +396,6 @@ function InsightsTab({
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// Statements Tab Component
-function StatementsTab() {
-  const statements = [
-    { month: "December 2024", date: "2024-12-15", status: "Available" },
-    { month: "November 2024", date: "2024-11-15", status: "Available" },
-    { month: "October 2024", date: "2024-10-15", status: "Available" },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold text-primary-text">Statements</h2>
-
-      <div className="grid gap-4">
-        {statements.map((statement, index) => (
-          <div
-            key={index}
-            className="bg-card-bg rounded-lg p-4 flex items-center justify-between"
-          >
-            <div>
-              <h3 className="font-medium text-primary-text">
-                {statement.month}
-              </h3>
-              <p className="text-sm text-secondary-text">
-                Generated on {statement.date}
-              </p>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Badge label={statement.status} variant="success" />
-              <Button variant="secondary" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Download PDF
-              </Button>
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   );

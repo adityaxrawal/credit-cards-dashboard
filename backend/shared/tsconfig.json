@@ -10,11 +10,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "moduleResolution": "Node10",
+    "moduleResolution": "NodeNext",
     "types": ["node"],
     "sourceMap": true,
-    "declaration": true,
-    "ignoreDeprecations": "5.0"
+    "declaration": true
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist"]
