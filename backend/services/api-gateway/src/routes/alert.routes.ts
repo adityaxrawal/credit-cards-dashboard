@@ -436,7 +436,8 @@ router.post("/notifications/test", async (req: AuthRequest, res: Response) => {
 
 /**
  * POST /alerts/generate-budget-alerts
- * Manually trigger budget alert generation (typically called by cron job)
+ * Manually trigger budget alert generation (called from frontend, not cron)
+ * Zero-cost architecture: No background cron jobs
  */
 router.post(
   "/generate-budget-alerts",
@@ -828,7 +829,8 @@ router.post("/digest/generate", async (req: AuthRequest, res: Response) => {
 
 /**
  * POST /alerts/batch-send
- * Batch send pending notifications (for scheduled jobs)
+ * Batch send pending notifications (called manually, not scheduled)
+ * Zero-cost architecture: No background scheduled jobs
  */
 router.post("/batch-send", async (req: AuthRequest, res: Response) => {
   try {

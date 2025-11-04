@@ -15,7 +15,7 @@ import budgetRoutes from "./routes/budget.routes";
 import alertRoutes from "./routes/alert.routes";
 import analyticsRoutes from "./routes/analytics-enhanced.routes";
 import gmailRoutes from "./routes/gmail.routes";
-import jobsRoutes from "./routes/jobs.routes";
+// jobsRoutes removed - zero-cost architecture has no background jobs
 import billReminderRoutes from "./routes/bill-reminder.routes";
 import aiInsightsRoutes from "./routes/ai-insights.routes";
 import subscriptionRoutes from "./routes/subscriptions.routes";
@@ -56,7 +56,7 @@ app.use("/budget", budgetRoutes);
 app.use("/alerts", alertRoutes);
 app.use("/analytics", analyticsRoutes);
 app.use("/gmail", gmailRoutes);
-app.use("/jobs", jobsRoutes);
+// app.use("/jobs", jobsRoutes); // Removed - no background jobs in zero-cost architecture
 app.use("/bills", billReminderRoutes);
 app.use("/ai-insights", aiInsightsRoutes);
 app.use("/subscriptions", subscriptionRoutes);
