@@ -35,7 +35,10 @@ router.post(
         .eq("billing_cycle_year", currentYear);
 
       if (txError) {
-        logger.error("Failed to fetch transactions", { error: txError, userId });
+        logger.error("Failed to fetch transactions", {
+          error: txError,
+          userId,
+        });
         return res.status(500).json({
           success: false,
           error: "Failed to calculate spending",
@@ -82,10 +85,10 @@ router.post(
         );
 
       if (upsertError) {
-        logger.error(
-          "Failed to update budget tracking",
-          { error: upsertError, userId }
-        );
+        logger.error("Failed to update budget tracking", {
+          error: upsertError,
+          userId,
+        });
         return res.status(500).json({
           success: false,
           error: "Failed to save budget tracking",
@@ -95,10 +98,12 @@ router.post(
       const percentage = (totalSpent / budgetLimit) * 100;
       const remaining = budgetLimit - totalSpent;
 
-      logger.info(
-        "Budget tracking updated",
-        { userId, totalSpent, budgetLimit, percentage }
-      );
+      logger.info("Budget tracking updated", {
+        userId,
+        totalSpent,
+        budgetLimit,
+        percentage,
+      });
 
       return res.json({
         success: true,
@@ -244,7 +249,10 @@ router.post(
         }
       }
 
-      logger.info("Budget alerts checked", { userId, alertCount: alerts.length });
+      logger.info("Budget alerts checked", {
+        userId,
+        alertCount: alerts.length,
+      });
 
       return res.json({ success: true, alerts });
     } catch (error) {
@@ -325,10 +333,10 @@ router.post(
         }
       }
 
-      logger.info(
-        "Bill reminders checked",
-        { userId, reminderCount: reminders.length }
-      );
+      logger.info("Bill reminders checked", {
+        userId,
+        reminderCount: reminders.length,
+      });
 
       return res.json({ success: true, reminders });
     } catch (error) {
@@ -374,10 +382,7 @@ router.post(
         }
       }
 
-      logger.info(
-        "Analytics cache refreshed",
-        { userId, deletedCount }
-      );
+      logger.info("Analytics cache refreshed", { userId, deletedCount });
 
       return res.json({
         success: true,
