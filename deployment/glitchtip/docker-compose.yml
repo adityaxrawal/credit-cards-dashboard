@@ -1,0 +1,122 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: glitchtip-postgres
+    environment:
+      POSTGRES_DB: glitchtip
+      POSTGRES_USER: glitchtip
+      POSTGRES_PASSWORD: glitchtip_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U glitchtip"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: glitchtip-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # GlitchTip Web Server
+  web:
+    image: glitchtip/glitchtip:latest
+    container_name: glitchtip-web
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      # Database Configuration
+      DATABASE_URL: postgres://glitchtip:glitchtip_password@postgres:5432/glitchtip
+      
+      # Redis Configuration
+      REDIS_URL: redis://redis:6379/0
+      
+      # Security
+      SECRET_KEY: change-this-to-a-random-secret-key-in-production
+      
+      # GlitchTip Configuration
+      GLITCHTIP_DOMAIN: http://localhost:8080
+      DEFAULT_FROM_EMAIL: noreply@localhost
+      EMAIL_BACKEND: console
+      
+      # Worker Configuration
+      CELERY_WORKER_AUTOSCALE: "1,3"
+      CELERY_WORKER_MAX_TASKS_PER_CHILD: "10000"
+      
+      # Performance
+      WEB_CONCURRENCY: 2
+      
+      # Enable registration (for testing)
+      ENABLE_OPEN_USER_REGISTRATION: "True"
+      
+      # Environment
+      ENVIRONMENT: development
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/_health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # GlitchTip Worker (for background tasks)
+  worker:
+    image: glitchtip/glitchtip:latest
+    container_name: glitchtip-worker
+    command: ./bin/run-celery-with-beat.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Same environment as web service
+      DATABASE_URL: postgres://glitchtip:glitchtip_password@postgres:5432/glitchtip
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: change-this-to-a-random-secret-key-in-production
+      GLITCHTIP_DOMAIN: http://localhost:8080
+      DEFAULT_FROM_EMAIL: noreply@localhost
+      EMAIL_BACKEND: console
+      CELERY_WORKER_AUTOSCALE: "1,3"
+      CELERY_WORKER_MAX_TASKS_PER_CHILD: "10000"
+      ENVIRONMENT: development
+    restart: unless-stopped
+
+  # GlitchTip Migrations (runs once on startup)
+  migrate:
+    image: glitchtip/glitchtip:latest
+    container_name: glitchtip-migrate
+    command: ./manage.py migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://glitchtip:glitchtip_password@postgres:5432/glitchtip
+      SECRET_KEY: change-this-to-a-random-secret-key-in-production
+    restart: "no"
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: glitchtip-network
