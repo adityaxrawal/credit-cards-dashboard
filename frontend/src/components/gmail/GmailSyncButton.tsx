@@ -26,7 +26,10 @@ interface GmailSyncButtonProps {
  * GmailSyncButton Component
  * Triggers manual Gmail sync and orchestrates downstream services
  */
-export function GmailSyncButton({ onSyncComplete, className }: GmailSyncButtonProps) {
+export function GmailSyncButton({
+  onSyncComplete,
+  className,
+}: GmailSyncButtonProps) {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const { user } = useAuth();
@@ -62,11 +65,13 @@ export function GmailSyncButton({ onSyncComplete, className }: GmailSyncButtonPr
 
       if (response.ok && data.success) {
         setLastSync(new Date());
-        
+
         const newCount = data.summary?.newTransactions || 0;
         showToast(
           "success",
-          `Sync complete! ${newCount} new transaction${newCount !== 1 ? 's' : ''}`,
+          `Sync complete! ${newCount} new transaction${
+            newCount !== 1 ? "s" : ""
+          }`,
           `Scanned ${data.summary?.emailsScanned} emails in ${data.summary?.processingTime}`
         );
 
@@ -78,7 +83,7 @@ export function GmailSyncButton({ onSyncComplete, className }: GmailSyncButtonPr
         // Step 3: Refresh UI
         window.dispatchEvent(new CustomEvent("transactions-updated"));
         window.dispatchEvent(new CustomEvent("refresh-dashboard"));
-        
+
         // Call callback if provided
         if (onSyncComplete) {
           onSyncComplete();
@@ -132,8 +137,9 @@ export function GmailSyncButton({ onSyncComplete, className }: GmailSyncButtonPr
     // Handle alerts and reminders
     for (let i = 0; i < results.length; i++) {
       if (results[i].status === "fulfilled") {
-        const response = (results[i] as PromiseFulfilledResult<Response | null>).value;
-        
+        const response = (results[i] as PromiseFulfilledResult<Response | null>)
+          .value;
+
         if (!response) continue;
 
         try {
@@ -141,9 +147,16 @@ export function GmailSyncButton({ onSyncComplete, className }: GmailSyncButtonPr
 
           // Show alerts (service index 1)
           if (i === 1 && data.alerts?.length > 0) {
-            data.alerts.forEach((alert: { message?: string; title?: string }) => {
-              showToast("warning", alert.message || alert.title || "Alert", undefined, 5000);
-            });
+            data.alerts.forEach(
+              (alert: { message?: string; title?: string }) => {
+                showToast(
+                  "warning",
+                  alert.message || alert.title || "Alert",
+                  undefined,
+                  5000
+                );
+              }
+            );
           }
 
           // Show reminders (service index 2)
@@ -151,7 +164,9 @@ export function GmailSyncButton({ onSyncComplete, className }: GmailSyncButtonPr
             const reminderCount = data.reminders.length;
             showToast(
               "info",
-              `${reminderCount} upcoming bill reminder${reminderCount !== 1 ? 's' : ''}`,
+              `${reminderCount} upcoming bill reminder${
+                reminderCount !== 1 ? "s" : ""
+              }`,
               data.reminders[0]?.message
             );
           }
@@ -181,7 +196,9 @@ export function GmailSyncButton({ onSyncComplete, className }: GmailSyncButtonPr
       info: "ℹ",
     }[type];
 
-    console.log(`[${icon}] ${message}${description ? ` - ${description}` : ""}`);
+    console.log(
+      `[${icon}] ${message}${description ? ` - ${description}` : ""}`
+    );
 
     // Dispatch custom event for toast (can be picked up by a toast provider)
     window.dispatchEvent(

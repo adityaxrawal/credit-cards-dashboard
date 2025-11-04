@@ -29,18 +29,24 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDashboardData();
     checkAndAutoSync();
-    
+
     // Listen for sync completion events
     const handleTransactionsUpdated = () => {
       loadDashboardData();
     };
-    
+
     window.addEventListener("transactions-updated", handleTransactionsUpdated);
     window.addEventListener("refresh-dashboard", handleTransactionsUpdated);
-    
+
     return () => {
-      window.removeEventListener("transactions-updated", handleTransactionsUpdated);
-      window.removeEventListener("refresh-dashboard", handleTransactionsUpdated);
+      window.removeEventListener(
+        "transactions-updated",
+        handleTransactionsUpdated
+      );
+      window.removeEventListener(
+        "refresh-dashboard",
+        handleTransactionsUpdated
+      );
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -89,7 +95,7 @@ export default function DashboardPage() {
       }
 
       const data = await response.json();
-      
+
       if (!data.success || !data.gmailConnected) {
         return;
       }
@@ -99,8 +105,10 @@ export default function DashboardPage() {
 
       // Trigger auto-sync if more than 30 minutes or first sync
       if (!lastSync || lastSync < thirtyMinutesAgo) {
-        console.log("Auto-syncing Gmail (>30 min since last sync or first sync)");
-        
+        console.log(
+          "Auto-syncing Gmail (>30 min since last sync or first sync)"
+        );
+
         // Silent background sync
         fetch(`${process.env.NEXT_PUBLIC_API_URL}/gmail/sync`, {
           method: "POST",
@@ -110,7 +118,9 @@ export default function DashboardPage() {
             if (res.ok) {
               const result = await res.json();
               if (result.summary?.newTransactions > 0) {
-                console.log(`Auto-sync completed: ${result.summary.newTransactions} new transactions`);
+                console.log(
+                  `Auto-sync completed: ${result.summary.newTransactions} new transactions`
+                );
                 // Refresh dashboard data
                 window.dispatchEvent(new CustomEvent("transactions-updated"));
               }
@@ -167,7 +177,7 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
-            
+
             {/* Gmail Sync Button */}
             <div className="mt-4 pt-4 border-t border-gray-200">
               <GmailSyncButton onSyncComplete={loadDashboardData} />
