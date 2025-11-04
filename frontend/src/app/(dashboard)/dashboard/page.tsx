@@ -9,6 +9,7 @@ import {
   type UpcomingBill,
 } from "@/lib/api/analytics";
 import { transactionApi, type Transaction } from "@/lib/api/transactions";
+import { GmailSyncButton } from "@/components/gmail/GmailSyncButton";
 import Link from "next/link";
 
 /**
@@ -23,9 +24,25 @@ export default function DashboardPage() {
   );
   const [upcomingBills, setUpcomingBills] = useState<UpcomingBill[]>([]);
   const [loading, setLoading] = useState(true);
+  const [autoSyncChecked, setAutoSyncChecked] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
+    checkAndAutoSync();
+    
+    // Listen for sync completion events
+    const handleTransactionsUpdated = () => {
+      loadDashboardData();
+    };
+    
+    window.addEventListener("transactions-updated", handleTransactionsUpdated);
+    window.addEventListener("refresh-dashboard", handleTransactionsUpdated);
+    
+    return () => {
+      window.removeEventListener("transactions-updated", handleTransactionsUpdated);
+      window.removeEventListener("refresh-dashboard", handleTransactionsUpdated);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadDashboardData = async () => {
@@ -43,6 +60,66 @@ export default function DashboardPage() {
       console.error("Failed to load dashboard data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Check if auto-sync is needed (>30 minutes since last sync)
+   * Triggers silent background sync if needed
+   */
+  const checkAndAutoSync = async () => {
+    if (autoSyncChecked || !user) return;
+
+    try {
+      setAutoSyncChecked(true);
+      const accessToken = localStorage.getItem("accessToken");
+      if (!accessToken) return;
+
+      // Fetch last sync time
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/gmail/last-sync/${user.id}`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
+
+      if (!response.ok) {
+        console.error("Failed to fetch last sync time");
+        return;
+      }
+
+      const data = await response.json();
+      
+      if (!data.success || !data.gmailConnected) {
+        return;
+      }
+
+      const lastSync = data.lastSync ? new Date(data.lastSync) : null;
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+
+      // Trigger auto-sync if more than 30 minutes or first sync
+      if (!lastSync || lastSync < thirtyMinutesAgo) {
+        console.log("Auto-syncing Gmail (>30 min since last sync or first sync)");
+        
+        // Silent background sync
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/gmail/sync`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+          .then(async (res) => {
+            if (res.ok) {
+              const result = await res.json();
+              if (result.summary?.newTransactions > 0) {
+                console.log(`Auto-sync completed: ${result.summary.newTransactions} new transactions`);
+                // Refresh dashboard data
+                window.dispatchEvent(new CustomEvent("transactions-updated"));
+              }
+            }
+          })
+          .catch((err) => console.error("Auto-sync failed:", err));
+      }
+    } catch (error) {
+      console.error("Auto-sync check failed:", error);
     }
   };
 
@@ -89,6 +166,11 @@ export default function DashboardPage() {
                   Logout
                 </button>
               </div>
+            </div>
+            
+            {/* Gmail Sync Button */}
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <GmailSyncButton onSyncComplete={loadDashboardData} />
             </div>
           </div>
         </header>

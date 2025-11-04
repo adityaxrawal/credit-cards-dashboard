@@ -2,6 +2,7 @@ import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { gmailClient } from "./gmail-client";
+import syncRoutes from "./routes/sync.routes";
 // watch-manager removed - zero-cost architecture uses manual sync only
 
 dotenv.config();
@@ -17,6 +18,9 @@ app.use(express.json());
 app.get("/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", service: "gmail-service", timestamp: new Date().toISOString() });
 });
+
+// Mount sync routes
+app.use("/gmail", syncRoutes);
 
 /**
  * GET /auth-url
