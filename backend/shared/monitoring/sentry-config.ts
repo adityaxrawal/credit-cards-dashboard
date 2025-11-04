@@ -1,41 +1,53 @@
 /**
- * Sentry Configuration for Error Tracking and Performance Monitoring
+ * Error Tracking Configuration - GlitchTip (Sentry SDK Compatible)
  * Phase 6: Post-Launch & Optimization
+ *
+ * Note: GlitchTip is 100% compatible with Sentry SDK
+ * Simply use GlitchTip DSN instead of Sentry.io DSN
  */
 
 import * as Sentry from "@sentry/node";
 import { ProfilingIntegration } from "@sentry/profiling-node";
 
-export interface SentryConfig {
+export interface ErrorTrackingConfig {
   dsn: string;
   environment: string;
   tracesSampleRate: number;
   profilesSampleRate: number;
   enabled: boolean;
+  serviceName?: string;
 }
 
-export const sentryConfig: SentryConfig = {
-  dsn: process.env.SENTRY_DSN || "",
+// Support both GLITCHTIP_DSN (new) and SENTRY_DSN (legacy fallback)
+export const errorTrackingConfig: ErrorTrackingConfig = {
+  dsn: process.env.GLITCHTIP_DSN || process.env.SENTRY_DSN || "",
   environment: process.env.NODE_ENV || "development",
   tracesSampleRate: process.env.NODE_ENV === "production" ? 0.2 : 1.0,
   profilesSampleRate: process.env.NODE_ENV === "production" ? 0.1 : 1.0,
-  enabled: process.env.SENTRY_ENABLED === "true",
+  enabled:
+    process.env.GLITCHTIP_ENABLED === "true" ||
+    process.env.SENTRY_ENABLED === "true",
 };
 
-export function initializeSentry(serviceName: string): void {
-  if (!sentryConfig.enabled || !sentryConfig.dsn) {
-    console.log("Sentry is disabled or DSN not configured");
+export function initializeErrorTracking(serviceName: string): void {
+  if (!errorTrackingConfig.enabled || !errorTrackingConfig.dsn) {
+    console.log("Error tracking is disabled or DSN not configured");
     return;
   }
 
+  const provider = errorTrackingConfig.dsn.includes("glitchtip")
+    ? "GlitchTip"
+    : "Sentry";
+  console.log(`Initializing ${provider} error tracking for ${serviceName}...`);
+
   Sentry.init({
-    dsn: sentryConfig.dsn,
-    environment: sentryConfig.environment,
+    dsn: errorTrackingConfig.dsn,
+    environment: errorTrackingConfig.environment,
     serverName: serviceName,
 
     // Performance Monitoring
-    tracesSampleRate: sentryConfig.tracesSampleRate,
-    profilesSampleRate: sentryConfig.profilesSampleRate,
+    tracesSampleRate: errorTrackingConfig.tracesSampleRate,
+    profilesSampleRate: errorTrackingConfig.profilesSampleRate,
 
     integrations: [
       new ProfilingIntegration(),
@@ -77,15 +89,18 @@ export function initializeSentry(serviceName: string): void {
   });
 
   console.log(
-    `✅ Sentry initialized for ${serviceName} in ${sentryConfig.environment} mode`
+    `${provider} initialized for ${serviceName} in ${errorTrackingConfig.environment} environment`
   );
 }
+
+// Legacy function name for backwards compatibility
+export const initializeSentry = initializeErrorTracking;
 
 export function captureError(
   error: Error,
   context?: Record<string, any>
 ): void {
-  if (!sentryConfig.enabled) {
+  if (!errorTrackingConfig.enabled) {
     console.error("Error:", error, context);
     return;
   }
@@ -105,7 +120,7 @@ export function captureMessage(
   level: Sentry.SeverityLevel = "info",
   context?: Record<string, any>
 ): void {
-  if (!sentryConfig.enabled) {
+  if (!errorTrackingConfig.enabled) {
     console.log(message, context);
     return;
   }

@@ -45,32 +45,40 @@ services:
     environment:
       # Database Configuration
       DATABASE_URL: postgres://glitchtip:glitchtip_password@postgres:5432/glitchtip
-      
+
       # Redis Configuration
       REDIS_URL: redis://redis:6379/0
-      
+
       # Security
       SECRET_KEY: change-this-to-a-random-secret-key-in-production
-      
+
       # GlitchTip Configuration
       GLITCHTIP_DOMAIN: http://localhost:8080
       DEFAULT_FROM_EMAIL: noreply@localhost
       EMAIL_BACKEND: console
-      
+
       # Worker Configuration
       CELERY_WORKER_AUTOSCALE: "1,3"
       CELERY_WORKER_MAX_TASKS_PER_CHILD: "10000"
-      
+
       # Performance
       WEB_CONCURRENCY: 2
-      
+
       # Enable registration (for testing)
       ENABLE_OPEN_USER_REGISTRATION: "True"
-      
+
       # Environment
       ENVIRONMENT: development
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/_health/"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/_health/",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

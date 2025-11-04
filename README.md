@@ -43,7 +43,7 @@ A comprehensive personal credit card management dashboard for tracking 10+ credi
 ### Phase 6 - Post-Launch & Optimization (NEW) ✅
 
 - **Real-time Monitoring**: Production-grade observability
-  - Sentry integration for error tracking
+  - Self-hosted GlitchTip error tracking ($15-25/month vs $312+/year for Sentry)
   - Centralized logging with Winston
   - Real-time metrics collection
   - Performance profiling and tracing
