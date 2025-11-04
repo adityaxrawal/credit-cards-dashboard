@@ -35,9 +35,6 @@ export function requestTrackingMiddleware(
     userAgent: req.headers["user-agent"],
   });
 
-  // Capture original end function
-  const originalEnd = res.end;
-
   // Override res.end to capture response time
   const originalEnd = res.end.bind(res);
   res.end = function (

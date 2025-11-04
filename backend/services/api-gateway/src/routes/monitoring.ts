@@ -6,7 +6,7 @@
 import { Router } from "express";
 import { healthCheck } from "../../../../shared/monitoring/health-check";
 import { metricsCollector } from "../../../../shared/monitoring/metrics-collector";
-import { requireAuth } from "../middleware/auth.middleware";
+import { authenticate } from "../middleware/auth";
 
 const router = Router();
 
@@ -39,7 +39,7 @@ router.get("/health", async (req, res) => {
  * GET /api/monitoring/metrics
  * Protected metrics summary endpoint (admin only)
  */
-router.get("/metrics", requireAuth, async (req, res) => {
+router.get("/metrics", authenticate, async (req, res) => {
   try {
     // TODO: Add admin role check
     const summary = await metricsCollector.getMetricsSummary();
