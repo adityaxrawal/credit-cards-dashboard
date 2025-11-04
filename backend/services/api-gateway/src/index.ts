@@ -21,9 +21,8 @@ import aiInsightsRoutes from "./routes/ai-insights.routes";
 import subscriptionRoutes from "./routes/subscriptions.routes";
 import reportsRoutes from "./routes/reports.routes";
 import rewardsRoutes from "./routes/rewards.routes";
-import statementUploadRoutes from "./routes/statement-upload.routes";
 import recurringTransactionsRoutes from "./routes/recurring-transactions.routes";
-import { BackgroundJobService } from "./services/background-jobs.service";
+// BackgroundJobService removed - zero-cost architecture uses frontend-triggered services
 
 dotenv.config();
 
@@ -62,7 +61,6 @@ app.use("/ai-insights", aiInsightsRoutes);
 app.use("/subscriptions", subscriptionRoutes);
 app.use("/reports", reportsRoutes);
 app.use("/rewards", rewardsRoutes);
-app.use("/api/statements", statementUploadRoutes);
 app.use("/recurring-transactions", recurringTransactionsRoutes);
 
 // 404 handler
@@ -77,15 +75,7 @@ app.use(errorHandler);
 if (process.env.NODE_ENV !== "test") {
   app.listen(PORT, () => {
     logger.info(`API Gateway running on port ${PORT}`);
-
-    // Start background jobs in production
-    if (
-      process.env.NODE_ENV === "production" ||
-      process.env.ENABLE_BACKGROUND_JOBS === "true"
-    ) {
-      BackgroundJobService.startAllJobs();
-      logger.info("Background jobs started");
-    }
+    logger.info("Zero-cost architecture: Services triggered from frontend");
   });
 }
 

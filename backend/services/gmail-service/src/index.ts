@@ -2,7 +2,7 @@ import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { gmailClient } from "./gmail-client";
-import { gmailWatchManager } from "./watch-manager";
+// watch-manager removed - zero-cost architecture uses manual sync only
 
 dotenv.config();
 
@@ -49,19 +49,17 @@ app.post("/connect", async (req: Request, res: Response) => {
     await gmailClient.storeUserTokens(userId, tokens);
 
     // Initialize Gmail
-    const gmail = await gmailClient.initializeForUser(userId);
+    await gmailClient.initializeForUser(userId);
     const email = await gmailClient.getUserProfile(userId);
 
-    // Setup watch
-    const watch = await gmailWatchManager.setupWatch(userId, gmail);
+    // Zero-cost architecture: No watches, manual sync only
 
     res.json({
       success: true,
       data: {
         connected: true,
         email,
-        watchExpiration: watch.expiration,
-        historyId: watch.historyId,
+        syncType: "manual",
       },
     });
   } catch (error) {
@@ -87,8 +85,7 @@ app.post("/disconnect", async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: "Gmail not connected" });
     }
 
-    const gmail = await gmailClient.initializeForUser(userId);
-    await gmailWatchManager.stopWatch(userId, gmail);
+    // Zero-cost architecture: No watches to stop, just disconnect tokens
     await gmailClient.disconnect(userId);
 
     res.json({ success: true, data: { message: "Gmail disconnected successfully" } });
@@ -111,22 +108,18 @@ app.get("/status/:userId", async (req: Request, res: Response) => {
     if (!isConnected) {
       return res.json({
         success: true,
-        data: { connected: false, email: null, watchActive: false },
+        data: { connected: false, email: null, syncType: "none" },
       });
     }
 
     const email = await gmailClient.getUserProfile(userId);
-    const watchStatus = await gmailWatchManager.getWatchStatus(userId);
 
     res.json({
       success: true,
       data: {
         connected: true,
         email,
-        watchActive: watchStatus.active,
-        watchExpiration: watchStatus.expiration,
-        historyId: watchStatus.historyId,
-        needsRenewal: watchStatus.needsRenewal,
+        syncType: "manual",
       },
     });
   } catch (error) {
@@ -137,38 +130,9 @@ app.get("/status/:userId", async (req: Request, res: Response) => {
 
 /**
  * POST /renew-watch
- * Renew Gmail watch
+ * DEPRECATED: Zero-cost architecture uses manual sync only
  */
-app.post("/renew-watch", async (req: Request, res: Response) => {
-  try {
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ success: false, error: "userId required" });
-    }
-
-    const isConnected = await gmailClient.isConnected(userId);
-    if (!isConnected) {
-      return res.status(400).json({ success: false, error: "Gmail not connected" });
-    }
-
-    const renewed = await gmailWatchManager.renewIfNeeded(userId);
-    const watchStatus = await gmailWatchManager.getWatchStatus(userId);
-
-    res.json({
-      success: true,
-      data: {
-        renewed,
-        watchActive: watchStatus.active,
-        watchExpiration: watchStatus.expiration,
-        message: renewed ? "Watch renewed" : "Renewal not needed yet",
-      },
-    });
-  } catch (error) {
-    console.error("Error renewing watch:", error);
-    res.status(500).json({ success: false, error: error instanceof Error ? error.message : "Unknown error" });
-  }
-});
+// Endpoint removed - no watches in zero-cost architecture
 
 /**
  * GET /messages/:userId
@@ -236,24 +200,9 @@ app.get("/messages/:userId/:messageId", async (req: Request, res: Response) => {
 
 /**
  * POST /process-notification
- * Process Pub/Sub notification
+ * DEPRECATED: Zero-cost architecture uses manual sync only
  */
-app.post("/process-notification", async (req: Request, res: Response) => {
-  try {
-    const { emailAddress, historyId } = req.body;
-
-    if (!emailAddress || !historyId) {
-      return res.status(400).json({ success: false, error: "emailAddress and historyId required" });
-    }
-
-    const result = await gmailWatchManager.processNotification({ emailAddress, historyId });
-
-    res.json({ success: true, data: result });
-  } catch (error) {
-    console.error("Error processing notification:", error);
-    res.status(500).json({ success: false, error: error instanceof Error ? error.message : "Unknown error" });
-  }
-});
+// Endpoint removed - no Pub/Sub notifications in zero-cost architecture
 
 /**
  * GET /queue/stats
@@ -364,19 +313,9 @@ app.get("/scan-historical/:jobId", async (req: Request, res: Response) => {
 
 // Start server
 if (process.env.NODE_ENV !== "test") {
-  app.listen(PORT, async () => {
+  app.listen(PORT, () => {
     console.log(`Gmail Service running on port ${PORT}`);
-
-    // Start Pub/Sub listener if enabled
-    if (process.env.ENABLE_PUBSUB_LISTENER === "true") {
-      try {
-        const { gmailPubSubListener } = await import("./pubsub-listener");
-        gmailPubSubListener.start();
-        console.log("Pub/Sub listener started");
-      } catch (error) {
-        console.error("Failed to start Pub/Sub listener:", error);
-      }
-    }
+    console.log("Zero-cost architecture: Manual Gmail sync only");
   });
 }
 

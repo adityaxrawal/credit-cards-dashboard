@@ -7,8 +7,7 @@ export interface User {
   name: string;
   profile_picture?: string;
   monthly_budget: number;
-  gmail_watch_expiration?: Date;
-  gmail_history_id?: string;
+  last_gmail_sync?: Date; // Zero-cost architecture: manual sync tracking
   is_active: boolean;
   preferences?: Record<string, any>;
   created_at: Date;
