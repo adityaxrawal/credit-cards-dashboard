@@ -8,6 +8,7 @@ import React, { useEffect, useRef, useCallback, useState } from "react";
 /**
  * Debounce hook to prevent excessive function calls
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useDebounce<T extends (...args: any[]) => any>(
   callback: T,
   delay: number
@@ -39,6 +40,7 @@ export function useDebounce<T extends (...args: any[]) => any>(
 /**
  * Throttle hook to limit function call frequency
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useThrottle<T extends (...args: any[]) => any>(
   callback: T,
   limit: number
@@ -201,9 +203,9 @@ export function preloadImages(urls: string[]): Promise<void[]> {
 /**
  * Code splitting helper
  */
-export function lazyWithPreload<T extends React.ComponentType<Record<string, unknown>>>(
-  factory: () => Promise<{ default: T }>
-) {
+export function lazyWithPreload<
+  T extends React.ComponentType<Record<string, unknown>>
+>(factory: () => Promise<{ default: T }>) {
   const Component = React.lazy(factory);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (Component as any).preload = factory;

@@ -38,19 +38,24 @@ export function requestTrackingMiddleware(
   // Capture original end function
   const originalEnd = res.end;
 
-  // Override end function to capture metrics
-  res.end = function (this: Response, ...args: any[]): Response {
+  // Override res.end to capture response time
+  const originalEnd = res.end.bind(res);
+  res.end = function (
+    chunk?: any,
+    encoding?: BufferEncoding | (() => void),
+    cb?: () => void
+  ): Response {
     const duration = Date.now() - startTime;
     const statusCode = res.statusCode;
 
     // Record metrics
     metricsCollector.recordUsage({
-      userId: (req as any).user?.userId,
       endpoint: req.path,
       method: req.method,
       statusCode,
       responseTime: duration,
       timestamp: Date.now(),
+      userId: (req as any).user?.userId,
     });
 
     // Log request completion
@@ -58,9 +63,15 @@ export function requestTrackingMiddleware(
       userId: (req as any).user?.userId,
     });
 
-    // Call original end
-    return originalEnd.apply(this, args);
-  };
+    // Call original end with proper typing
+    if (typeof encoding === "function") {
+      return originalEnd(chunk, encoding);
+    }
+    if (encoding !== undefined) {
+      return originalEnd(chunk, encoding, cb);
+    }
+    return originalEnd(chunk);
+  } as typeof res.end;
 
   next();
 }
@@ -124,22 +135,29 @@ export function performanceMiddleware(
   res: Response,
   next: NextFunction
 ): void {
-  const transaction = Sentry.startTransaction({
-    op: "http.server",
-    name: `${req.method} ${req.path}`,
-  });
-
-  // Add transaction to request
-  (req as any).sentryTransaction = transaction;
+  const startTime = Date.now();
 
   // Capture original end
-  const originalEnd = res.end;
+  const originalEnd2 = res.end.bind(res);
 
-  res.end = function (this: Response, ...args: any[]): Response {
-    transaction.setHttpStatus(res.statusCode);
-    transaction.finish();
-    return originalEnd.apply(this, args);
-  };
+  res.end = function (chunk?: any, encoding?: BufferEncoding | (() => void), cb?: () => void): Response {
+    const duration = Date.now() - startTime;
+    
+    // Log performance
+    logger.info(`Request completed: ${req.method} ${req.path}`, {
+      statusCode: res.statusCode,
+      duration,
+    });
+
+    // Call original end with proper typing
+    if (typeof encoding === 'function') {
+      return originalEnd2(chunk, encoding);
+    }
+    if (encoding !== undefined) {
+      return originalEnd2(chunk, encoding, cb);
+    }
+    return originalEnd2(chunk);
+  } as typeof res.end;
 
   next();
 }

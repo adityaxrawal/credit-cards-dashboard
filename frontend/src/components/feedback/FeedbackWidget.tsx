@@ -8,12 +8,20 @@
 import React, { useState } from "react";
 import { X, MessageCircle, Send } from "lucide-react";
 
+interface BrowserInfo {
+  userAgent: string;
+  screenSize?: string;
+  viewport?: string;
+  language?: string;
+  platform?: string;
+}
+
 interface FeedbackData {
   feedbackType: "bug" | "feature" | "improvement" | "general" | "complaint";
   title: string;
   description: string;
   pageUrl: string;
-  browserInfo: any;
+  browserInfo: BrowserInfo;
 }
 
 export default function FeedbackWidget() {
@@ -136,7 +144,7 @@ export default function FeedbackWidget() {
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    feedbackType: e.target.value as any,
+                    feedbackType: e.target.value as FeedbackData["feedbackType"],
                   })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"

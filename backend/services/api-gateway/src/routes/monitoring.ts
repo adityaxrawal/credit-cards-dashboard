@@ -39,7 +39,7 @@ router.get("/health", async (req, res) => {
  * GET /api/monitoring/metrics
  * Protected metrics summary endpoint (admin only)
  */
-router.get("/metrics", authenticateToken, async (req, res) => {
+router.get("/metrics", requireAuth, async (req, res) => {
   try {
     // TODO: Add admin role check
     const summary = await metricsCollector.getMetricsSummary();
