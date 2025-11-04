@@ -22,6 +22,7 @@ import subscriptionRoutes from "./routes/subscriptions.routes";
 import reportsRoutes from "./routes/reports.routes";
 import rewardsRoutes from "./routes/rewards.routes";
 import recurringTransactionsRoutes from "./routes/recurring-transactions.routes";
+import servicesRoutes from "./routes/services.routes";
 // BackgroundJobService removed - zero-cost architecture uses frontend-triggered services
 
 dotenv.config();
@@ -62,6 +63,7 @@ app.use("/subscriptions", subscriptionRoutes);
 app.use("/reports", reportsRoutes);
 app.use("/rewards", rewardsRoutes);
 app.use("/recurring-transactions", recurringTransactionsRoutes);
+app.use("/services", servicesRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
