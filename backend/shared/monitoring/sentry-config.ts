@@ -40,7 +40,7 @@ export function initializeSentry(serviceName: string): void {
     integrations: [
       new ProfilingIntegration(),
       new Sentry.Integrations.Http({ tracing: true }),
-      new Sentry.Integrations.Express({ app: undefined as any }),
+      new Sentry.Integrations.Express(),
     ],
 
     // Error filtering
