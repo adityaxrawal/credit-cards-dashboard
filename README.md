@@ -7,10 +7,12 @@ A comprehensive personal credit card management dashboard for tracking 10+ credi
 ### Core Features
 
 - **Multi-Card Management**: Track unlimited credit cards with individual bill dates and due dates
-- **Automated Transaction Extraction**: Gmail integration with Pub/Sub for real-time transaction capture
+- **Manual Gmail Sync**: On-demand Gmail transaction sync with automatic deduplication
+- **Auto-Sync on Dashboard Load**: Automatically syncs if >30 minutes since last sync
 - **Budget Tracking**: Set monthly spending limits with intelligent alerts
 - **Analytics & Insights**: Comprehensive spending analytics, trends, and KPIs
 - **Bill Reminders**: Automated reminders for upcoming bills and due dates
+- **Frontend-Triggered Services**: Budget updates, alerts, reminders, and analytics refresh after sync
 
 ### Phase 4 - Enhanced Features
 
@@ -100,10 +102,13 @@ A comprehensive personal credit card management dashboard for tracking 10+ credi
 
 **Infrastructure**:
 
-- Frontend: Vercel (Free Tier)
-- Backend: Google Cloud Run (Free Tier)
-- Email: Gmail API + Pub/Sub
-- CI/CD: GitHub Actions
+- Frontend: Vercel (Free Tier) - 100GB bandwidth
+- Backend: Render (Free Tier) - 750 hours/month
+- Database: Supabase (Free Tier) - 500MB storage
+- Cache: Upstash Redis (Free Tier) - 10K commands/day
+- Email: Gmail API (Free) - 1B quota/day
+- Monitoring: Sentry (Free Tier) - 5K errors/month
+- **Total Cost: $0.00/month** ✨
 
 ## 📁 Project Structure
 
@@ -131,10 +136,11 @@ credit-card-dashboard/
 - Node.js 20+
 - npm or yarn
 - Git
-- Google Cloud account (free tier)
-- Supabase account (free tier)
-- Upstash account (free tier)
-- Vercel account (free tier)
+- Google Cloud account (for OAuth)
+- Supabase account (free tier) - Database
+- Upstash account (free tier) - Redis cache
+- Vercel account (free tier) - Frontend hosting
+- Render account (free tier) - Backend hosting
 
 ### Initial Setup
 
@@ -204,13 +210,109 @@ credit-card-dashboard/
    - Backend API: http://localhost:3001
    - API Health Check: http://localhost:3001/health
 
+### Manual Gmail Sync (Zero-Cost Architecture)
+
+The application uses **manual Gmail sync** to stay within free tier limits:
+
+#### How to Sync Transactions
+
+1. **Manual Sync Button**: Click "Sync Gmail" button in dashboard header
+   - Fetches emails since last sync (or all if first time)
+   - Extracts credit card transactions automatically
+   - Triggers budget updates, alerts, and reminders
+   - Shows sync summary with processing time
+
+2. **Auto-Sync on Dashboard Load**: 
+   - Automatically syncs if >30 minutes since last sync
+   - Runs silently in background
+   - Shows toast notification on completion
+
+3. **What Happens During Sync**:
+   - **Step 1**: Fetch emails from Gmail (HDFC, ICICI, SBI card alerts)
+   - **Step 2**: Extract transaction details (amount, merchant, date, card)
+   - **Step 3**: Deduplicate using email message ID
+   - **Step 4**: Update budget tracking for current month
+   - **Step 5**: Check and generate spending alerts (80%, 90%, 100% thresholds)
+   - **Step 6**: Check upcoming bill reminders (within 7 days)
+   - **Step 7**: Refresh analytics cache
+
+#### Sync Frequency Recommendations
+
+- **Daily users**: Sync once per day
+- **Heavy spenders**: Sync 2-3 times per day
+- **Occasional users**: Sync weekly or when needed
+- **Dashboard auto-syncs**: Every 30 minutes when dashboard is opened
+
+#### Troubleshooting
+
+- **"Gmail not connected"**: Re-authenticate via Settings → Connect Gmail
+- **Cold start delay (~30s)**: Backend service starting up (Render free tier)
+- **No new transactions found**: Check email filters or sync was recent
+- **Duplicate transactions**: Email message ID prevents duplicates automatically
+
 ## 📖 Documentation
 
 - [Architecture Documentation](./docs/architecture.md) - Complete system architecture and design
-- [Development Phases](./docs/DEVELOPMENT_PHASES.md) - Week-by-week implementation guide
-- [Environment Setup Guide](./docs/ENVIRONMENT_SETUP.md) - ✨ **NEW** - Complete environment configuration guide
-- [API Documentation](./docs/API.md) - API endpoints and specifications (Coming in Phase 1)
-- [Deployment Guide](./docs/DEPLOYMENT.md) - Production deployment instructions (Coming soon)
+- [Updated Architecture](./docs/updated-architecture.md) - Zero-cost architecture specification
+- [Implementation Phases](./docs/IMPLEMENTATION_PHASES.md) - Complete 6-phase implementation guide
+- [API Documentation](./docs/API.md) - ✨ **NEW** - Complete API reference with all endpoints
+- [Deployment Guide](./docs/DEPLOYMENT.md) - ✨ **NEW** - Zero-cost production deployment guide
+
+## 🔑 Environment Variables
+
+### Required Variables
+
+```bash
+# Supabase Database (Free Tier - 500MB)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+DATABASE_URL=postgresql://postgres:password@host:6543/postgres
+
+# Google OAuth & Gmail API (Free - 1B quota/day)
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REDIRECT_URI=https://your-project.supabase.co/auth/v1/callback
+
+# Upstash Redis Cache (Free Tier - 10K commands/day)
+UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your-redis-token
+
+# Application URLs
+NEXT_PUBLIC_URL=https://your-app.vercel.app
+
+# Security
+ENCRYPTION_KEY=generate-random-32-byte-hex-string
+```
+
+### Optional Variables
+
+```bash
+# Sentry Error Tracking (Free Tier - 5K errors/month)
+SENTRY_DSN=your-sentry-dsn
+NEXT_PUBLIC_SENTRY_DSN=your-sentry-dsn
+
+# JWT (if not using Supabase auth)
+JWT_SECRET=your-jwt-secret
+
+# API URLs (if using custom domain)
+NEXT_PUBLIC_API_URL=https://your-api.onrender.com
+```
+
+### Removed Variables (Not in Zero-Cost Architecture)
+
+These variables are **no longer needed** and should be removed:
+
+```bash
+# ❌ GMAIL_PUBSUB_TOPIC - Not using Pub/Sub (requires paid GCP)
+# ❌ ENABLE_PUBSUB_LISTENER - Replaced with manual sync
+# ❌ QSTASH_URL - Not using QStash cron jobs
+# ❌ QSTASH_TOKEN - Not needed
+# ❌ QSTASH_CURRENT_SIGNING_KEY - Not needed
+# ❌ QSTASH_NEXT_SIGNING_KEY - Not needed
+```
+
+See `.env.example` for complete configuration template.
 
 ## 🧪 Testing
 
@@ -340,22 +442,37 @@ Authorization: Bearer <token>
 
 For complete API documentation, see [API Reference](./docs/API.md).
 
-## �🚢 Deployment
+## 🚢 Deployment (Zero-Cost)
 
-### Frontend (Vercel)
+### Quick Deploy
 
-```bash
-cd frontend
-vercel --prod
-```
+1. **Frontend (Vercel - Free Tier)**
+   ```bash
+   git push origin main  # Auto-deploys to Vercel
+   ```
 
-### Backend (Google Cloud Run)
+2. **Backend (Render - Free Tier)**
+   ```bash
+   git push origin main  # Auto-deploys to Render
+   ```
 
-```bash
-cd backend/services/api-gateway
-gcloud builds submit --tag gcr.io/[PROJECT-ID]/api-gateway
-gcloud run deploy api-gateway --image gcr.io/[PROJECT-ID]/api-gateway
-```
+3. **Database (Supabase - Free Tier)**
+   - Already hosted, just run migrations
+   ```bash
+   cd database
+   npm run migrate:up
+   ```
+
+### Deployment Checklist
+
+- [ ] ✅ Push code to GitHub main branch
+- [ ] ✅ Configure environment variables in Vercel dashboard
+- [ ] ✅ Configure environment variables in Render dashboard
+- [ ] ✅ Run database migration on Supabase
+- [ ] ✅ Test production endpoints
+- [ ] ✅ Verify all services stay within free tier limits
+
+**Total Monthly Cost: $0.00** 🎉
 
 For detailed deployment instructions, see [Deployment Guide](./docs/DEPLOYMENT.md).
 
@@ -381,16 +498,18 @@ This is a personal project, but feedback and suggestions are welcome!
 
 ## 📝 Development Phases
 
-- [x] **Phase 0**: Pre-Development Setup (Week 0)
-- [x] **Phase 1**: Foundation & Core Features (Weeks 1-4)
-- [x] **Phase 2**: Email Integration & Automation (Weeks 5-8)
-- [x] **Phase 3**: Advanced Analytics & Intelligence (Weeks 9-12)
-- [x] **Phase 4**: Enhanced Features & Polish (Weeks 13-15) ✨ **COMPLETED**
-  - [x] Week 13: Recurring Transactions & Subscriptions
-  - [x] Week 14: Reports & Export Functionality
-  - [x] Week 15: Rewards System & UI Polish
-- [ ] **Phase 5**: Testing & Launch Preparation (Weeks 16-17)
-- [ ] **Phase 6**: Post-Launch & Optimization (Ongoing)
+- [x] **Phase 1**: Cleanup & Architecture Alignment ✅ **COMPLETED**
+- [x] **Phase 2**: Manual Gmail Sync Implementation ✅ **COMPLETED**
+- [x] **Phase 3**: Frontend-Triggered Services ✅ **COMPLETED**
+- [x] **Phase 4**: UI/UX Enhancements ✅ **COMPLETED**
+- [x] **Phase 5**: Testing & Bug Fixes ✅ **COMPLETED**
+- [ ] **Phase 6**: Documentation & Deployment (In Progress) 🚧
+  - [x] Update documentation (README, API, Deployment)
+  - [ ] Environment variables setup
+  - [ ] Database migration execution
+  - [ ] Production deployment
+  - [ ] Monitoring configuration
+  - [ ] Zero-cost verification
 
 See [DEVELOPMENT_PHASES.md](./docs/DEVELOPMENT_PHASES.md) for detailed phase breakdown.
 
