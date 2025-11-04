@@ -1,10 +1,31 @@
 import { createClient } from "@supabase/supabase-js";
-import { ExtractedTransaction } from "./ocr.service";
+
+/**
+ * @deprecated This service is part of legacy OCR/statement upload feature
+ * Zero-cost architecture uses Gmail-only transaction extraction
+ * This file will be removed in a future phase
+ */
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_KEY!
 );
+
+/**
+ * Extracted transaction from statement (legacy type for reconciliation)
+ */
+export interface ExtractedTransaction {
+  id?: string;
+  date: string;
+  description: string;
+  amount: number;
+  type: "debit" | "credit";
+  merchant?: string;
+  category?: string;
+  card_last_4?: string;
+  reference_number?: string;
+  confidence?: number;
+}
 
 /**
  * Transaction match result
@@ -190,7 +211,9 @@ export class TransactionReconciliationService {
     } catch (error) {
       console.error("Error during reconciliation:", error);
       throw new Error(
-        `Reconciliation failed: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Reconciliation failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
       );
     }
   }
@@ -319,7 +342,9 @@ export class TransactionReconciliationService {
         confidence += 20; // Partial credit for small differences
       }
       discrepancies.push(
-        `Amount difference: $${amountDiff.toFixed(2)} (${percentDiff.toFixed(1)}%)`
+        `Amount difference: $${amountDiff.toFixed(2)} (${percentDiff.toFixed(
+          1
+        )}%)`
       );
     }
 
@@ -469,7 +494,8 @@ export class TransactionReconciliationService {
     const processed = new Set<string>();
 
     for (let i = 0; i < extractedTransactions.length; i++) {
-      if (processed.has(extractedTransactions[i].id)) continue;
+      const txId = extractedTransactions[i].id;
+      if (!txId || processed.has(txId)) continue;
 
       const duplicates = [];
       for (let j = i + 1; j < extractedTransactions.length; j++) {
@@ -480,13 +506,14 @@ export class TransactionReconciliationService {
 
         if (similarity >= 0.95) {
           duplicates.push(extractedTransactions[j]);
-          processed.add(extractedTransactions[j].id);
+          const dupId = extractedTransactions[j].id;
+          if (dupId) processed.add(dupId);
         }
       }
 
       if (duplicates.length > 0) {
         discrepancies.push({
-          id: `duplicate_${extractedTransactions[i].id}`,
+          id: `duplicate_${txId}`,
           type: "duplicate_transaction",
           severity: "medium",
           extractedTransaction: extractedTransactions[i],
@@ -501,7 +528,7 @@ export class TransactionReconciliationService {
           suggestedResolution: `Remove ${duplicates.length} duplicate transaction(s)`,
         });
 
-        processed.add(extractedTransactions[i].id);
+        processed.add(txId);
       }
     }
 
@@ -641,7 +668,7 @@ export class TransactionReconciliationService {
         description: `${autoImportCandidates} transaction(s) ready for automatic import`,
         affectedTransactions: matches
           .filter((m) => m.confidence >= autoImportThreshold * 100)
-          .map((m) => m.extractedTransaction.id),
+          .map((m) => m.extractedTransaction.id || ""),
       });
     }
 
@@ -680,7 +707,7 @@ export class TransactionReconciliationService {
         description: `${possibleMatches} transaction(s) need manual review for matching`,
         affectedTransactions: matches
           .filter((m) => m.matchType === "possible")
-          .map((m) => m.extractedTransaction.id),
+          .map((m) => m.extractedTransaction.id || ""),
       });
     }
 
@@ -746,7 +773,7 @@ export class TransactionReconciliationService {
         }
       } catch (error) {
         errors.push({
-          transactionId: match.extractedTransaction.id,
+          transactionId: match.extractedTransaction.id || "unknown",
           error: error instanceof Error ? error.message : "Unknown error",
         });
       }
