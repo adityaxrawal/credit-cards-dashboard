@@ -114,7 +114,9 @@ export function NotificationBell() {
               Notifications
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {count > 0 ? `${count} upcoming bill reminder${count > 1 ? "s" : ""}` : "No new notifications"}
+              {count > 0
+                ? `${count} upcoming bill reminder${count > 1 ? "s" : ""}`
+                : "No new notifications"}
             </p>
           </div>
 
@@ -150,7 +152,9 @@ export function NotificationBell() {
                         <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 font-medium">
                           {reminder.days_remaining === 0
                             ? "Due today!"
-                            : `${reminder.days_remaining} day${reminder.days_remaining > 1 ? "s" : ""} remaining`}
+                            : `${reminder.days_remaining} day${
+                                reminder.days_remaining > 1 ? "s" : ""
+                              } remaining`}
                         </p>
                       </div>
                     </div>
