@@ -1,1 +1,3 @@
-next.config.optimized.js
+node_modules
+.next
+out
