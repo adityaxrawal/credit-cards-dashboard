@@ -7,6 +7,7 @@ import { Request, Response, NextFunction } from "express";
 import * as Sentry from "@sentry/node";
 import { metricsCollector } from "../../../../shared/monitoring/metrics-collector";
 import { logger } from "../../../../shared/monitoring/logger";
+import { captureError } from "../../../../shared/monitoring";
 
 /**
  * Request tracking middleware
@@ -92,25 +93,26 @@ export function errorTrackingMiddleware(
     userId: (req as any).user?.userId,
   });
 
-  // Send to Sentry with request context
-  Sentry.withScope((scope: any) => {
-    scope.setTag("request_id", requestId);
-    scope.setContext("request", {
-      method: req.method,
-      path: req.path,
-      headers: req.headers,
-      query: req.query,
-      body: req.body,
-    });
-
-    if ((req as any).user) {
-      scope.setUser({
-        id: (req as any).user.userId,
-        email: (req as any).user.email,
-      });
-    }
-
-    Sentry.captureException(err);
+  // Send to error tracking (GlitchTip/Sentry) with request context
+  captureError(err, {
+    tags: {
+      request_id: requestId,
+    },
+    context: {
+      request: {
+        method: req.method,
+        path: req.path,
+        headers: req.headers,
+        query: req.query,
+        body: req.body,
+      },
+    },
+    user: (req as any).user
+      ? {
+          id: (req as any).user.userId,
+          email: (req as any).user.email,
+        }
+      : undefined,
   });
 
   // Send error response
