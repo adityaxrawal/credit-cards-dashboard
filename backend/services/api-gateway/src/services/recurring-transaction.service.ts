@@ -277,7 +277,8 @@ export class RecurringTransactionService {
   }
 
   /**
-   * Process due recurring transactions (called by background job)
+   * Process due recurring transactions (called manually or from frontend)
+   * Zero-cost architecture: No background cron jobs, trigger on-demand
    */
   static async processDueRecurringTransactions(): Promise<{
     processed: number;

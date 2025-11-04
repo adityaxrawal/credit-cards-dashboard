@@ -210,19 +210,9 @@ app.get("/messages/:userId/:messageId", async (req: Request, res: Response) => {
 
 /**
  * GET /queue/stats
- * Get email processing queue statistics
+ * DEPRECATED: Zero-cost architecture - no background queues
  */
-app.get("/queue/stats", async (req: Request, res: Response) => {
-  try {
-    const { emailQueue } = await import("./email-queue");
-    const stats = await emailQueue.getStats();
-
-    res.json({ success: true, data: stats });
-  } catch (error) {
-    console.error("Error getting queue stats:", error);
-    res.status(500).json({ success: false, error: error instanceof Error ? error.message : "Unknown error" });
-  }
-});
+// Endpoint removed - no Bull queue in zero-cost architecture
 
 /**
  * GET /templates
