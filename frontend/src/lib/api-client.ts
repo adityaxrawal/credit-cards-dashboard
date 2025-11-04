@@ -14,7 +14,9 @@ export async function apiRequest(
 
   try {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}${endpoint}`,
+      `${
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+      }${endpoint}`,
       {
         ...options,
         signal: controller.signal,
