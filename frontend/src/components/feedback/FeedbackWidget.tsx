@@ -144,7 +144,8 @@ export default function FeedbackWidget() {
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    feedbackType: e.target.value as FeedbackData["feedbackType"],
+                    feedbackType: e.target
+                      .value as FeedbackData["feedbackType"],
                   })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"

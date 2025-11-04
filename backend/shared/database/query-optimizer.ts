@@ -153,11 +153,12 @@ export async function paginateQuery<T>(
 
   const hasMore = (data?.length || 0) > pageSize;
   const results = hasMore ? data!.slice(0, pageSize) : data || [];
-  const lastResult = results.length > 0 ? results[results.length - 1] as unknown as Record<string, unknown> : null;
-  const nextCursor =
-    hasMore && lastResult
-      ? String(lastResult[orderBy.column])
+  const lastResult =
+    results.length > 0
+      ? (results[results.length - 1] as unknown as Record<string, unknown>)
       : null;
+  const nextCursor =
+    hasMore && lastResult ? String(lastResult[orderBy.column]) : null;
 
   return {
     data: results as T[],
