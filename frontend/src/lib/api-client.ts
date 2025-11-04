@@ -1,6 +1,41 @@
 import axios, { AxiosInstance, AxiosResponse } from "axios";
 import { ApiResponse } from "@/types";
 
+/**
+ * Enhanced API request with cold start handling
+ * Supports 45s timeout for Render cold starts
+ */
+export async function apiRequest(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000); // 45s for cold start
+
+  try {
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}${endpoint}`,
+      {
+        ...options,
+        signal: controller.signal,
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...options.headers,
+        },
+      }
+    );
+    clearTimeout(timeout);
+    return response;
+  } catch (error) {
+    clearTimeout(timeout);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Service starting up, please try again in 30 seconds");
+    }
+    throw error;
+  }
+}
+
 class ApiClient {
   private client: AxiosInstance;
 
@@ -11,6 +46,7 @@ class ApiClient {
         "Content-Type": "application/json",
       },
       withCredentials: true, // For httpOnly cookies
+      timeout: 45000, // 45s timeout for cold starts
     });
 
     this.setupInterceptors();

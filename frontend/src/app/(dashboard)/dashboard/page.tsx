@@ -38,6 +38,12 @@ export default function DashboardPage() {
     window.addEventListener("transactions-updated", handleTransactionsUpdated);
     window.addEventListener("refresh-dashboard", handleTransactionsUpdated);
 
+    // Auto-refresh dashboard data every 5 minutes
+    const refreshInterval = setInterval(() => {
+      console.log("Auto-refreshing dashboard data (5-minute interval)");
+      loadDashboardData();
+    }, 5 * 60 * 1000); // 5 minutes
+
     return () => {
       window.removeEventListener(
         "transactions-updated",
@@ -47,6 +53,7 @@ export default function DashboardPage() {
         "refresh-dashboard",
         handleTransactionsUpdated
       );
+      clearInterval(refreshInterval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
