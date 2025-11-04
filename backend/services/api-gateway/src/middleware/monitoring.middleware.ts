@@ -137,9 +137,13 @@ export function performanceMiddleware(
   // Capture original end
   const originalEnd2 = res.end.bind(res);
 
-  res.end = function (chunk?: any, encoding?: BufferEncoding | (() => void), cb?: () => void): Response {
+  res.end = function (
+    chunk?: any,
+    encoding?: BufferEncoding | (() => void),
+    cb?: () => void
+  ): Response {
     const duration = Date.now() - startTime;
-    
+
     // Log performance
     logger.info(`Request completed: ${req.method} ${req.path}`, {
       statusCode: res.statusCode,
@@ -147,7 +151,7 @@ export function performanceMiddleware(
     });
 
     // Call original end with proper typing
-    if (typeof encoding === 'function') {
+    if (typeof encoding === "function") {
       return originalEnd2(chunk, encoding);
     }
     if (encoding !== undefined) {
