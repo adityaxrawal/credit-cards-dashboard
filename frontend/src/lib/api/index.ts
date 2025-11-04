@@ -49,7 +49,7 @@ export const transactionsApi = {
     apiClient.put<Transaction>(`/api/transactions/${id}`, data),
   delete: (id: string) => apiClient.delete(`/api/transactions/${id}`),
   getStats: () => apiClient.get<TransactionStats>("/api/transactions/stats"),
-  export: (format: "csv" | "pdf" | "excel", filters?: TransactionFilters) =>
+  export: (format: "csv" | "excel", filters?: TransactionFilters) =>
     apiClient.get(
       `/api/transactions/export?format=${format}`,
       filters as Record<string, unknown>

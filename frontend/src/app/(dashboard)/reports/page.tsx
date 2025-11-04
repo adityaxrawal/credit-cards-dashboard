@@ -62,9 +62,7 @@ export default function ReportsPage() {
     startDate: format(subMonths(new Date(), 3), "yyyy-MM-dd"),
     endDate: format(new Date(), "yyyy-MM-dd"),
   });
-  const [exportFormat, setExportFormat] = useState<"pdf" | "csv" | "excel">(
-    "pdf"
-  );
+  const [exportFormat, setExportFormat] = useState<"csv" | "excel">("csv");
 
   useEffect(() => {
     fetchReportData();
@@ -187,13 +185,10 @@ export default function ReportsPage() {
         <div className="flex gap-3">
           <select
             value={exportFormat}
-            onChange={(e) =>
-              setExportFormat(e.target.value as "pdf" | "csv" | "excel")
-            }
+            onChange={(e) => setExportFormat(e.target.value as "csv" | "excel")}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             aria-label="Select export format"
           >
-            <option value="pdf">PDF</option>
             <option value="csv">CSV</option>
             <option value="excel">Excel</option>
           </select>

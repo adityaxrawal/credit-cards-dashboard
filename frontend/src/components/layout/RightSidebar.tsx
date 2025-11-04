@@ -181,13 +181,6 @@ export function RightSidebar({
             <div className="font-medium">Add Transaction</div>
             <div className="text-sm opacity-75">Record a new expense</div>
           </button>
-
-          <button className="w-full p-3 bg-hover-bg border border-muted-text/20 rounded-lg text-primary-text hover:bg-muted-text/10 transition-colors text-left">
-            <div className="font-medium">View Statements</div>
-            <div className="text-sm text-secondary-text">
-              Download or view bills
-            </div>
-          </button>
         </div>
       </div>
     </div>
