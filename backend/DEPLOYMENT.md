@@ -95,13 +95,67 @@ See `.env.production.example` for complete list. **Replace ALL placeholders!**
 
 ## 🔧 Troubleshooting
 
-**Build fails:** Check logs, verify shared package builds first
+### ❌ "Out of Memory" / "Heap Limit" Error
 
-**Service crashes:** Check environment variables, database connection
+**Problem:** Service crashes with `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory`
 
-**CORS errors:** Verify CORS_ORIGINS matches frontend URL exactly
+**Cause:** Running `npm run dev` (TypeScript compilation) instead of `npm start` (pre-compiled JS)
 
-**Cold starts:** Free tier sleeps after 15 min (30s wake time)
+**Solution:**
+1. Go to Render Dashboard → Settings
+2. Change **Start Command** from `npm run dev` to `npm start`
+3. Ensure **Build Command** is `npm install && npm run build`
+4. Redeploy
+
+### ❌ "No open ports detected"
+
+**Problem:** Render can't detect the service port
+
+**Cause:** Service not listening on PORT environment variable
+
+**Solution:**
+- Verify `PORT=10000` is set in Render environment variables
+- Check your code uses `process.env.PORT`
+- Ensure service actually starts (check logs)
+
+### ❌ Build fails
+
+**Problem:** Build command fails during deployment
+
+**Solution:**
+- Check logs for specific error
+- Verify shared package builds first
+- Ensure all dependencies in package.json
+- Try building locally: `npm run build`
+
+### ❌ Service crashes on start
+
+**Problem:** Service starts but immediately crashes
+
+**Solution:**
+- Check environment variables are set
+- Verify database connection string
+- Check Supabase/Redis credentials
+- Review error logs in Render dashboard
+
+### ❌ CORS errors
+
+**Problem:** Frontend can't connect to API
+
+**Solution:**
+- Verify `CORS_ORIGINS` matches frontend URL exactly
+- Include protocol: `https://your-app.vercel.app`
+- No trailing slashes
+- Check `FRONTEND_URL` is also correct
+
+### ⏰ Cold starts
+
+**Info:** Free tier sleeps after 15 min inactivity (~30s wake time)
+
+**Options:**
+- Upgrade to paid tier for always-on
+- Accept cold starts for free tier
+- Don't use keep-alive pings (wastes bandwidth)
 
 ## 📚 Resources
 
