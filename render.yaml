@@ -13,13 +13,13 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /health
-    
+
     envVars:
       - key: NODE_ENV
         value: production
-      
+
       - key: PORT
         value: 10000
-      
+
       # Add all other environment variables in Render Dashboard
       # See backend/services/api-gateway/.env.production.example
