@@ -1,0 +1,25 @@
+# Render Configuration
+# Place this in repo root for Infrastructure as Code deployment
+
+services:
+  # API Gateway Service
+  - type: web
+    name: credit-card-api-gateway
+    runtime: node
+    region: singapore
+    plan: free
+    branch: dev-v1
+    rootDir: backend/services/api-gateway
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      - key: PORT
+        value: 10000
+
+      # Add all other environment variables in Render Dashboard
+      # See backend/services/api-gateway/.env.production.example
