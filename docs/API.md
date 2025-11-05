@@ -42,6 +42,7 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -69,6 +70,7 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -88,6 +90,7 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -111,6 +114,7 @@ Authorization: Bearer <token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -129,6 +133,7 @@ Authorization: Bearer <token>
 **Rate Limit**: 10 requests per hour per user
 
 **What Happens:**
+
 1. Fetches emails since last sync (or all if first time)
 2. Extracts transaction details (amount, merchant, date, card)
 3. Deduplicates using email message ID
@@ -136,6 +141,7 @@ Authorization: Bearer <token>
 5. Returns summary with processing metrics
 
 **Errors:**
+
 - `403`: Gmail not connected
 - `429`: Rate limit exceeded (10/hour)
 - `500`: Sync failed (Gmail API error)
@@ -156,6 +162,7 @@ Authorization: Bearer <token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -170,6 +177,7 @@ Authorization: Bearer <token>
 ```
 
 **Status Values:**
+
 - `safe`: < 80% spent
 - `warning`: 80-89% spent
 - `critical`: 90-99% spent
@@ -183,6 +191,7 @@ Authorization: Bearer <token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -204,6 +213,7 @@ Authorization: Bearer <token>
 ```
 
 **Alert Types:**
+
 - `budget_warning`: 80-89% spent
 - `budget_critical`: 90-99% spent
 - `budget_exceeded`: ≥100% spent
@@ -216,6 +226,7 @@ Authorization: Bearer <token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -240,6 +251,7 @@ Authorization: Bearer <token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -249,6 +261,7 @@ Authorization: Bearer <token>
 ```
 
 **Cache Keys Invalidated:**
+
 - `analytics:{userId}:dashboard_kpis`
 - `analytics:{userId}:category_breakdown`
 - `analytics:{userId}:monthly_trend`
@@ -266,6 +279,7 @@ Authorization: Bearer <token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -338,6 +352,7 @@ Authorization: Bearer <token>
 ```
 
 **Query Parameters:**
+
 - `page` (optional): Page number (default: 1)
 - `limit` (optional): Items per page (default: 50)
 - `startDate` (optional): Filter by date range
@@ -347,6 +362,7 @@ Authorization: Bearer <token>
 - `merchantName` (optional): Search by merchant
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -413,6 +429,7 @@ Authorization: Bearer <token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -461,6 +478,7 @@ Authorization: Bearer <token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -509,6 +527,7 @@ Authorization: Bearer <token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -613,6 +632,7 @@ Authorization: Bearer <token>
 ```
 
 **Supported Formats:**
+
 - `csv`: CSV file
 - `excel`: Excel XLSX file
 - `json`: JSON file
@@ -629,6 +649,7 @@ Authorization: Bearer <token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -669,6 +690,7 @@ All endpoints return standard error responses:
 ```
 
 **HTTP Status Codes:**
+
 - `200`: Success
 - `201`: Created
 - `400`: Bad Request (validation error)

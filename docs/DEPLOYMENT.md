@@ -109,6 +109,7 @@ Total Monthly Cost: $0.00 ✨
 
 1. Go to Project Settings → Database
 2. Copy the following:
+
    - **Host**: `aws-1-ap-south-1.pooler.supabase.com`
    - **Database**: `postgres`
    - **Port**: `6543` (pooler port)
@@ -145,12 +146,13 @@ psql $DATABASE_URL -c "\dt"
 RLS policies are already in migrations. Verify:
 
 ```sql
-SELECT tablename, policyname 
-FROM pg_policies 
+SELECT tablename, policyname
+FROM pg_policies
 WHERE schemaname = 'public';
 ```
 
 **Free Tier Limits**:
+
 - ✅ 500MB Database Storage
 - ✅ Unlimited API Requests
 - ✅ 2GB Bandwidth/month
@@ -183,6 +185,7 @@ WHERE schemaname = 'public';
    - **UPSTASH_REDIS_REST_TOKEN**: `your-token`
 
 **Free Tier Limits**:
+
 - ✅ 10,000 Commands/day (~7 commands/min)
 - ✅ 256MB Storage
 - ✅ Global Replication (optional)
@@ -224,6 +227,7 @@ WHERE schemaname = 'public';
    - **Client Secret**: `GOCSPX-abc123...`
 
 **Free Tier Limits**:
+
 - ✅ 1 Billion Quota Units/day
 - ✅ Each Gmail API call = 5-10 units
 - ✅ ~100 million API calls/day (way more than needed!)
@@ -274,6 +278,7 @@ git push origin main
 Vercel auto-deploys on every push to main branch.
 
 **Free Tier Limits**:
+
 - ✅ 100GB Bandwidth/month
 - ✅ Unlimited Deployments
 - ✅ Automatic HTTPS
@@ -336,6 +341,7 @@ git push origin main
 ```
 
 **Free Tier Limits**:
+
 - ✅ 750 Hours/month (31 days = 744 hours)
 - ✅ 512MB RAM
 - ✅ Auto-sleep after 15 minutes inactivity
@@ -367,16 +373,19 @@ git push origin main
 #### Step 3: Configure in Applications
 
 **Frontend (Vercel)**:
+
 ```bash
 NEXT_PUBLIC_SENTRY_DSN=https://abc123@o123456.ingest.sentry.io/7890123
 ```
 
 **Backend (Render)**:
+
 ```bash
 SENTRY_DSN=https://abc123@o123456.ingest.sentry.io/7890123
 ```
 
 **Free Tier Limits**:
+
 - ✅ 5,000 Errors/month
 - ✅ 30-day History
 - ✅ Unlimited Projects
@@ -435,6 +444,7 @@ NEXT_PUBLIC_API_URL=https://your-api.onrender.com
 ```
 
 Redeploy frontend:
+
 ```bash
 # In Vercel dashboard, click "Redeploy"
 ```
@@ -532,6 +542,7 @@ JWT_SECRET=your-jwt-secret
 ### 1. Verify Deployment
 
 **Checklist**:
+
 - [ ] ✅ Frontend loads at `https://your-app.vercel.app`
 - [ ] ✅ Backend health check: `https://your-api.onrender.com/health`
 - [ ] ✅ Can login with Google OAuth
@@ -555,23 +566,26 @@ curl https://your-api.onrender.com/health
 
 **Daily Checks**:
 
-| Service | Free Tier Limit | Check |
-|---------|----------------|-------|
-| Vercel | 100GB bandwidth/month | Vercel Dashboard → Usage |
-| Render | 750 hours/month | Render Dashboard → Usage |
-| Supabase | 500MB storage | Supabase Dashboard → Database Size |
-| Upstash | 10K commands/day | Upstash Dashboard → Metrics |
-| Sentry | 5K errors/month | Sentry Dashboard → Stats |
+| Service  | Free Tier Limit       | Check                              |
+| -------- | --------------------- | ---------------------------------- |
+| Vercel   | 100GB bandwidth/month | Vercel Dashboard → Usage           |
+| Render   | 750 hours/month       | Render Dashboard → Usage           |
+| Supabase | 500MB storage         | Supabase Dashboard → Database Size |
+| Upstash  | 10K commands/day      | Upstash Dashboard → Metrics        |
+| Sentry   | 5K errors/month       | Sentry Dashboard → Stats           |
 
 ### 4. Set Up Alerts
 
 **Supabase**: Settings → Alerts
+
 - Alert when database size > 400MB (80%)
 
 **Upstash**: Dashboard → Alerts
+
 - Alert when daily commands > 8,000 (80%)
 
 **Render**: Dashboard → Notifications
+
 - Email notifications for build failures
 
 ---
@@ -580,32 +594,36 @@ curl https://your-api.onrender.com/health
 
 ### Monthly Cost Breakdown
 
-| Service | Free Tier | Usage | Cost |
-|---------|-----------|-------|------|
-| Vercel | 100GB bandwidth | ~5GB | $0.00 |
-| Render | 750 hours | 744 hours | $0.00 |
-| Supabase | 500MB storage | ~15MB | $0.00 |
-| Upstash | 10K commands/day | ~2K/day | $0.00 |
-| Gmail API | 1B quota/day | ~1K/day | $0.00 |
-| Sentry | 5K errors/month | ~100/month | $0.00 |
-| **Total** | - | - | **$0.00** ✨ |
+| Service   | Free Tier        | Usage      | Cost         |
+| --------- | ---------------- | ---------- | ------------ |
+| Vercel    | 100GB bandwidth  | ~5GB       | $0.00        |
+| Render    | 750 hours        | 744 hours  | $0.00        |
+| Supabase  | 500MB storage    | ~15MB      | $0.00        |
+| Upstash   | 10K commands/day | ~2K/day    | $0.00        |
+| Gmail API | 1B quota/day     | ~1K/day    | $0.00        |
+| Sentry    | 5K errors/month  | ~100/month | $0.00        |
+| **Total** | -                | -          | **$0.00** ✨ |
 
 ### How to Stay Within Free Tiers
 
 1. **Vercel Bandwidth**:
+
    - Optimize images (use Next.js Image component)
    - Enable caching headers
    - Use CDN for static assets
 
 2. **Render Hours**:
+
    - Auto-sleep after 15min inactivity (default)
    - Service runs 24/7 = 744 hours/month (within 750 limit)
 
 3. **Supabase Storage**:
+
    - No file uploads (only transaction data)
    - Expected usage: ~10-20MB for 10,000 transactions
 
 4. **Upstash Commands**:
+
    - Current usage: ~2,000/day (20% of limit)
    - Cache only frequently accessed data
    - Set TTL to expire old cache entries
@@ -625,6 +643,7 @@ curl https://your-api.onrender.com/health
 **Problem**: First request takes ~30 seconds
 
 **Solution**: This is expected behavior for Render free tier
+
 - Show loading spinner in frontend
 - Display "Service starting up..." message
 - Set 45s timeout in API client
@@ -634,6 +653,7 @@ curl https://your-api.onrender.com/health
 **Problem**: `undefined` errors in logs
 
 **Solution**:
+
 1. Verify variables in Render dashboard
 2. Restart service after adding variables
 3. Check variable names match exactly (case-sensitive)
@@ -643,6 +663,7 @@ curl https://your-api.onrender.com/health
 **Problem**: `ECONNREFUSED` or `Connection timeout`
 
 **Solution**:
+
 1. Use pooler connection (port 6543, not 5432)
 2. Check IP allowlist in Supabase (should be disabled for pooler)
 3. Verify DATABASE_URL format
@@ -652,6 +673,7 @@ curl https://your-api.onrender.com/health
 **Problem**: "Gmail not connected" or "OAuth error"
 
 **Solution**:
+
 1. Re-authorize Gmail via Settings
 2. Check OAuth redirect URI matches Supabase callback URL
 3. Verify Gmail API is enabled in Google Cloud Console
@@ -661,6 +683,7 @@ curl https://your-api.onrender.com/health
 **Problem**: "Too many requests" error
 
 **Solution**:
+
 1. Gmail sync: Max 10/hour per user (design limitation)
 2. Wait for rate limit to reset
 3. Implement exponential backoff in frontend

@@ -217,12 +217,14 @@ The application uses **manual Gmail sync** to stay within free tier limits:
 #### How to Sync Transactions
 
 1. **Manual Sync Button**: Click "Sync Gmail" button in dashboard header
+
    - Fetches emails since last sync (or all if first time)
    - Extracts credit card transactions automatically
    - Triggers budget updates, alerts, and reminders
    - Shows sync summary with processing time
 
-2. **Auto-Sync on Dashboard Load**: 
+2. **Auto-Sync on Dashboard Load**:
+
    - Automatically syncs if >30 minutes since last sync
    - Runs silently in background
    - Shows toast notification on completion
@@ -447,11 +449,13 @@ For complete API documentation, see [API Reference](./docs/API.md).
 ### Quick Deploy
 
 1. **Frontend (Vercel - Free Tier)**
+
    ```bash
    git push origin main  # Auto-deploys to Vercel
    ```
 
 2. **Backend (Render - Free Tier)**
+
    ```bash
    git push origin main  # Auto-deploys to Render
    ```
