@@ -109,6 +109,7 @@ class MockRedis {
 let redis: Redis | UpstashRestRedis | MockRedis;
 
 // Initialize Redis connection with cloud services for local development
+// Use REST API by default to avoid connection issues and memory leaks
 if (
   process.env.NODE_ENV === "test" ||
   !process.env.REDIS_URL ||
@@ -117,47 +118,30 @@ if (
   console.log("Using Mock Redis for testing/fallback");
   redis = new MockRedis();
 } else if (
-  process.env.USE_REDIS_REST_API === "true" &&
   process.env.UPSTASH_REDIS_REST_URL &&
   process.env.UPSTASH_REDIS_REST_TOKEN
 ) {
+  // Prefer REST API - simpler, no connection overhead, no memory leaks
   console.log("Using Upstash Redis REST API for cloud connection");
   redis = new UpstashRestRedis(
     process.env.UPSTASH_REDIS_REST_URL,
     process.env.UPSTASH_REDIS_REST_TOKEN
   );
-} else {
+} else if (process.env.USE_IOREDIS === "true" && process.env.REDIS_URL) {
+  // Only use ioredis if explicitly requested
   try {
-    console.log("Using Upstash Redis with ioredis client");
-    /**
-     * Redis client for caching and session management
-     * Using Upstash Redis with free tier (10,000 commands/day)
-     */
+    console.log("Using Upstash Redis with ioredis client (explicit opt-in)");
     redis = new Redis(process.env.REDIS_URL, {
-      maxRetriesPerRequest: 3,
-      enableReadyCheck: false, // Important for Upstash compatibility
-      lazyConnect: true, // Connect when first command is sent
-      connectTimeout: 10000, // 10 second timeout
+      maxRetriesPerRequest: 2,
+      enableReadyCheck: false,
+      lazyConnect: true,
+      connectTimeout: 5000,
       retryStrategy(times: number) {
-        if (times > 3) {
-          console.log(
-            "Redis connection failed after 3 attempts, switching to REST API"
-          );
-          // Fallback to REST API if available
-          if (
-            process.env.UPSTASH_REDIS_REST_URL &&
-            process.env.UPSTASH_REDIS_REST_TOKEN
-          ) {
-            redis = new UpstashRestRedis(
-              process.env.UPSTASH_REDIS_REST_URL,
-              process.env.UPSTASH_REDIS_REST_TOKEN
-            );
-            return null;
-          }
+        if (times > 2) {
+          console.log("Redis connection failed, giving up");
           return null;
         }
-        const delay = Math.min(times * 100, 2000);
-        return delay;
+        return Math.min(times * 50, 500);
       },
     });
 
@@ -168,28 +152,13 @@ if (
     redis.on("error", (err) => {
       console.log("Redis ioredis error:", err.message);
     });
-
-    redis.on("close", () => {
-      console.log("Redis ioredis connection closed");
-    });
   } catch (error) {
-    console.log(
-      "Failed to initialize ioredis, falling back to REST API or mock"
-    );
-    if (
-      process.env.UPSTASH_REDIS_REST_URL &&
-      process.env.UPSTASH_REDIS_REST_TOKEN
-    ) {
-      console.log("Using Upstash Redis REST API as fallback");
-      redis = new UpstashRestRedis(
-        process.env.UPSTASH_REDIS_REST_URL,
-        process.env.UPSTASH_REDIS_REST_TOKEN
-      );
-    } else {
-      console.log("Using Mock Redis as final fallback");
-      redis = new MockRedis();
-    }
+    console.log("Failed to initialize ioredis, using Mock Redis");
+    redis = new MockRedis();
   }
+} else {
+  console.log("No Redis configuration found, using Mock Redis");
+  redis = new MockRedis();
 }
 
 // Export both named and default export for compatibility
