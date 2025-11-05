@@ -10,8 +10,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -34,7 +34,7 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/Badge";
 import { Switch } from "@/components/ui/switch";
 
 interface Alert {
@@ -81,8 +81,10 @@ export default function NotificationsPage() {
       if (showUnreadOnly) params.append("unread_only", "true");
       params.append("limit", "50");
 
-      const response = await apiClient.get(`/api/alerts?${params.toString()}`);
-      return response.data.data;
+      const response = await apiClient.get<any>(
+        `/api/alerts?${params.toString()}`
+      );
+      return response.data;
     },
   });
 
@@ -90,8 +92,10 @@ export default function NotificationsPage() {
   const { data: analytics } = useQuery({
     queryKey: ["alert-analytics"],
     queryFn: async () => {
-      const response = await apiClient.get("/api/alerts/analytics?days=30");
-      return response.data.data.analytics;
+      const response = await apiClient.get<any>(
+        "/api/alerts/analytics?days=30"
+      );
+      return response.data?.analytics;
     },
   });
 
@@ -450,8 +454,8 @@ function AlertRulesManagement() {
   const { data: rulesData } = useQuery({
     queryKey: ["alert-rules"],
     queryFn: async () => {
-      const response = await apiClient.get("/api/alerts/rules");
-      return response.data.data.rules;
+      const response = await apiClient.get<any>("/api/alerts/rules");
+      return response.data?.rules;
     },
   });
 
@@ -674,8 +678,8 @@ function NotificationPreferences() {
   const { data: preferences } = useQuery({
     queryKey: ["notification-preferences"],
     queryFn: async () => {
-      const response = await apiClient.get("/api/alerts/preferences");
-      return response.data.data.preferences;
+      const response = await apiClient.get<any>("/api/alerts/preferences");
+      return response.data?.preferences;
     },
   });
 

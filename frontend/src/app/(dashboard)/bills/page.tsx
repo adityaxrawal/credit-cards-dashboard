@@ -80,10 +80,10 @@ export default function BillsCalendarPage() {
   const { data: calendarEvents } = useQuery({
     queryKey: ["billCalendar", selectedMonth.toISOString()],
     queryFn: async () => {
-      const response = await apiClient.get(
+      const response = await apiClient.get<any>(
         `/bills/calendar?startDate=${startOfMonth.toISOString()}&endDate=${endOfMonth.toISOString()}`
       );
-      return response.data.data as CalendarEvent[];
+      return response.data as CalendarEvent[];
     },
   });
 
@@ -91,8 +91,8 @@ export default function BillsCalendarPage() {
   const { data: reminders } = useQuery({
     queryKey: ["billReminders"],
     queryFn: async () => {
-      const response = await apiClient.get("/bills/reminders");
-      return response.data.data as BillReminder[];
+      const response = await apiClient.get<any>("/bills/reminders");
+      return response.data as BillReminder[];
     },
   });
 
@@ -100,10 +100,10 @@ export default function BillsCalendarPage() {
   const { data: recurringTemplates } = useQuery({
     queryKey: ["recurringTemplates"],
     queryFn: async () => {
-      const response = await apiClient.get(
+      const response = await apiClient.get<any>(
         "/bills/recurring-templates?activeOnly=true"
       );
-      return response.data.data;
+      return response.data;
     },
   });
 
@@ -138,11 +138,11 @@ export default function BillsCalendarPage() {
   // Detect recurring bills
   const detectRecurringMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiClient.post("/bills/detect-recurring");
+      const response = await apiClient.post<any>("/bills/detect-recurring");
       return response.data;
     },
-    onSuccess: (data) => {
-      alert(`Detected ${data.data.detectedCount} recurring bills!`);
+    onSuccess: (data: any) => {
+      alert(`Detected ${data.detectedCount} recurring bills!`);
       queryClient.invalidateQueries({ queryKey: ["recurringTemplates"] });
     },
   });

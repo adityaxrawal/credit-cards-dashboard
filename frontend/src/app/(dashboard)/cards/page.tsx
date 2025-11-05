@@ -123,11 +123,13 @@ export default function CardsPage() {
 
         {/* Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredCards.map((card, index) => (
+          {filteredCards.map((card) => (
             <CardItem
               key={card.id}
               card={card}
-              gradient={getCardGradient(index)}
+              gradient={getCardGradient(
+                card.card_name || card.bank_name || "default"
+              )}
               onClick={() => handleCardClick(card)}
               onEdit={(e) => handleEditCard(e, card)}
               onDelete={(e) => handleDeleteCard(e, card)}
@@ -241,8 +243,8 @@ function CardItem({
                   utilization > 80
                     ? "bg-error"
                     : utilization > 50
-                      ? "bg-warning"
-                      : "bg-success"
+                    ? "bg-warning"
+                    : "bg-success"
                 )}
                 style={{ width: `${Math.min(utilization, 100)}%` }}
               />

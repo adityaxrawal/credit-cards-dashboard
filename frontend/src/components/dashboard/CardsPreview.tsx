@@ -31,7 +31,7 @@ export function CardsPreview({
 
       <div className="flex space-x-4 overflow-x-auto pb-2">
         {/* Existing Cards */}
-        {cards.map((card, index) => (
+        {cards.map((card) => (
           <div
             key={card.id}
             className="flex-shrink-0 cursor-pointer transition-transform hover:scale-105"
@@ -40,7 +40,9 @@ export function CardsPreview({
             <CardVisual
               cardName={card.card_name}
               cardNumber={card.card_number_last4}
-              gradient={getCardGradient(index)}
+              gradient={getCardGradient(
+                card.card_name || card.bank_name || "default"
+              )}
               className="w-72"
             />
             <div className="mt-2 text-sm text-center">

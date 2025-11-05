@@ -57,3 +57,34 @@ export function formatDate(
       return dateObj.toLocaleDateString();
   }
 }
+
+/**
+ * Get gradient class for card brand
+ */
+export function getCardGradient(brand: string): string {
+  const gradients: Record<string, string> = {
+    visa: "from-blue-600 to-blue-800",
+    mastercard: "from-red-600 to-orange-600",
+    amex: "from-blue-500 to-cyan-600",
+    discover: "from-orange-500 to-orange-700",
+    default: "from-gray-700 to-gray-900",
+  };
+  return gradients[brand.toLowerCase()] || gradients.default;
+}
+
+/**
+ * Calculate credit card utilization percentage
+ */
+export function calculateUtilization(balance: number, limit: number): number {
+  if (limit === 0) return 0;
+  return Math.round((balance / limit) * 100);
+}
+
+/**
+ * Mask card number for display
+ */
+export function maskCardNumber(cardNumber: string): string {
+  if (!cardNumber || cardNumber.length < 4) return cardNumber;
+  const last4 = cardNumber.slice(-4);
+  return `•••• ${last4}`;
+}

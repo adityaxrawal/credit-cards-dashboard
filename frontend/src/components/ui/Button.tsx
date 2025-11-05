@@ -4,7 +4,7 @@ import type { ButtonVariant } from "@/types";
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
+  variant?: ButtonVariant | "outline" | "destructive" | "ghost";
   size?: "sm" | "md" | "lg";
   loading?: boolean;
   children: React.ReactNode;
@@ -17,6 +17,11 @@ const variantStyles = {
   warning: "bg-warning text-white hover:bg-warning/90",
   error: "bg-error text-white hover:bg-error/90",
   info: "bg-info text-white hover:bg-info/90",
+  outline:
+    "border border-gray-300 bg-transparent text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800",
+  destructive: "bg-red-600 text-white hover:bg-red-700",
+  ghost:
+    "bg-transparent hover:bg-gray-100 text-gray-700 dark:hover:bg-gray-800 dark:text-gray-300",
 };
 
 const sizeStyles = {
