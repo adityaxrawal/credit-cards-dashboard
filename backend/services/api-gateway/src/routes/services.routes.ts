@@ -1,7 +1,7 @@
 /**
  * @fileoverview Frontend-Triggered Services Routes
  * @module routes/services
- * 
+ *
  * @description
  * Handles frontend-triggered service endpoints for zero-cost architecture.
  * These services are called automatically by the frontend after Gmail sync completes:
@@ -9,19 +9,19 @@
  * 2. Check Alerts - Generate budget alerts for thresholds (80%, 90%, 100%)
  * 3. Check Reminders - Find upcoming bill due dates (within 7 days)
  * 4. Refresh Analytics - Invalidate analytics cache to force refresh
- * 
+ *
  * @architecture Zero-Cost Implementation
  * - No background jobs or cron tasks (saves money)
  * - Triggered on-demand from frontend after Gmail sync
  * - Uses Upstash Redis for caching (10K commands/day free)
  * - Supabase PostgreSQL for data storage (500MB free)
- * 
+ *
  * @security
  * - All endpoints require JWT authentication
  * - User-scoped data access only
  * - Input validation on all parameters
  * - Rate limiting via middleware
- * 
+ *
  * @author Credit Card Dashboard Team
  * @since Phase 3 - Frontend-Triggered Services
  * @see {@link /docs/API.md} API Documentation
@@ -52,11 +52,11 @@ interface AuthRequest extends Request {
  * @route POST /services/update-budget
  * @group Frontend-Triggered Services - Budget tracking updates
  * @security JWT
- * 
+ *
  * @description
  * Updates budget tracking for the current month after Gmail sync completes.
  * Calculates total spending, updates database, and returns budget status.
- * 
+ *
  * @workflow
  * 1. Fetch all debit transactions for current month
  * 2. Calculate total spent amount
@@ -64,13 +64,13 @@ interface AuthRequest extends Request {
  * 4. Upsert budget_tracking record (insert or update)
  * 5. Calculate percentage and status (safe/warning/critical/exceeded)
  * 6. Return budget summary to frontend
- * 
+ *
  * @requestHeaders
  * - Authorization: Bearer <jwt-token> (required)
- * 
+ *
  * @returns {Object} 200 - Budget tracking updated successfully
  * @returns {Object} 500 - Internal server error
- * 
+ *
  * @example Response (200 OK)
  * {
  *   "success": true,
@@ -82,18 +82,18 @@ interface AuthRequest extends Request {
  *     "status": "warning"
  *   }
  * }
- * 
+ *
  * @statusCodes
  * - safe: < 80% spent
  * - warning: 80-89% spent
  * - critical: 90-99% spent
  * - exceeded: >= 100% spent
- * 
+ *
  * @performance
  * - Average response time: < 200ms
  * - Database queries: 3 (transactions, user, upsert)
  * - Redis cache: Not used (real-time calculation)
- * 
+ *
  * @triggeredBy Frontend after successful Gmail sync
  */
 router.post(
@@ -216,11 +216,11 @@ router.post(
  * @route POST /services/check-alerts
  * @group Frontend-Triggered Services - Alert generation
  * @security JWT
- * 
+ *
  * @description
  * Checks budget thresholds and generates alerts for budget warnings and overages.
  * Triggers after Gmail sync to notify users of spending patterns.
- * 
+ *
  * @workflow
  * 1. Fetch budget_tracking for current month
  * 2. Calculate spending percentage
@@ -228,13 +228,13 @@ router.post(
  * 4. Generate alerts for crossed thresholds
  * 5. Mark budget as alerted to prevent duplicates
  * 6. Return alerts array to frontend for display
- * 
+ *
  * @requestHeaders
  * - Authorization: Bearer <jwt-token> (required)
- * 
+ *
  * @returns {Object} 200 - Alerts checked successfully
  * @returns {Object} 500 - Internal server error
- * 
+ *
  * @example Response (200 OK)
  * {
  *   "success": true,
@@ -250,17 +250,17 @@ router.post(
  *     }
  *   ]
  * }
- * 
+ *
  * @alertTypes
  * - budget_warning: 80-89% spent (medium priority)
  * - budget_critical: 90-99% spent (high priority)
  * - budget_exceeded: >= 100% spent (high priority)
- * 
+ *
  * @performance
  * - Average response time: < 150ms
  * - Database queries: 2-3 (budget fetch, alert create, budget update)
  * - Redis cache: Not used (real-time checking)
- * 
+ *
  * @triggeredBy Frontend after successful Gmail sync
  */
 router.post(
