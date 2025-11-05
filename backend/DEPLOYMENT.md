@@ -23,12 +23,14 @@ git push origin main
 
 - Name: `credit-card-api-gateway`
 - Region: **Singapore**
-- Branch: `main`
+- Branch: `main` or `dev-v1`
 - Root Directory: `backend/services/api-gateway`
 - Runtime: Node
-- Build: `npm install && npm run build`
-- Start: `npm start`
+- Build Command: `npm install && npm run build`
+- Start Command: `npm start` ⚠️ **NOT `npm run dev`!**
 - Plan: Free (or Starter for production)
+
+**Important:** Make sure Start Command is `npm start` not `npm run dev` in Render dashboard!
 
 ## 🔐 Environment Variables
 
