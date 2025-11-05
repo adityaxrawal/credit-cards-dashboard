@@ -21,10 +21,16 @@ import {
   AreaChart,
 } from "recharts";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
+import { Button } from "@/components/ui/Button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/Badge";
 import {
   TrendingUp,
   TrendingDown,
@@ -87,10 +93,10 @@ export default function AnalyticsPage() {
   const { data: kpiData, isLoading: kpiLoading } = useQuery({
     queryKey: ["analytics", "kpi", selectedPeriod],
     queryFn: async () => {
-      const response = await apiClient.get(
+      const response = await apiClient.get<any>(
         `/analytics/kpi?period=${selectedPeriod}`
       );
-      return response.data.data;
+      return response.data;
     },
   });
 
@@ -98,10 +104,10 @@ export default function AnalyticsPage() {
   const { data: trendsData, isLoading: trendsLoading } = useQuery({
     queryKey: ["analytics", "trends", trendMetric, trendPeriod],
     queryFn: async () => {
-      const response = await apiClient.get(
+      const response = await apiClient.get<any>(
         `/analytics/trends?metric=${trendMetric}&period=${trendPeriod}&limit=12`
       );
-      return response.data.data;
+      return response.data;
     },
   });
 
@@ -109,10 +115,10 @@ export default function AnalyticsPage() {
   const { data: categoryData, isLoading: categoryLoading } = useQuery({
     queryKey: ["analytics", "categories", selectedPeriod],
     queryFn: async () => {
-      const response = await apiClient.get(
+      const response = await apiClient.get<any>(
         `/analytics/categories?period=${selectedPeriod}`
       );
-      return response.data.data;
+      return response.data;
     },
   });
 
@@ -120,10 +126,10 @@ export default function AnalyticsPage() {
   const { data: merchantData, isLoading: merchantLoading } = useQuery({
     queryKey: ["analytics", "merchants", selectedPeriod],
     queryFn: async () => {
-      const response = await apiClient.get(
+      const response = await apiClient.get<any>(
         `/analytics/merchants?period=${selectedPeriod}&limit=10`
       );
-      return response.data.data;
+      return response.data;
     },
   });
 
@@ -131,10 +137,10 @@ export default function AnalyticsPage() {
   const { data: comparativeData } = useQuery({
     queryKey: ["analytics", "comparative", "month_over_month"],
     queryFn: async () => {
-      const response = await apiClient.get(
+      const response = await apiClient.get<any>(
         `/analytics/comparative?type=month_over_month`
       );
-      return response.data.data;
+      return response.data;
     },
   });
 
@@ -199,18 +205,19 @@ export default function AnalyticsPage() {
             </p>
           </div>
           <div className="flex items-center space-x-4">
-            <Select
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="w-48"
-            >
-              {periodOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Select period" />
+              </SelectTrigger>
+              <SelectContent>
+                {periodOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-            <Button variant="outline">Export Report</Button>
+            <Button>Export Report</Button>
           </div>
         </div>
 
@@ -228,10 +235,10 @@ export default function AnalyticsPage() {
             <>
               {kpiData?.kpis?.slice(0, 4).map((kpi: KPI, index: number) => {
                 const icons = [
-                  <DollarSign className="w-6 h-6 text-blue-600" />,
-                  <CreditCard className="w-6 h-6 text-blue-600" />,
-                  <Calendar className="w-6 h-6 text-blue-600" />,
-                  <PieChartIcon className="w-6 h-6 text-blue-600" />,
+                  <DollarSign key="dollar" className="w-6 h-6 text-blue-600" />,
+                  <CreditCard key="credit" className="w-6 h-6 text-blue-600" />,
+                  <Calendar key="calendar" className="w-6 h-6 text-blue-600" />,
+                  <PieChartIcon key="pie" className="w-6 h-6 text-blue-600" />,
                 ];
                 return renderKPICard(kpi, icons[index]);
               })}
@@ -291,23 +298,25 @@ export default function AnalyticsPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Spending Trends</h3>
               <div className="flex space-x-2">
-                <Select
-                  value={trendMetric}
-                  onChange={(e) => setTrendMetric(e.target.value)}
-                  className="w-32"
-                >
-                  <option value="spending">Spending</option>
-                  <option value="transactions">Transactions</option>
-                  <option value="categories">Categories</option>
+                <Select value={trendMetric} onValueChange={setTrendMetric}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="spending">Spending</SelectItem>
+                    <SelectItem value="transactions">Transactions</SelectItem>
+                    <SelectItem value="categories">Categories</SelectItem>
+                  </SelectContent>
                 </Select>
-                <Select
-                  value={trendPeriod}
-                  onChange={(e) => setTrendPeriod(e.target.value)}
-                  className="w-32"
-                >
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
+                <Select value={trendPeriod} onValueChange={setTrendPeriod}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Daily</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
             </div>
