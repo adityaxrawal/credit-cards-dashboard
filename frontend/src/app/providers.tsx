@@ -5,6 +5,7 @@ import { useState } from "react";
 import { AuthProvider } from "@/lib/auth/AuthContext";
 import { LoadingProvider } from "@/lib/hooks/useApiLoader";
 import { GlobalLoadingSpinner } from "@/components/ui/GlobalLoadingSpinner";
+import { ToastProvider } from "@/components/ui/Toast";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -21,12 +22,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <LoadingProvider>
-        <AuthProvider>
-          {children}
-          <GlobalLoadingSpinner />
-        </AuthProvider>
-      </LoadingProvider>
+      <ToastProvider>
+        <LoadingProvider>
+          <AuthProvider>
+            {children}
+            <GlobalLoadingSpinner />
+          </AuthProvider>
+        </LoadingProvider>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }

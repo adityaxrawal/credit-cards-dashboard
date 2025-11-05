@@ -10,8 +10,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -77,8 +77,8 @@ export default function BudgetDashboardPage() {
   const { data: analytics, isLoading } = useQuery({
     queryKey: ["budget-analytics"],
     queryFn: async () => {
-      const response = await apiClient.get("/api/budget/analytics");
-      return response.data.data;
+      const response = await apiClient.get<any>("/api/budget/analytics");
+      return response.data;
     },
   });
 
@@ -86,8 +86,8 @@ export default function BudgetDashboardPage() {
   const { data: currentBudget } = useQuery({
     queryKey: ["current-budget"],
     queryFn: async () => {
-      const response = await apiClient.get("/api/budget/current");
-      return response.data.data;
+      const response = await apiClient.get<any>("/api/budget/current");
+      return response.data;
     },
   });
 
@@ -95,8 +95,8 @@ export default function BudgetDashboardPage() {
   const { data: categoryData } = useQuery({
     queryKey: ["category-budgets"],
     queryFn: async () => {
-      const response = await apiClient.get("/api/budget/categories");
-      return response.data.data;
+      const response = await apiClient.get<any>("/api/budget/categories");
+      return response.data;
     },
   });
 
@@ -104,10 +104,10 @@ export default function BudgetDashboardPage() {
   const { data: cardBudgets } = useQuery({
     queryKey: ["card-budgets", selectedMonth, selectedYear],
     queryFn: async () => {
-      const response = await apiClient.get(
+      const response = await apiClient.get<any>(
         `/api/budget/cards?month=${selectedMonth}&year=${selectedYear}`
       );
-      return response.data.data.cardBudgets;
+      return response.data?.cardBudgets;
     },
   });
 
@@ -701,8 +701,10 @@ function BudgetHistory() {
   const { data: history } = useQuery({
     queryKey: ["budget-history"],
     queryFn: async () => {
-      const response = await apiClient.get("/api/budget/history?months=12");
-      return response.data.data.history;
+      const response = await apiClient.get<any>(
+        "/api/budget/history?months=12"
+      );
+      return response.data?.history;
     },
   });
 
