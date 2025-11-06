@@ -15,7 +15,7 @@
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "isolatedModules": true,
-    "types": ["node", "jest"],
+    "types": ["node"],
     "sourceMap": true,
     "declaration": true,
     "paths": {
@@ -29,5 +29,5 @@
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "exclude": ["node_modules", "dist"]
 }
