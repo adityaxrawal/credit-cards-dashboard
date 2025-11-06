@@ -17,7 +17,7 @@ import { transactionsRoutes } from "@modules/transactions";
 import { budgetsRoutes } from "@modules/budgets";
 import { alertsRoutes } from "@modules/alerts";
 import { analyticsRoutes } from "@modules/analytics";
-import gmailRoutes from "./routes/gmail.routes"; // Complex legacy routes
+import gmailRoutes from "./modules/gmail/gmail.routes"; // Complex legacy routes
 import { billsRoutes } from "@modules/bills";
 import { aiInsightsRoutes } from "@modules/ai-insights";
 import { subscriptionsRoutes } from "@modules/subscriptions";

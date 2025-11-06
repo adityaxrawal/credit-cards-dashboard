@@ -4,6 +4,10 @@
   "description": "Shared utilities for Credit Card Dashboard backend services",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./*": "./dist/*.js"
+  },
   "scripts": {
     "build": "tsc",
     "type-check": "tsc --noEmit"
