@@ -117,11 +117,7 @@ credit-card-dashboard/
 ├── frontend/               # Next.js frontend application
 ├── backend/
 │   ├── services/
-│   │   ├── api-gateway/   # Main API service
-│   │   ├── gmail-service/ # Email processing service
-│   │   ├── extraction-service/ # Transaction extraction
-│   │   ├── alert-service/ # Alert notifications
-│   │   └── analytics-service/ # Analytics computation
+│   │   └── api-gateway/   # Unified API service (includes Gmail, analytics)
 │   └── shared/            # Shared utilities and types
 ├── database/              # Database migrations and seeds
 ├── docs/                  # Documentation
@@ -217,14 +213,12 @@ The application uses **manual Gmail sync** to stay within free tier limits:
 #### How to Sync Transactions
 
 1. **Manual Sync Button**: Click "Sync Gmail" button in dashboard header
-
    - Fetches emails since last sync (or all if first time)
    - Extracts credit card transactions automatically
    - Triggers budget updates, alerts, and reminders
    - Shows sync summary with processing time
 
 2. **Auto-Sync on Dashboard Load**:
-
    - Automatically syncs if >30 minutes since last sync
    - Runs silently in background
    - Shows toast notification on completion
