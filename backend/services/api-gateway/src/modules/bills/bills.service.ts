@@ -1,6 +1,7 @@
 // TODO: Fix AlertService import
 // import { enhancedAlertService } from "../alerts/alerts.service";
 import { supabase } from "shared/database/supabase";
+import { EnhancedAlertService } from "../alerts/alerts.service";
 
 /**
  * Bill information interface
@@ -273,7 +274,7 @@ export class BillReminderService {
   /**
    * Get bills for a user
    */
-  static async getBills(
+  static async getBillsDetailed(
     userId: string,
     options: {
       status?: "pending" | "paid" | "overdue" | "all";
@@ -397,7 +398,7 @@ export class BillReminderService {
         .single();
 
       // Generate payment confirmation alert
-      await AlertService.createAlert({
+      await EnhancedAlertService.createAlert({
         userId,
         type: "bill_reminder",
         title: "Payment Confirmation",
@@ -458,7 +459,7 @@ export class BillReminderService {
 
         // Send overdue notification
         try {
-          await AlertService.createAlert({
+          await EnhancedAlertService.createAlert({
             userId: bill.user_id,
             type: "bill_reminder",
             title: "Overdue Bill Alert",
@@ -596,7 +597,7 @@ export class BillReminderService {
 
         // Only schedule future reminders
         if (reminderDate > new Date()) {
-          await AlertService.createAlert({
+          await EnhancedAlertService.createAlert({
             userId: bill.user_id,
             type: "bill_reminder",
             title: `Bill Due in ${daysBefore} Day${daysBefore > 1 ? "s" : ""}`,
@@ -813,7 +814,7 @@ export class BillReminderService {
     for (const reminder of reminders || []) {
       try {
         // Create alert
-        await AlertService.createAlert({
+        await EnhancedAlertService.createAlert({
           userId: reminder.user_id,
           type: "bill_reminder",
           priority: "high",
@@ -843,7 +844,38 @@ export class BillReminderService {
 
     return { sent, failed };
   }
+
+  /**
+   * CRUD Wrapper Methods for API Controller
+   */
+  static async createBill(data: any): Promise<any> {
+    return await this.createBillReminder(data.userId, data);
+  }
+
+  static async getBillById(id: string): Promise<any> {
+    const { data } = await supabase
+      .from('bill_reminders')
+      .select('*')
+      .eq('id', id)
+      .single();
+    return data;
+  }
+
+  static async getBills(userId: string): Promise<any> {
+    return await this.getBillReminders(userId);
+  }
+
+  static async updateBill(id: string, data: any): Promise<any> {
+    const { data: updated } = await supabase.from("bill_reminders").update(data).eq("id", id).select().single();
+    return updated;
+  }
+
+  static async deleteBill(id: string): Promise<void> {
+    await supabase.from("bill_reminders").delete().eq("id", id);
+  }
+
 }
+
 
 // Export singleton instance
 export const billReminderService = new BillReminderService();

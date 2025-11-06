@@ -172,13 +172,10 @@ export class CircuitBreaker {
     if (this.failureCount >= this.failureThreshold) {
       this.state = CircuitState.OPEN;
       this.nextAttemptTime = Date.now() + this.resetTimeout;
-      logger.warn(
-        {
+      logger.warn("Circuit breaker OPEN due to threshold exceeded", { 
           failureCount: this.failureCount,
           threshold: this.failureThreshold,
-        },
-        "Circuit breaker OPEN due to threshold exceeded"
-      );
+         });
     }
   }
 
@@ -245,10 +242,7 @@ export async function retryWithBackoff<T>(
         const jitter = Math.random() * 1000;
         const totalDelay = delay + jitter;
 
-        logger.warn(
-          { attempt: attempt + 1, maxRetries, delay: totalDelay },
-          "Retrying after failure"
-        );
+        logger.warn("Retrying after failure", {  attempt: attempt + 1, maxRetries, delay: totalDelay  });
 
         await new Promise((resolve) => setTimeout(resolve, totalDelay));
       }

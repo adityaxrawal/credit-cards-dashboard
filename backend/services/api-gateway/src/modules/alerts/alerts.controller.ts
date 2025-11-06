@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { enhancedAlertService } from "./alerts.service";
+import { EnhancedAlertService } from "./alerts.service";
 import { HTTP_STATUS, ERROR_MESSAGES } from "../../constants";
 import { logger } from "../../utils/logger";
 
@@ -10,7 +10,7 @@ import { logger } from "../../utils/logger";
 export class AlertsController {
   static async create(req: Request, res: Response): Promise<void> {
     try {
-      const result = await AlertService.createAlert(req.body);
+      const result = await EnhancedAlertService.createAlert(req.body);
       res.status(HTTP_STATUS.CREATED).json(result);
     } catch (error: any) {
       logger.error("Alerts creation failed:", error);
@@ -24,7 +24,7 @@ export class AlertsController {
   static async getById(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await AlertService.getAlertById(id);
+      const result = await EnhancedAlertService.getAlertById(id);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Get alerts failed:", error);
@@ -38,7 +38,7 @@ export class AlertsController {
   static async getAll(req: Request, res: Response): Promise<void> {
     try {
       const userId = (req as any).user?.userId;
-      const result = await AlertService.getAlerts(userId);
+      const result = await EnhancedAlertService.getAlerts(userId);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Get all alerts failed:", error);
@@ -51,7 +51,7 @@ export class AlertsController {
   static async update(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await AlertService.updateAlert(id, req.body);
+      const result = await EnhancedAlertService.updateAlert(id, req.body);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Update alerts failed:", error);
@@ -64,7 +64,7 @@ export class AlertsController {
   static async delete(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      await AlertService.deleteAlert(id);
+      await EnhancedAlertService.deleteAlert(id);
       res.status(HTTP_STATUS.NO_CONTENT).send();
     } catch (error: any) {
       logger.error("Delete alerts failed:", error);

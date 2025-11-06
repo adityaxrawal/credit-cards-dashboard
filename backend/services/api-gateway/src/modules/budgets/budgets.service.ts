@@ -822,7 +822,44 @@ export class EnhancedBudgetService {
 
     return recommendations;
   }
+
+  /**
+   * CRUD Wrapper Methods for API Controller
+   */
+  static async createBudget(data: any): Promise<any> {
+    return await this.createCategoryBudget(
+      data.userId,
+      data.category,
+      data.amount,
+      data.period || 'monthly',
+      data.startDate ? new Date(data.startDate) : new Date(),
+      data.endDate ? new Date(data.endDate) : undefined
+    );
+  }
+
+  static async getBudgetById(id: string): Promise<any> {
+    const { data } = await supabase
+      .from('budgets')
+      .select('*')
+      .eq('id', id)
+      .single();
+    return data;
+  }
+
+  static async getBudgets(userId: string): Promise<any> {
+    return await this.getCategoryBudgets(userId);
+  }
+
+  static async updateBudget(id: string, data: any): Promise<any> {
+    return await this.updateCategoryBudget(id, data.userId, data);
+  }
+
+  static async deleteBudget(id: string): Promise<void> {
+    await supabase.from('budgets').delete().eq('id', id);
+  }
+
 }
+
 
 
 // Export singleton instance

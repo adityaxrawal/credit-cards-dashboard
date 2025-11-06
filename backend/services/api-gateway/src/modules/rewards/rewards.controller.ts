@@ -10,7 +10,7 @@ import { logger } from "../../utils/logger";
 export class RewardsController {
   static async create(req: Request, res: Response): Promise<void> {
     try {
-      const result = await rewardsService.create(req.body);
+      const result = await rewardsService.trackReward(req.body);
       res.status(HTTP_STATUS.CREATED).json(result);
     } catch (error: any) {
       logger.error("Rewards creation failed:", error);
@@ -24,7 +24,7 @@ export class RewardsController {
   static async getById(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await rewardsService.getRewardById(id);
+      const result = await rewardsService.getReward(id);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Get rewards failed:", error);
@@ -38,7 +38,7 @@ export class RewardsController {
   static async getAll(req: Request, res: Response): Promise<void> {
     try {
       const userId = (req as any).user?.userId;
-      const result = await rewardsService.getRewards(userId);
+      const result = await rewardsService.getUserRewards(userId);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Get all rewards failed:", error);
@@ -51,7 +51,7 @@ export class RewardsController {
   static async update(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await rewardsService.update(id, req.body);
+      const result = await rewardsService.updateReward(id, req.body);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Update rewards failed:", error);
@@ -64,7 +64,7 @@ export class RewardsController {
   static async delete(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      await rewardsService.delete(id);
+      await rewardsService.deleteReward(id);
       res.status(HTTP_STATUS.NO_CONTENT).send();
     } catch (error: any) {
       logger.error("Delete rewards failed:", error);

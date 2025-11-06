@@ -71,7 +71,7 @@ export class TransactionExtractor {
         reasons: ["No matching patterns found"],
       };
     } catch (error) {
-      logger.error({ error, emailId: email.id }, "Extraction failed");
+      logger.error("Extraction failed", {  error, emailId: email.id  });
       return {
         success: false,
         confidence: 0,

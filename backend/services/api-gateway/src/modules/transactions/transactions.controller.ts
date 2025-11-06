@@ -10,7 +10,8 @@ import { logger } from "../../utils/logger";
 export class TransactionsController {
   static async create(req: Request, res: Response): Promise<void> {
     try {
-      const result = await transactionService.createTransaction(req.body);
+      const userId = (req as any).user?.userId;
+      const result = await transactionService.createTransaction(userId, req.body);
       res.status(HTTP_STATUS.CREATED).json(result);
     } catch (error: any) {
       logger.error("Transactions creation failed:", error);
@@ -24,7 +25,8 @@ export class TransactionsController {
   static async getById(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await transactionService.getTransactionById(id);
+      const userId = (req as any).user?.userId;
+      const result = await transactionService.getTransactionById(id, userId);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Get transactions failed:", error);
@@ -51,7 +53,8 @@ export class TransactionsController {
   static async update(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await transactionService.updateTransaction(id, req.body);
+      const userId = (req as any).user?.userId;
+      const result = await transactionService.updateTransaction(id, userId, req.body);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Update transactions failed:", error);
@@ -64,7 +67,8 @@ export class TransactionsController {
   static async delete(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      await transactionService.deleteTransaction(id);
+      const userId = (req as any).user?.userId;
+      await transactionService.deleteTransaction(id, userId);
       res.status(HTTP_STATUS.NO_CONTENT).send();
     } catch (error: any) {
       logger.error("Delete transactions failed:", error);

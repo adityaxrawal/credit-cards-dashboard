@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { billReminderService } from "./bills.service";
+import { BillReminderService } from "./bills.service";
 import { HTTP_STATUS, ERROR_MESSAGES } from "../../constants";
 import { logger } from "../../utils/logger";
 
@@ -10,7 +10,7 @@ import { logger } from "../../utils/logger";
 export class BillsController {
   static async create(req: Request, res: Response): Promise<void> {
     try {
-      const result = await BillService.createBill(req.body);
+      const result = await BillReminderService.createBill(req.body);
       res.status(HTTP_STATUS.CREATED).json(result);
     } catch (error: any) {
       logger.error("Bills creation failed:", error);
@@ -24,7 +24,7 @@ export class BillsController {
   static async getById(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await BillService.getBillById(id);
+      const result = await BillReminderService.getBillById(id);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Get bills failed:", error);
@@ -38,7 +38,7 @@ export class BillsController {
   static async getAll(req: Request, res: Response): Promise<void> {
     try {
       const userId = (req as any).user?.userId;
-      const result = await BillService.getBills(userId);
+      const result = await BillReminderService.getBills(userId);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Get all bills failed:", error);
@@ -51,7 +51,7 @@ export class BillsController {
   static async update(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await BillService.updateBill(id, req.body);
+      const result = await BillReminderService.updateBill(id, req.body);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Update bills failed:", error);
@@ -64,7 +64,7 @@ export class BillsController {
   static async delete(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      await BillService.deleteBill(id);
+      await BillReminderService.deleteBill(id);
       res.status(HTTP_STATUS.NO_CONTENT).send();
     } catch (error: any) {
       logger.error("Delete bills failed:", error);

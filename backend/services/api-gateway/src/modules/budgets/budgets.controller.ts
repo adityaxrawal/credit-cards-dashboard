@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { enhancedBudgetService } from "./budgets.service";
+import { EnhancedBudgetService } from "./budgets.service";
 import { HTTP_STATUS, ERROR_MESSAGES } from "../../constants";
 import { logger } from "../../utils/logger";
 
@@ -10,7 +10,7 @@ import { logger } from "../../utils/logger";
 export class BudgetsController {
   static async create(req: Request, res: Response): Promise<void> {
     try {
-      const result = await BudgetService.createBudget(req.body);
+      const result = await EnhancedBudgetService.createBudget(req.body);
       res.status(HTTP_STATUS.CREATED).json(result);
     } catch (error: any) {
       logger.error("Budgets creation failed:", error);
@@ -24,7 +24,7 @@ export class BudgetsController {
   static async getById(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await BudgetService.getBudgetById(id);
+      const result = await EnhancedBudgetService.getBudgetById(id);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Get budgets failed:", error);
@@ -38,7 +38,7 @@ export class BudgetsController {
   static async getAll(req: Request, res: Response): Promise<void> {
     try {
       const userId = (req as any).user?.userId;
-      const result = await BudgetService.getBudgets(userId);
+      const result = await EnhancedBudgetService.getBudgets(userId);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Get all budgets failed:", error);
@@ -51,7 +51,7 @@ export class BudgetsController {
   static async update(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await BudgetService.updateBudget(id, req.body);
+      const result = await EnhancedBudgetService.updateBudget(id, req.body);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Update budgets failed:", error);
@@ -64,7 +64,7 @@ export class BudgetsController {
   static async delete(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      await BudgetService.deleteBudget(id);
+      await EnhancedBudgetService.deleteBudget(id);
       res.status(HTTP_STATUS.NO_CONTENT).send();
     } catch (error: any) {
       logger.error("Delete budgets failed:", error);

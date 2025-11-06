@@ -68,7 +68,7 @@ export class GmailClient {
         expiryDate: tokens.expiry_date!,
       };
     } catch (error) {
-      logger.error({ error }, "Error exchanging code for tokens");
+      logger.error("Error exchanging code for tokens", {  error  });
       throw new Error("Failed to exchange authorization code for tokens");
     }
   }
@@ -91,11 +91,11 @@ export class GmailClient {
       // Initialize Gmail API
       this.gmail = google.gmail({ version: "v1", auth: this.oauth2Client });
 
-      logger.info({ userId }, "Gmail API initialized for user");
+      logger.info("Gmail API initialized for user", {  userId  });
 
       return this.gmail;
     } catch (error) {
-      logger.error({ error, userId }, "Error initializing Gmail for user");
+      logger.error("Error initializing Gmail for user", {  error, userId  });
       throw error;
     }
   }
@@ -334,9 +334,9 @@ export class GmailClient {
   async disconnect(userId: string): Promise<void> {
     try {
       await this.tokenManager.revokeTokens(userId);
-      logger.info({ userId }, "Gmail disconnected successfully");
+      logger.info("Gmail disconnected successfully", {  userId  });
     } catch (error) {
-      logger.error({ error, userId }, "Error disconnecting Gmail");
+      logger.error("Error disconnecting Gmail", {  error, userId  });
       throw new Error("Failed to disconnect Gmail");
     }
   }

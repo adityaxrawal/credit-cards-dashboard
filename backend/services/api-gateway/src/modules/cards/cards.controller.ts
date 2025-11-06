@@ -11,7 +11,7 @@ export class CardsController {
   static async create(req: Request, res: Response): Promise<void> {
     try {
       const userId = (req as any).user?.userId;
-      const result = await cardService.addCard(userId, req.body);
+      const result = await cardService.createCard(userId, req.body);
       res.status(HTTP_STATUS.CREATED).json(result);
     } catch (error: any) {
       logger.error("Cards creation failed:", error);
