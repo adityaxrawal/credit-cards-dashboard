@@ -1,3 +1,7 @@
+// Load environment variables first
+import dotenv from "dotenv";
+dotenv.config();
+
 // Register path aliases for runtime resolution
 import "tsconfig-paths/register";
 
@@ -5,7 +9,6 @@ import express, { Application, Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import dotenv from "dotenv";
 import { logger } from "./utils/logger";
 import { errorHandler } from "./common/middleware/errorHandler";
 import { requestLogger } from "./common/middleware/requestLogger";
@@ -24,8 +27,6 @@ import { subscriptionsRoutes } from "@modules/subscriptions";
 import { reportsRoutes } from "@modules/reports";
 import { rewardsRoutes } from "@modules/rewards";
 import servicesRoutes from "./routes/services.routes"; // Health check routes
-
-dotenv.config();
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
