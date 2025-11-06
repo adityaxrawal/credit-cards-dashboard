@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "ignoreDeprecations": "5.0",
     "target": "ES2020",
     "module": "commonjs",
     "lib": ["ES2020"],
@@ -11,21 +12,20 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": false,
     "resolveJsonModule": true,
-    "moduleResolution": "node10",
+    "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "isolatedModules": true,
     "types": ["node", "jest"],
     "sourceMap": true,
     "declaration": true,
-    "baseUrl": "./src",
     "paths": {
-      "@modules/*": ["modules/*"],
-      "@common/*": ["common/*"],
-      "@config/*": ["config/*"],
-      "@constants/*": ["constants/*"],
-      "@shared/*": ["shared/*"],
-      "@utils/*": ["utils/*"],
-      "@types/*": ["types/*"]
+      "@modules/*": ["./src/modules/*"],
+      "@common/*": ["./src/common/*"],
+      "@config/*": ["./src/config/*"],
+      "@constants/*": ["./src/constants/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@utils/*": ["./src/utils/*"],
+      "@types/*": ["./src/types/*"]
     }
   },
   "include": ["src/**/*"],
