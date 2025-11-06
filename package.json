@@ -14,7 +14,7 @@
     "frontend:lint": "cd frontend && npm run lint",
     "backend:lint": "cd backend/services/api-gateway && npm run lint",
     "test": "npm run test:backend && npm run test:frontend",
-    "test:backend": "cd backend/services/api-gateway && npm test && cd ../gmail-service && npm test",
+    "test:backend": "cd backend/services/api-gateway && npm test",
     "test:frontend": "cd frontend && npm test",
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui",

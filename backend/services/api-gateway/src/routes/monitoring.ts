@@ -4,9 +4,9 @@
  */
 
 import { Router } from "express";
-import { healthCheck } from "../../../../shared/monitoring/health-check";
-import { metricsCollector } from "../../../../shared/monitoring/metrics-collector";
-import { authenticate } from "../middleware/auth";
+import { healthCheck } from "shared/monitoring/health-check";
+import { metricsCollector } from "shared/monitoring/metrics-collector";
+import { authenticate } from "@common/middleware/auth";
 
 const router = Router();
 
@@ -22,8 +22,8 @@ router.get("/health", async (req, res) => {
       health.status === "healthy"
         ? 200
         : health.status === "degraded"
-        ? 200
-        : 503;
+          ? 200
+          : 503;
 
     res.status(statusCode).json(health);
   } catch (error: any) {

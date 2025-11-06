@@ -24,4 +24,8 @@ fi
 echo "🔧 Building API Gateway..."
 tsc
 
+# Transform path aliases
+echo "🔄 Transforming path aliases..."
+npx tsc-alias
+
 echo "✅ Build complete!"

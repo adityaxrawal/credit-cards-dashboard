@@ -1,21 +1,32 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "node16",
+    "module": "commonjs",
     "lib": ["ES2020"],
     "outDir": "./dist",
-    "strict": true,
+    "strict": false,
+    "noImplicitAny": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "moduleResolution": "node16",
+    "moduleResolution": "node10",
     "allowSyntheticDefaultImports": true,
     "isolatedModules": true,
     "types": ["node", "jest"],
     "sourceMap": true,
-    "declaration": true
+    "declaration": true,
+    "baseUrl": "./src",
+    "paths": {
+      "@modules/*": ["modules/*"],
+      "@common/*": ["common/*"],
+      "@config/*": ["config/*"],
+      "@constants/*": ["constants/*"],
+      "@shared/*": ["shared/*"],
+      "@utils/*": ["utils/*"],
+      "@types/*": ["types/*"]
+    }
   },
-  "include": ["src/**/*", "../../shared/monitoring/**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests"]
 }

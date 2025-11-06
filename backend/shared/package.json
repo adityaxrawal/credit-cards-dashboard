@@ -3,25 +3,12 @@
   "version": "1.0.0",
   "description": "Shared utilities for Credit Card Dashboard backend services",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "type-check": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@supabase/supabase-js": "^2.42.0",
-    "anthropic": "^0.0.0",
-    "bull": "^4.16.5",
-    "dotenv": "^16.4.5",
-    "ioredis": "^5.8.2",
-    "openai": "^6.7.0",
-    "winston": "^3.18.3",
-    "zod": "^3.22.4"
-  },
-  "devDependencies": {
-    "@types/node": "^20.11.30",
-    "typescript": "^5.4.3"
-  }
+  "license": "ISC"
 }

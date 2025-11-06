@@ -1,29 +1,29 @@
+// Register path aliases for runtime resolution
+import "tsconfig-paths/register";
+
 import express, { Application, Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
 import dotenv from "dotenv";
 import { logger } from "./utils/logger";
-import { errorHandler } from "./middleware/errorHandler";
-import { requestLogger } from "./middleware/requestLogger";
+import { errorHandler } from "./common/middleware/errorHandler";
+import { requestLogger } from "./common/middleware/requestLogger";
 
-// Import routes
-import authRoutes from "./routes/auth.routes";
-import cardRoutes from "./routes/card.routes";
-import transactionRoutes from "./routes/transaction.routes";
-import budgetRoutes from "./routes/budget.routes";
-import alertRoutes from "./routes/alert.routes";
-import analyticsRoutes from "./routes/analytics-enhanced.routes";
-import gmailRoutes from "./routes/gmail.routes";
-// jobsRoutes removed - zero-cost architecture has no background jobs
-import billReminderRoutes from "./routes/bill-reminder.routes";
-import aiInsightsRoutes from "./routes/ai-insights.routes";
-import subscriptionRoutes from "./routes/subscriptions.routes";
-import reportsRoutes from "./routes/reports.routes";
-import rewardsRoutes from "./routes/rewards.routes";
-import recurringTransactionsRoutes from "./routes/recurring-transactions.routes";
-import servicesRoutes from "./routes/services.routes";
-// BackgroundJobService removed - zero-cost architecture uses frontend-triggered services
+// Import modular routes
+import { authRoutes } from "@modules/auth";
+import { cardsRoutes } from "@modules/cards";
+import { transactionsRoutes } from "@modules/transactions";
+import { budgetsRoutes } from "@modules/budgets";
+import { alertsRoutes } from "@modules/alerts";
+import { analyticsRoutes } from "@modules/analytics";
+import gmailRoutes from "./routes/gmail.routes"; // Complex legacy routes
+import { billsRoutes } from "@modules/bills";
+import { aiInsightsRoutes } from "@modules/ai-insights";
+import { subscriptionsRoutes } from "@modules/subscriptions";
+import { reportsRoutes } from "@modules/reports";
+import { rewardsRoutes } from "@modules/rewards";
+import servicesRoutes from "./routes/services.routes"; // Health check routes
 
 dotenv.config();
 
@@ -48,22 +48,20 @@ app.get("/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// API Routes
+// API Routes - Modular Architecture
 app.use("/auth", authRoutes);
-app.use("/cards", cardRoutes);
-app.use("/transactions", transactionRoutes);
-app.use("/budget", budgetRoutes);
-app.use("/alerts", alertRoutes);
+app.use("/cards", cardsRoutes);
+app.use("/transactions", transactionsRoutes);
+app.use("/budget", budgetsRoutes);
+app.use("/alerts", alertsRoutes);
 app.use("/analytics", analyticsRoutes);
-app.use("/gmail", gmailRoutes);
-// app.use("/jobs", jobsRoutes); // Removed - no background jobs in zero-cost architecture
-app.use("/bills", billReminderRoutes);
+app.use("/gmail", gmailRoutes); // TODO: Migrate gmail service to module
+app.use("/bills", billsRoutes);
 app.use("/ai-insights", aiInsightsRoutes);
-app.use("/subscriptions", subscriptionRoutes);
+app.use("/subscriptions", subscriptionsRoutes);
 app.use("/reports", reportsRoutes);
 app.use("/rewards", rewardsRoutes);
-app.use("/recurring-transactions", recurringTransactionsRoutes);
-app.use("/services", servicesRoutes);
+app.use("/services", servicesRoutes); // Health check and status routes
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
