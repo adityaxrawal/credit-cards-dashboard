@@ -5,8 +5,8 @@ import { supabase } from "shared/database/supabase";
 import { logger } from "../../utils/logger";
 import redis from "shared/cache/redis";
 import { IAuthResponse, IUser } from "./interfaces/auth.interface";
-import { appConfig } from "@config/app.config";
-import { ERROR_MESSAGES } from "@constants";
+import { appConfig } from "../../config/app.config";
+import { ERROR_MESSAGES } from "../../constants";
 
 /**
  * AuthService handles all authentication-related operations
