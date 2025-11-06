@@ -17,7 +17,7 @@ export class AiInsightsController {
       logger.error("AiInsights creation failed", { error });
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR,
-        message: error.message
+        message: error.message,
       });
     }
   }
@@ -31,7 +31,7 @@ export class AiInsightsController {
       logger.error("Get ai-insights failed", { error });
       res.status(HTTP_STATUS.NOT_FOUND).json({
         error: ERROR_MESSAGES.GENERIC.NOT_FOUND,
-        message: error.message
+        message: error.message,
       });
     }
   }
@@ -44,7 +44,7 @@ export class AiInsightsController {
     } catch (error: any) {
       logger.error("Get all ai-insights failed", { error });
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
-        error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR
+        error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR,
       });
     }
   }
@@ -57,7 +57,7 @@ export class AiInsightsController {
     } catch (error: any) {
       logger.error("Update ai-insights failed", { error });
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
-        error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR
+        error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR,
       });
     }
   }
@@ -68,7 +68,7 @@ export class AiInsightsController {
     } catch (error: any) {
       logger.error("Delete ai-insights failed", { error });
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
-        error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR
+        error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR,
       });
     }
   }

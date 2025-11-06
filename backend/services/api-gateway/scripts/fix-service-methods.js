@@ -5,21 +5,21 @@
  * Creates wrapper methods or updates controllers to use correct service methods
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-console.log('🔧 Phase 2: Fixing service method mismatches...\n');
+console.log("🔧 Phase 2: Fixing service method mismatches...\n");
 
-const srcDir = path.join(__dirname, '../src');
+const srcDir = path.join(__dirname, "../src");
 
-// ===================================================== 
+// =====================================================
 // Strategy: Add CRUD wrapper methods to each service
 // =====================================================
 
 // 1. Alerts Service - Add CRUD methods
-console.log('1️⃣ Adding CRUD methods to alerts service...');
-const alertsServicePath = path.join(srcDir, 'modules/alerts/alerts.service.ts');
-let alertsService = fs.readFileSync(alertsServicePath, 'utf8');
+console.log("1️⃣ Adding CRUD methods to alerts service...");
+const alertsServicePath = path.join(srcDir, "modules/alerts/alerts.service.ts");
+let alertsService = fs.readFileSync(alertsServicePath, "utf8");
 
 const alertsCRUD = `
   /**
@@ -57,12 +57,15 @@ alertsService = alertsService.replace(
   `${alertsCRUD}\n}\n$1`
 );
 fs.writeFileSync(alertsServicePath, alertsService);
-console.log('✅ Added CRUD methods to alerts service');
+console.log("✅ Added CRUD methods to alerts service");
 
 // 2. Analytics Service - Add CRUD methods
-console.log('2️⃣ Adding CRUD methods to analytics service...');
-const analyticsServicePath = path.join(srcDir, 'modules/analytics/analytics.service.ts');
-let analyticsService = fs.readFileSync(analyticsServicePath, 'utf8');
+console.log("2️⃣ Adding CRUD methods to analytics service...");
+const analyticsServicePath = path.join(
+  srcDir,
+  "modules/analytics/analytics.service.ts"
+);
+let analyticsService = fs.readFileSync(analyticsServicePath, "utf8");
 
 const analyticsCRUD = `
   /**
@@ -98,12 +101,12 @@ analyticsService = analyticsService.replace(
   `${analyticsCRUD}\n}\n$1`
 );
 fs.writeFileSync(analyticsServicePath, analyticsService);
-console.log('✅ Added CRUD methods to analytics service');
+console.log("✅ Added CRUD methods to analytics service");
 
 // 3. Bills Service - Add CRUD methods
-console.log('3️⃣ Adding CRUD methods to bills service...');
-const billsServicePath = path.join(srcDir, 'modules/bills/bills.service.ts');
-let billsService = fs.readFileSync(billsServicePath, 'utf8');
+console.log("3️⃣ Adding CRUD methods to bills service...");
+const billsServicePath = path.join(srcDir, "modules/bills/bills.service.ts");
+let billsService = fs.readFileSync(billsServicePath, "utf8");
 
 const billsCRUD = `
   /**
@@ -140,12 +143,15 @@ billsService = billsService.replace(
   `${billsCRUD}\n}\n$1`
 );
 fs.writeFileSync(billsServicePath, billsService);
-console.log('✅ Added CRUD methods to bills service');
+console.log("✅ Added CRUD methods to bills service");
 
 // 4. Budgets Service - Add CRUD methods
-console.log('4️⃣ Adding CRUD methods to budgets service...');
-const budgetsServicePath = path.join(srcDir, 'modules/budgets/budgets.service.ts');
-let budgetsService = fs.readFileSync(budgetsServicePath, 'utf8');
+console.log("4️⃣ Adding CRUD methods to budgets service...");
+const budgetsServicePath = path.join(
+  srcDir,
+  "modules/budgets/budgets.service.ts"
+);
+let budgetsService = fs.readFileSync(budgetsServicePath, "utf8");
 
 const budgetsCRUD = `
   /**
@@ -182,12 +188,15 @@ budgetsService = budgetsService.replace(
   `${budgetsCRUD}\n}\n$1`
 );
 fs.writeFileSync(budgetsServicePath, budgetsService);
-console.log('✅ Added CRUD methods to budgets service');
+console.log("✅ Added CRUD methods to budgets service");
 
 // 5. Reports Service - Add CRUD methods
-console.log('5️⃣ Adding CRUD methods to reports service...');
-const reportsServicePath = path.join(srcDir, 'modules/reports/reports.service.ts');
-let reportsService = fs.readFileSync(reportsServicePath, 'utf8');
+console.log("5️⃣ Adding CRUD methods to reports service...");
+const reportsServicePath = path.join(
+  srcDir,
+  "modules/reports/reports.service.ts"
+);
+let reportsService = fs.readFileSync(reportsServicePath, "utf8");
 
 const reportsCRUD = `
   /**
@@ -225,15 +234,18 @@ reportsService = reportsService.replace(
   `${reportsCRUD}\n}\n$1`
 );
 fs.writeFileSync(reportsServicePath, reportsService);
-console.log('✅ Added CRUD methods to reports service');
+console.log("✅ Added CRUD methods to reports service");
 
 // 6. Rewards Service - Check existing methods and add wrappers if needed
-console.log('6️⃣ Checking rewards service methods...');
-const rewardsServicePath = path.join(srcDir, 'modules/rewards/rewards.service.ts');
-let rewardsService = fs.readFileSync(rewardsServicePath, 'utf8');
+console.log("6️⃣ Checking rewards service methods...");
+const rewardsServicePath = path.join(
+  srcDir,
+  "modules/rewards/rewards.service.ts"
+);
+let rewardsService = fs.readFileSync(rewardsServicePath, "utf8");
 
 // Check if methods already exist
-if (!rewardsService.includes('async trackReward(')) {
+if (!rewardsService.includes("async trackReward(")) {
   const rewardsCRUD = `
   /**
    * CRUD Wrapper Methods for API Controller
@@ -275,48 +287,54 @@ if (!rewardsService.includes('async trackReward(')) {
     `${rewardsCRUD}\n}\n$1`
   );
   fs.writeFileSync(rewardsServicePath, rewardsService);
-  console.log('✅ Added CRUD methods to rewards service');
+  console.log("✅ Added CRUD methods to rewards service");
 } else {
-  console.log('✅ Rewards service already has required methods');
+  console.log("✅ Rewards service already has required methods");
 }
 
 // 7. Fix Subscriptions Controller - import SubscriptionService
-console.log('7️⃣ Fixing subscriptions controller imports...');
-const subsControllerPath = path.join(srcDir, 'modules/subscriptions/subscriptions.controller.ts');
-let subsController = fs.readFileSync(subsControllerPath, 'utf8');
+console.log("7️⃣ Fixing subscriptions controller imports...");
+const subsControllerPath = path.join(
+  srcDir,
+  "modules/subscriptions/subscriptions.controller.ts"
+);
+let subsController = fs.readFileSync(subsControllerPath, "utf8");
 
 // Add import for SubscriptionService class
-if (!subsController.includes('import { SubscriptionService }')) {
+if (!subsController.includes("import { SubscriptionService }")) {
   subsController = subsController.replace(
-    'import { subscriptionService }',
-    'import { SubscriptionService, subscriptionService }'
+    "import { subscriptionService }",
+    "import { SubscriptionService, subscriptionService }"
   );
   fs.writeFileSync(subsControllerPath, subsController);
-  console.log('✅ Fixed subscriptions controller imports');
+  console.log("✅ Fixed subscriptions controller imports");
 }
 
 // 8. Fix bills service enhancedAlertService import
-console.log('8️⃣ Fixing bills service alert imports...');
-const billsServiceFile = path.join(srcDir, 'modules/bills/bills.service.ts');
-let billsServiceContent = fs.readFileSync(billsServiceFile, 'utf8');
+console.log("8️⃣ Fixing bills service alert imports...");
+const billsServiceFile = path.join(srcDir, "modules/bills/bills.service.ts");
+let billsServiceContent = fs.readFileSync(billsServiceFile, "utf8");
 
 // Check if import already exists
-if (billsServiceContent.includes('enhancedAlertService.createAlert')) {
+if (billsServiceContent.includes("enhancedAlertService.createAlert")) {
   // Ensure import is correct
-  if (!billsServiceContent.includes('import { enhancedAlertService }')) {
+  if (!billsServiceContent.includes("import { enhancedAlertService }")) {
     // Add the import after supabase import
     billsServiceContent = billsServiceContent.replace(
       'import { supabase } from "shared/database/supabase";',
       'import { supabase } from "shared/database/supabase";\nimport { EnhancedAlertService } from "../alerts/alerts.service";'
     );
-    
+
     // Replace enhancedAlertService with EnhancedAlertService (static calls)
-    billsServiceContent = billsServiceContent.replace(/enhancedAlertService\./g, 'EnhancedAlertService.');
-    
+    billsServiceContent = billsServiceContent.replace(
+      /enhancedAlertService\./g,
+      "EnhancedAlertService."
+    );
+
     fs.writeFileSync(billsServiceFile, billsServiceContent);
-    console.log('✅ Fixed bills service alert imports');
+    console.log("✅ Fixed bills service alert imports");
   }
 }
 
-console.log('\n✅ Phase 2 complete!');
-console.log('🔍 Run `npm run type-check` to verify fixes.\n');
+console.log("\n✅ Phase 2 complete!");
+console.log("🔍 Run `npm run type-check` to verify fixes.\n");

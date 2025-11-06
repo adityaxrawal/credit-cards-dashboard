@@ -1176,33 +1176,33 @@ export class ReportingService {
   static async create(data: any): Promise<any> {
     const startDate = data.startDate ? new Date(data.startDate) : new Date();
     const endDate = data.endDate ? new Date(data.endDate) : new Date();
-    
+
     const config: ReportConfig = {
       userId: data.userId,
-      type: (data.type || 'spending_summary') as ReportType,
-      format: (data.format || 'json') as ReportFormat,
+      type: (data.type || "spending_summary") as ReportType,
+      format: (data.format || "json") as ReportFormat,
       dateRange: {
-        startDate: format(startDate, 'yyyy-MM-dd'),
-        endDate: format(endDate, 'yyyy-MM-dd')
+        startDate: format(startDate, "yyyy-MM-dd"),
+        endDate: format(endDate, "yyyy-MM-dd"),
       },
       options: {
         includeCharts: data.includeCharts !== false,
         includeTrends: data.includeTrends,
         includeComparisons: data.includeComparisons,
         groupBy: data.groupBy,
-        currency: data.currency || 'INR'
-      }
+        currency: data.currency || "INR",
+      },
     };
     return await this.generateReport(config);
   }
 
   static async getReportById(id: string): Promise<any> {
     const { data, error } = await supabase
-      .from('generated_reports')
-      .select('*')
-      .eq('id', id)
+      .from("generated_reports")
+      .select("*")
+      .eq("id", id)
       .single();
-    
+
     if (error) throw new Error(`Failed to fetch report: ${error.message}`);
     return data;
   }
@@ -1214,16 +1214,17 @@ export class ReportingService {
       .eq("user_id", userId)
       .limit(50)
       .order("generated_at", { ascending: false });
-    
+
     if (error) throw new Error(`Failed to fetch reports: ${error.message}`);
     return data || [];
   }
 
   static async update(id: string, updateData: any): Promise<any> {
     // Reports are immutable, regenerate instead
-    return { 
-      message: "Reports cannot be updated. Please generate a new report instead.",
-      id 
+    return {
+      message:
+        "Reports cannot be updated. Please generate a new report instead.",
+      id,
     };
   }
 
@@ -1232,12 +1233,10 @@ export class ReportingService {
       .from("generated_reports")
       .delete()
       .eq("id", id);
-    
+
     if (error) throw new Error(`Failed to delete report: ${error.message}`);
   }
-
 }
-
 
 // Export singleton instance
 export const reportingService = new ReportingService();
