@@ -1,4 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
 import {
   format,
   startOfMonth,
@@ -8,11 +7,7 @@ import {
   subMonths,
   subYears,
 } from "date-fns";
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { supabase } from "../../../../shared/database/supabase";
 
 /**
  * Report types available for generation

@@ -16,6 +16,7 @@ if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
 /**
  * Supabase client with service role key for backend operations
  * This bypasses Row Level Security and should only be used in trusted backend services
+ * Singleton pattern ensures only one instance is created
  */
 export const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -24,6 +25,14 @@ export const supabase = createClient(
     auth: {
       autoRefreshToken: false,
       persistSession: false,
+    },
+    global: {
+      headers: {
+        "X-Client-Info": "credit-card-backend@1.0.0",
+      },
+    },
+    db: {
+      schema: "public",
     },
   }
 );
