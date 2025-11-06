@@ -8,9 +8,10 @@ services:
     runtime: node
     region: singapore
     plan: free
-    branch: dev-v1
-    buildCommand: npm install && npm run build --workspace=backend/shared && npm run build --workspace=backend/services/api-gateway
-    startCommand: npm start --workspace=backend/services/api-gateway
+    branch: prod
+    rootDir: backend/services/api-gateway
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     healthCheckPath: /health
 
     envVars:
