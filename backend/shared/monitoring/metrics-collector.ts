@@ -185,8 +185,8 @@ export class MetricsCollector {
       this.redisClient.get("metrics:cache:misses"),
     ]);
 
-    const hits = parseInt(cacheHits || "0", 10);
-    const misses = parseInt(cacheMisses || "0", 10);
+    const hits = parseInt(String(cacheHits || "0"), 10);
+    const misses = parseInt(String(cacheMisses || "0"), 10);
     const total = hits + misses;
     const hitRate = total > 0 ? (hits / total) * 100 : 0;
 
@@ -230,13 +230,16 @@ export class MetricsCollector {
    * Aggregate metrics for summary
    */
   private aggregateMetrics(metrics: MetricData[]): any {
-    const grouped = metrics.reduce((acc, metric) => {
-      if (!acc[metric.name]) {
-        acc[metric.name] = [];
-      }
-      acc[metric.name].push(metric.value);
-      return acc;
-    }, {} as Record<string, number[]>);
+    const grouped = metrics.reduce(
+      (acc, metric) => {
+        if (!acc[metric.name]) {
+          acc[metric.name] = [];
+        }
+        acc[metric.name].push(metric.value);
+        return acc;
+      },
+      {} as Record<string, number[]>
+    );
 
     const aggregated: any = {};
 

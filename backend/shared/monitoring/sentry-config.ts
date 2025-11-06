@@ -7,7 +7,7 @@
  */
 
 import * as Sentry from "@sentry/node";
-import { ProfilingIntegration } from "@sentry/profiling-node";
+import { nodeProfilingIntegration } from "@sentry/profiling-node";
 
 export interface ErrorTrackingConfig {
   dsn: string;
@@ -50,16 +50,16 @@ export function initializeErrorTracking(serviceName: string): void {
     profilesSampleRate: errorTrackingConfig.profilesSampleRate,
 
     integrations: [
-      new ProfilingIntegration(),
-      new Sentry.Integrations.Http({ tracing: true }),
-      new Sentry.Integrations.Express(),
+      nodeProfilingIntegration(),
+      Sentry.httpIntegration(),
+      Sentry.expressIntegration(),
     ],
 
     // Error filtering
     beforeSend(
-      event: Sentry.Event,
+      event: Sentry.ErrorEvent,
       hint: Sentry.EventHint
-    ): Sentry.Event | null {
+    ): Sentry.ErrorEvent | null {
       // Filter out specific errors
       const error = hint.originalException;
 
