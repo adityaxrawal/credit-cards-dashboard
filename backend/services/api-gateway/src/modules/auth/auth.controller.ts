@@ -32,9 +32,9 @@ export class AuthController {
 
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
-      logger.error({ error }, "Google OAuth failed");
+      logger.error("Google OAuth failed", {  error  });
       res.status(HTTP_STATUS.UNAUTHORIZED).json({
-        error: ERROR_MESSAGES.AUTH.AUTH_FAILED,
+        error: ERROR_MESSAGES.AUTH.UNAUTHORIZED,
         message: error.message,
       });
     }
@@ -64,7 +64,7 @@ export class AuthController {
 
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
-      logger.error({ error }, "Token refresh failed");
+      logger.error("Token refresh failed", {  error  });
       res.status(HTTP_STATUS.UNAUTHORIZED).json({
         error: ERROR_MESSAGES.AUTH.TOKEN_EXPIRED,
         message: error.message,
@@ -97,7 +97,7 @@ export class AuthController {
         message: "Logged out successfully",
       });
     } catch (error: any) {
-      logger.error({ error }, "Logout failed");
+      logger.error("Logout failed", {  error  });
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR,
       });
@@ -127,7 +127,7 @@ export class AuthController {
 
       res.status(HTTP_STATUS.OK).json(user);
     } catch (error: any) {
-      logger.error({ error }, "Get profile failed");
+      logger.error("Get profile failed", {  error  });
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR,
       });

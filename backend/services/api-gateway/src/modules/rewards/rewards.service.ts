@@ -863,7 +863,43 @@ export class RewardsService {
       expiringRewards: [], // Would implement with expiration analysis
     };
   }
+
+  /**
+   * CRUD Wrapper Methods for API Controller
+   */
+  async trackReward(data: any): Promise<any> {
+    const { data: reward } = await supabase.from("rewards").insert(data).select().single(); return reward;
+  }
+
+  async getReward(id: string): Promise<any> {
+    const { data } = await supabase
+      .from('rewards')
+      .select('*')
+      .eq('id', id)
+      .single();
+    return data;
+  }
+
+  async getUserRewards(userId: string): Promise<any> {
+    const { data } = await supabase.from("rewards").select("*").eq("user_id", userId).order("earned_date", { ascending: false }); return data || [];
+  }
+
+  async updateReward(id: string, data: any): Promise<any> {
+    const { data: updated } = await supabase
+      .from('rewards')
+      .update(data)
+      .eq('id', id)
+      .select()
+      .single();
+    return updated;
+  }
+
+  async deleteReward(id: string): Promise<void> {
+    await supabase.from('rewards').delete().eq('id', id);
+  }
+
 }
+
 
 // Export singleton instance
 export const rewardsService = new RewardsService();

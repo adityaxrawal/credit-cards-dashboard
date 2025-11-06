@@ -1196,7 +1196,33 @@ export class AdvancedAnalyticsService {
       suggestions,
     };
   }
+
+  /**
+   * CRUD Wrapper Methods for API Controller
+   */
+  static async create(data: any): Promise<any> {
+    // Analytics are computed, not created directly
+    return { message: "Analytics are auto-generated" };
+  }
+
+  static async getAnalyticById(id: string): Promise<any> {
+    return { id, message: "Use getAnalytics instead" };
+  }
+
+  static async getAnalytics(userId: string): Promise<any> {
+    return await AdvancedAnalyticsService.getCategoryAnalytics(userId, 'current_month');
+  }
+
+  static async update(id: string, data: any): Promise<any> {
+    return { message: "Analytics are read-only" };
+  }
+
+  static async delete(id: string): Promise<void> {
+    // Analytics cannot be deleted
+  }
+
 }
+
 
 
 // Export singleton instance

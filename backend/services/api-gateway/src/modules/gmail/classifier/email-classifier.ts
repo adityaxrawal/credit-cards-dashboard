@@ -117,10 +117,7 @@ export class EmailClassifier {
       // Check cache first
       const cached = await this.checkCache(email.from, email.subject);
       if (cached) {
-        logger.debug(
-          { emailId: email.id, classification: cached.classification },
-          "Using cached classification"
-        );
+        logger.debug("Using cached classification", {  emailId: email.id, classification: cached.classification  });
         return cached;
       }
 
@@ -173,19 +170,16 @@ export class EmailClassifier {
       // Cache the result
       await this.cacheClassification(email.from, email.subject, result);
 
-      logger.info(
-        {
+      logger.info("Email classified", { 
           emailId: email.id,
           classification,
           confidence,
           bankName,
-        },
-        "Email classified"
-      );
+         });
 
       return result;
     } catch (error) {
-      logger.error({ error, emailId: email.id }, "Classification failed");
+      logger.error("Classification failed", {  error, emailId: email.id  });
       // Return default classification on error
       return {
         classification: "other",
@@ -398,7 +392,7 @@ export class EmailClassifier {
 
       return null;
     } catch (error) {
-      logger.debug({ error }, "Cache check failed");
+      logger.debug("Cache check failed", {  error  });
       return null;
     }
   }
@@ -430,7 +424,7 @@ export class EmailClassifier {
         }
       );
     } catch (error) {
-      logger.debug({ error }, "Failed to cache classification");
+      logger.debug("Failed to cache classification", {  error  });
     }
   }
 

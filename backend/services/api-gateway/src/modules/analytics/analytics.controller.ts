@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { advancedAnalyticsService } from "./analytics.service";
+import { AdvancedAnalyticsService } from "./analytics.service";
 import { HTTP_STATUS, ERROR_MESSAGES } from "../../constants";
 import { logger } from "../../utils/logger";
 
@@ -10,7 +10,7 @@ import { logger } from "../../utils/logger";
 export class AnalyticsController {
   static async create(req: Request, res: Response): Promise<void> {
     try {
-      const result = await AnalyticsService.create(req.body);
+      const result = await AdvancedAnalyticsService.create(req.body);
       res.status(HTTP_STATUS.CREATED).json(result);
     } catch (error: any) {
       logger.error("Analytics creation failed:", error);
@@ -24,7 +24,7 @@ export class AnalyticsController {
   static async getById(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await AnalyticsService.getAnalyticById(id);
+      const result = await AdvancedAnalyticsService.getAnalyticById(id);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Get analytics failed:", error);
@@ -38,7 +38,7 @@ export class AnalyticsController {
   static async getAll(req: Request, res: Response): Promise<void> {
     try {
       const userId = (req as any).user?.userId;
-      const result = await AnalyticsService.getAnalytics(userId);
+      const result = await AdvancedAnalyticsService.getAnalytics(userId);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Get all analytics failed:", error);
@@ -51,7 +51,7 @@ export class AnalyticsController {
   static async update(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await AnalyticsService.update(id, req.body);
+      const result = await AdvancedAnalyticsService.update(id, req.body);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: any) {
       logger.error("Update analytics failed:", error);
@@ -64,7 +64,7 @@ export class AnalyticsController {
   static async delete(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      await AnalyticsService.delete(id);
+      await AdvancedAnalyticsService.delete(id);
       res.status(HTTP_STATUS.NO_CONTENT).send();
     } catch (error: any) {
       logger.error("Delete analytics failed:", error);
