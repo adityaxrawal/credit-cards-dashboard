@@ -83,7 +83,7 @@ export class AuthService {
         7 * 24 * 60 * 60
       );
 
-      logger.info({ userId: user.id }, "User authenticated successfully");
+      logger.info("User authenticated successfully", {  userId: user.id  });
 
       return {
         accessToken,
@@ -97,7 +97,7 @@ export class AuthService {
         },
       };
     } catch (error: any) {
-      logger.error({ error }, "OAuth authentication failed");
+      logger.error("OAuth authentication failed", {  error  });
       throw error;
     }
   }
@@ -174,7 +174,7 @@ export class AuthService {
 
       return { accessToken: newAccessToken };
     } catch (error: any) {
-      logger.error({ error }, "Token refresh failed");
+      logger.error("Token refresh failed", {  error  });
       throw error;
     }
   }
@@ -185,9 +185,9 @@ export class AuthService {
   async logout(userId: string): Promise<void> {
     try {
       await redis.del(`session:${userId}`);
-      logger.info({ userId }, "User logged out");
+      logger.info("User logged out", {  userId  });
     } catch (error) {
-      logger.error({ error, userId }, "Logout failed");
+      logger.error("Logout failed", {  error, userId  });
       throw new Error(ERROR_MESSAGES.GENERIC.INTERNAL_ERROR);
     }
   }
@@ -216,7 +216,7 @@ export class AuthService {
         createdAt: user.created_at,
       };
     } catch (error: any) {
-      logger.error({ error, userId }, "Failed to fetch user");
+      logger.error("Failed to fetch user", {  error, userId  });
       throw error;
     }
   }
@@ -247,7 +247,7 @@ export class AuthService {
         is_valid: true,
       });
     } catch (error) {
-      logger.error({ error, userId }, "Failed to store Gmail token");
+      logger.error("Failed to store Gmail token", {  error, userId  });
       // Non-critical - don't throw
     }
   }

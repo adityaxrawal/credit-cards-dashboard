@@ -624,7 +624,42 @@ export class EnhancedAlertService {
         throw new Error(`Unsupported channel: ${channel}`);
     }
   }
+
+  /**
+   * CRUD Wrapper Methods for API Controller
+   */
+  static async createAlert(data: any): Promise<any> {
+    return await this.createAlertFromTemplate(
+      data.userId,
+      data.type || 'budget_exceeded',
+      data.title || 'Alert',
+      data.message || ''
+    );
+  }
+
+  static async getAlertById(id: string): Promise<any> {
+    const { data } = await supabase
+      .from('alerts')
+      .select('*')
+      .eq('id', id)
+      .single();
+    return data;
+  }
+
+  static async getAlerts(userId: string): Promise<any> {
+    return await this.getAlertRules(userId, true);
+  }
+
+  static async updateAlert(id: string, data: any): Promise<any> {
+    return await this.updateAlertRule(id, data.userId, data);
+  }
+
+  static async deleteAlert(id: string): Promise<void> {
+    await this.deleteAlertRule(id, '');
+  }
+
 }
+
 
 
 // Export singleton instance

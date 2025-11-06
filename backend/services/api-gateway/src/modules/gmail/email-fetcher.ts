@@ -48,10 +48,10 @@ export class EmailFetcher {
       return this.normalizeMessage(message);
     } catch (error: any) {
       if (error.code === 404) {
-        logger.warn({ messageId }, "Email not found");
+        logger.warn("Email not found", {  messageId  });
         return null;
       }
-      logger.error({ error, messageId }, "Failed to fetch email");
+      logger.error("Failed to fetch email", {  error, messageId  });
       throw error;
     }
   }
@@ -192,7 +192,7 @@ export class EmailFetcher {
       // Decode
       return Buffer.from(base64, "base64").toString("utf-8");
     } catch (error) {
-      logger.error({ error }, "Failed to decode base64");
+      logger.error("Failed to decode base64", {  error  });
       return "";
     }
   }
@@ -234,7 +234,7 @@ export class EmailFetcher {
 
       return messageIds.slice(0, maxResults);
     } catch (error) {
-      logger.error({ error, query }, "Failed to list messages");
+      logger.error("Failed to list messages", {  error, query  });
       throw error;
     }
   }
@@ -274,10 +274,10 @@ export class EmailFetcher {
     } catch (error: any) {
       // History ID might be too old (expired)
       if (error.code === 404) {
-        logger.warn({ historyId }, "History ID expired or invalid");
+        logger.warn("History ID expired or invalid", {  historyId  });
         return [];
       }
-      logger.error({ error, historyId }, "Failed to get history");
+      logger.error("Failed to get history", {  error, historyId  });
       throw error;
     }
   }

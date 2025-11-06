@@ -31,7 +31,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Check Redis connection
     try {
-      await redis.ping();
+      await redis.set("health:check", "1", "EX", 10);
       health.services.cache = 'ok';
     } catch (redisError) {
       health.services.cache = 'error';

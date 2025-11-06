@@ -99,13 +99,13 @@ export class TokenManager {
         .eq("id", userId);
 
       if (error) {
-        logger.error({ error, userId }, "Failed to store Gmail tokens");
+        logger.error("Failed to store Gmail tokens", {  error, userId  });
         throw new Error("Failed to store tokens");
       }
 
-      logger.info({ userId }, "Gmail tokens stored successfully");
+      logger.info("Gmail tokens stored successfully", {  userId  });
     } catch (error) {
-      logger.error({ error, userId }, "Error storing tokens");
+      logger.error("Error storing tokens", {  error, userId  });
       throw error;
     }
   }
@@ -142,7 +142,7 @@ export class TokenManager {
           : 0,
       };
     } catch (error) {
-      logger.error({ error, userId }, "Error retrieving tokens");
+      logger.error("Error retrieving tokens", {  error, userId  });
       throw error;
     }
   }
@@ -195,14 +195,14 @@ export class TokenManager {
         })
         .eq("id", userId);
 
-      logger.info({ userId }, "Access token refreshed successfully");
+      logger.info("Access token refreshed successfully", {  userId  });
 
       return {
         accessToken: credentials.access_token,
         expiryDate: credentials.expiry_date,
       };
     } catch (error) {
-      logger.error({ error, userId }, "Failed to refresh access token");
+      logger.error("Failed to refresh access token", {  error, userId  });
       throw error;
     }
   }
@@ -243,7 +243,7 @@ export class TokenManager {
         await this.oauth2Client.revokeToken(tokens.refreshToken);
       } catch (error) {
         // Log but don't fail - token might already be invalid
-        logger.warn({ error, userId }, "Failed to revoke token with Google");
+        logger.warn("Failed to revoke token with Google", {  error, userId  });
       }
 
       // Clear from database
@@ -259,9 +259,9 @@ export class TokenManager {
         })
         .eq("id", userId);
 
-      logger.info({ userId }, "Gmail tokens revoked successfully");
+      logger.info("Gmail tokens revoked successfully", {  userId  });
     } catch (error) {
-      logger.error({ error, userId }, "Error revoking tokens");
+      logger.error("Error revoking tokens", {  error, userId  });
       throw error;
     }
   }
