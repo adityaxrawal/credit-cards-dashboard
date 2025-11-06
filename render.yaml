@@ -9,9 +9,9 @@ services:
     region: singapore
     plan: free
     branch: dev-v1
-    rootDir: backend/services/api-gateway
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    rootDir: backend
+    buildCommand: npm install && npm run build --workspace=shared && npm run build --workspace=api-gateway
+    startCommand: npm start --workspace=api-gateway
     healthCheckPath: /health
 
     envVars:
