@@ -1210,7 +1210,10 @@ export class AdvancedAnalyticsService {
   }
 
   static async getAnalytics(userId: string): Promise<any> {
-    return await AdvancedAnalyticsService.getCategoryAnalytics(userId, 'current_month');
+    return await AdvancedAnalyticsService.getCategoryAnalytics(
+      userId,
+      "current_month"
+    );
   }
 
   static async update(id: string, data: any): Promise<any> {
@@ -1220,10 +1223,7 @@ export class AdvancedAnalyticsService {
   static async delete(id: string): Promise<void> {
     // Analytics cannot be deleted
   }
-
 }
-
-
 
 // Export singleton instance
 export const advancedAnalyticsService = new AdvancedAnalyticsService();
