@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { AuthController } from "./auth.controller";
-import { authenticateToken } from "@common/middleware/auth";
+import { authenticate } from "../../common/middleware/auth";
 
 const router = Router();
 
@@ -23,13 +23,13 @@ router.post("/refresh", AuthController.refreshToken);
  * @desc    Logout user
  * @access  Protected
  */
-router.post("/logout", authenticateToken, AuthController.logout);
+router.post("/logout", authenticate, AuthController.logout);
 
 /**
  * @route   GET /api/auth/profile
  * @desc    Get user profile
  * @access  Protected
  */
-router.get("/profile", authenticateToken, AuthController.getProfile);
+router.get("/profile", authenticate, AuthController.getProfile);
 
 export default router;

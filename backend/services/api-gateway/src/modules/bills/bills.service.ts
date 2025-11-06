@@ -1,4 +1,5 @@
-import { AlertService } from "./alert.service";
+// TODO: Fix AlertService import
+// import { enhancedAlertService } from "../alerts/alerts.service";
 import { supabase } from "shared/database/supabase";
 
 /**
@@ -843,7 +844,6 @@ export class BillReminderService {
     return { sent, failed };
   }
 }
-
 
 // Export singleton instance
 export const billReminderService = new BillReminderService();
