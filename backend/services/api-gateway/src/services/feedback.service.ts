@@ -3,14 +3,9 @@
  * Phase 6: Post-Launch & Optimization
  */
 
-import { createClient } from "@supabase/supabase-js";
 import { logger } from "../../../../shared/monitoring/logger";
 import { analyticsService } from "../../../analytics-service/src/analytics.service";
-
-const supabase = createClient(
-  process.env.SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-);
+import { supabase } from "../../../../shared/database/supabase";
 
 export interface Feedback {
   id?: string;
@@ -360,15 +355,21 @@ export class FeedbackService {
         totalNPS > 0 ? ((promoters - detractors) / totalNPS) * 100 : 0;
 
       // Group feedback by type and status
-      const byType = feedbackData?.reduce((acc, item) => {
-        acc[item.feedback_type] = (acc[item.feedback_type] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+      const byType = feedbackData?.reduce(
+        (acc, item) => {
+          acc[item.feedback_type] = (acc[item.feedback_type] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      );
 
-      const byStatus = feedbackData?.reduce((acc, item) => {
-        acc[item.status] = (acc[item.status] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+      const byStatus = feedbackData?.reduce(
+        (acc, item) => {
+          acc[item.status] = (acc[item.status] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      );
 
       return {
         total: feedbackData?.length || 0,

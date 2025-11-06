@@ -1,10 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { supabase } from "../../../../shared/database/supabase";
 
 /**
  * Reward types and their characteristics

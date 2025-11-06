@@ -1,15 +1,10 @@
-import { createClient } from "@supabase/supabase-js";
-
 /**
  * @deprecated This service is part of legacy OCR/statement upload feature
  * Zero-cost architecture uses Gmail-only transaction extraction
  * This file will be removed in a future phase
  */
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { supabase } from "../../../../shared/database/supabase";
 
 /**
  * Extracted transaction from statement (legacy type for reconciliation)

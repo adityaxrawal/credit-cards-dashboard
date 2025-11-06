@@ -1,9 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { supabase } from "../../../../shared/database/supabase";
 
 /**
  * Period type for budgets
@@ -254,11 +249,14 @@ export class EnhancedBudgetService {
     if (error) throw error;
 
     // Aggregate by category
-    const categorySpending = (transactions || []).reduce((acc, t) => {
-      const category = t.merchant_category || "Other";
-      acc[category] = (acc[category] || 0) + Number(t.amount);
-      return acc;
-    }, {} as Record<string, number>);
+    const categorySpending = (transactions || []).reduce(
+      (acc, t) => {
+        const category = t.merchant_category || "Other";
+        acc[category] = (acc[category] || 0) + Number(t.amount);
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
     // Combine with budgets
     return categoryBudgets.map((budget) => {
@@ -268,10 +266,10 @@ export class EnhancedBudgetService {
         percentage >= 100
           ? "exceeded"
           : percentage >= 90
-          ? "critical"
-          : percentage >= 75
-          ? "warning"
-          : "safe";
+            ? "critical"
+            : percentage >= 75
+              ? "warning"
+              : "safe";
 
       return {
         category: budget.category_name,
@@ -399,10 +397,10 @@ export class EnhancedBudgetService {
         percentage >= 100
           ? "exceeded"
           : percentage >= 90
-          ? "critical"
-          : percentage >= 75
-          ? "warning"
-          : "safe";
+            ? "critical"
+            : percentage >= 75
+              ? "warning"
+              : "safe";
 
       return {
         cardId: cb.card_id,
@@ -702,10 +700,10 @@ export class EnhancedBudgetService {
           percentage >= 100
             ? "exceeded"
             : percentage >= 90
-            ? "critical"
-            : percentage >= 75
-            ? "warning"
-            : "safe",
+              ? "critical"
+              : percentage >= 75
+                ? "warning"
+                : "safe",
       },
       monthly: monthlyBudget,
       categories,
@@ -748,11 +746,14 @@ export class EnhancedBudgetService {
   private static aggregateDailySpending(
     transactions: any[]
   ): Record<string, number> {
-    return transactions.reduce((acc, t) => {
-      const date = t.transaction_date.split("T")[0];
-      acc[date] = (acc[date] || 0) + Number(t.amount);
-      return acc;
-    }, {} as Record<string, number>);
+    return transactions.reduce(
+      (acc, t) => {
+        const date = t.transaction_date.split("T")[0];
+        acc[date] = (acc[date] || 0) + Number(t.amount);
+        return acc;
+      },
+      {} as Record<string, number>
+    );
   }
 
   private static generateAdvancedRecommendations(
