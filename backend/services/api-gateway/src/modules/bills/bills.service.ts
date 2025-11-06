@@ -845,6 +845,5 @@ export class BillReminderService {
   }
 }
 
-
 // Export singleton instance
 export const billReminderService = new BillReminderService();
