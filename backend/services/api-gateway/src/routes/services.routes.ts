@@ -28,25 +28,13 @@
  * @see {@link /docs/IMPLEMENTATION_PHASES.md} Implementation Guide
  */
 
-import { Router, Request, Response } from "express";
-import { authenticate } from '@common/middleware/auth';
+import { Router, Response } from "express";
+import { authenticate, AuthRequest } from "@common/middleware/auth";
 import { supabase } from "shared/database/supabase";
 import { redis } from "shared/cache/redis";
 import { logger } from "../utils/logger";
 
 const router = Router();
-
-/**
- * @interface AuthRequest
- * @extends {Request}
- * @description Extended Express Request with authenticated user information
- * @property {string} userId - Authenticated user's UUID from JWT token
- * @property {string} email - Authenticated user's email address
- */
-interface AuthRequest extends Request {
-  userId?: string;
-  email?: string;
-}
 
 /**
  * @route POST /services/update-budget
@@ -197,10 +185,10 @@ router.post(
             percentage >= 100
               ? "exceeded"
               : percentage >= 90
-              ? "critical"
-              : percentage >= 80
-              ? "warning"
-              : "safe",
+                ? "critical"
+                : percentage >= 80
+                  ? "warning"
+                  : "safe",
         },
       });
     } catch (error) {
@@ -455,8 +443,8 @@ router.post(
               daysRemaining === 0
                 ? `${card.card_name} bill due today`
                 : daysRemaining === 1
-                ? `${card.card_name} bill due tomorrow`
-                : `${card.card_name} bill due in ${daysRemaining} days (${dueDate}th)`,
+                  ? `${card.card_name} bill due tomorrow`
+                  : `${card.card_name} bill due in ${daysRemaining} days (${dueDate}th)`,
           });
         }
       }

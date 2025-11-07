@@ -19,7 +19,15 @@
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui",
     "test:coverage": "npm run test:backend -- --coverage && npm run test:frontend -- --coverage",
-    "test:performance": "ts-node scripts/performance-test.ts"
+    "test:performance": "ts-node scripts/performance-test.ts",
+    "typecheck": "cd backend/services/api-gateway && npm run typecheck",
+    "typecheck:strict": "cd backend/services/api-gateway && npm run typecheck:strict",
+    "format:check": "cd backend/services/api-gateway && npm run format:check",
+    "deps:verify": "cd backend/services/api-gateway && npm run deps:verify",
+    "render:simulate": "cd backend/services/api-gateway && npm run render:simulate",
+    "prepush": "npm run deps:verify && npm run typecheck:strict && npm run lint && npm run render:simulate",
+    "setup:quality-gate": "./setup-quality-gate.sh",
+    "prepare": "husky || true"
   },
   "keywords": [
     "credit-card",
@@ -35,5 +43,8 @@
     "backend/services/*",
     "backend/shared",
     "database"
-  ]
+  ],
+  "devDependencies": {
+    "husky": "^9.0.0"
+  }
 }

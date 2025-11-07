@@ -3,6 +3,10 @@ import jwt from "jsonwebtoken";
 import { AppError } from "./errorHandler";
 import redis from "shared/cache/redis";
 
+/**
+ * Extended Express Request with authentication context
+ * Explicitly extends Request to ensure all Express properties are available
+ */
 export interface AuthRequest extends Request {
   userId?: string;
   email?: string;
