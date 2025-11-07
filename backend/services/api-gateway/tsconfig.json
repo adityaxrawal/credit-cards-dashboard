@@ -3,6 +3,8 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
+    "types": ["node", "express"],
+    "moduleResolution": "node",
     "strict": false,
     "noImplicitAny": false,
     "noEmitOnError": false,
