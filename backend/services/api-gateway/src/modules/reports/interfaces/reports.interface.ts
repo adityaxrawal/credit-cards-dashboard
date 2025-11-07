@@ -10,6 +10,5 @@ export interface IReports {
   // Add specific fields based on module
 }
 
-export interface IReportsResponse extends IReports {
-  // Response specific fields
-}
+// Use type alias instead of empty interface
+export type IReportsResponse = IReports;

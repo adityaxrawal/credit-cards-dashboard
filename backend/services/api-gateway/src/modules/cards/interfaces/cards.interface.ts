@@ -10,6 +10,5 @@ export interface ICards {
   // Add specific fields based on module
 }
 
-export interface ICardsResponse extends ICards {
-  // Response specific fields
-}
+// Use type alias instead of empty interface
+export type ICardsResponse = ICards;

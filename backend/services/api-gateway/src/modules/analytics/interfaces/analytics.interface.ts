@@ -10,6 +10,5 @@ export interface IAnalytics {
   // Add specific fields based on module
 }
 
-export interface IAnalyticsResponse extends IAnalytics {
-  // Response specific fields
-}
+// Use type alias instead of empty interface
+export type IAnalyticsResponse = IAnalytics;

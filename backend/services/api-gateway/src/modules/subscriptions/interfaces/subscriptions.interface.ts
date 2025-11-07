@@ -10,6 +10,5 @@ export interface ISubscriptions {
   // Add specific fields based on module
 }
 
-export interface ISubscriptionsResponse extends ISubscriptions {
-  // Response specific fields
-}
+// Use type alias instead of empty interface
+export type ISubscriptionsResponse = ISubscriptions;

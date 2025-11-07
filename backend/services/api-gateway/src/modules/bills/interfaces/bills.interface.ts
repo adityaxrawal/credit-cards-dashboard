@@ -10,6 +10,5 @@ export interface IBills {
   // Add specific fields based on module
 }
 
-export interface IBillsResponse extends IBills {
-  // Response specific fields
-}
+// Use type alias instead of empty interface
+export type IBillsResponse = IBills;
