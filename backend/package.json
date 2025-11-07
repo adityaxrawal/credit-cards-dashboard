@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit --project services/api-gateway/tsconfig.json && tsc --noEmit --project services/shared/tsconfig.json",
     "typecheck:strict": "tsc --noEmit --skipLibCheck false --strict --project services/api-gateway/tsconfig.json",
     "clean": "rm -rf node_modules services/api-gateway/dist services/shared/dist",
-    "prepare": "cd .. && husky install backend/.husky",
+  "prepare": "echo 'husky hooks are managed at repository root (.husky)'",
     "test": "echo \"No tests specified yet\"",
     "pre-push": "npm run lint && npm run typecheck && npm run build",
     "ensure-deps": "bash scripts/ensure-deps.sh",
