@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import { supabase } from "shared/database/supabase";
-import { logger } from "../../utils/logger";
+import { logger } from "shared/monitoring/logger";
 
 /**
  * Token Manager - Securely manages Gmail OAuth tokens
@@ -99,13 +99,13 @@ export class TokenManager {
         .eq("id", userId);
 
       if (error) {
-        logger.error("Failed to store Gmail tokens", {  error, userId  });
+        logger.error("Failed to store Gmail tokens", error as Error);
         throw new Error("Failed to store tokens");
       }
 
       logger.info("Gmail tokens stored successfully", {  userId  });
     } catch (error) {
-      logger.error("Error storing tokens", {  error, userId  });
+      logger.error("Error storing tokens", error as Error);
       throw error;
     }
   }
@@ -142,7 +142,7 @@ export class TokenManager {
           : 0,
       };
     } catch (error) {
-      logger.error("Error retrieving tokens", {  error, userId  });
+      logger.error("Error retrieving tokens", error as Error);
       throw error;
     }
   }
@@ -202,7 +202,7 @@ export class TokenManager {
         expiryDate: credentials.expiry_date,
       };
     } catch (error) {
-      logger.error("Failed to refresh access token", {  error, userId  });
+      logger.error("Failed to refresh access token", error as Error);
       throw error;
     }
   }
@@ -261,7 +261,7 @@ export class TokenManager {
 
       logger.info("Gmail tokens revoked successfully", {  userId  });
     } catch (error) {
-      logger.error("Error revoking tokens", {  error, userId  });
+      logger.error("Error revoking tokens", error as Error);
       throw error;
     }
   }

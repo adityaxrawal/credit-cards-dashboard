@@ -3,8 +3,8 @@
  * Phase 6: Post-Launch & Optimization
  */
 
-import { createClient } from "redis";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import redis from "../cache/redis";
 
 export interface HealthStatus {
   status: "healthy" | "degraded" | "unhealthy";
@@ -68,20 +68,12 @@ async function checkDatabase(): Promise<ServiceHealth> {
  */
 async function checkRedis(): Promise<ServiceHealth> {
   const start = Date.now();
-
   try {
-    const redis = createClient({
-      url: process.env.REDIS_URL || "redis://localhost:6379",
-    });
-
-    await redis.connect();
-    await redis.ping();
-    await redis.quit();
-
+    await redis.set("health:ping", "1", "EX", 10);
+    const val = await redis.get("health:ping");
     const latency = Date.now() - start;
-
     return {
-      status: latency < 50 ? "up" : "degraded",
+      status: val === "1" ? (latency < 50 ? "up" : "degraded") : "down",
       latency,
     };
   } catch (error: any) {

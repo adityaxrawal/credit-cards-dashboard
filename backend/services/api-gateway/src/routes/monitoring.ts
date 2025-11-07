@@ -6,7 +6,7 @@
 import { Router } from "express";
 import { healthCheck } from "shared/monitoring/health-check";
 import { metricsCollector } from "shared/monitoring/metrics-collector";
-import { authenticate } from "@common/middleware/auth";
+import { authenticate, AuthRequest } from "@common/middleware/auth";
 
 const router = Router();
 
@@ -14,16 +14,11 @@ const router = Router();
  * GET /api/monitoring/health
  * Public health check endpoint
  */
-router.get("/health", async (req, res) => {
+router.get("/health", async (_req, res) => {
   try {
     const health = await healthCheck();
 
-    const statusCode =
-      health.status === "healthy"
-        ? 200
-        : health.status === "degraded"
-          ? 200
-          : 503;
+    const statusCode = health.status === "healthy" ? 200 : health.status === "degraded" ? 200 : 503;
 
     res.status(statusCode).json(health);
   } catch (error: any) {
@@ -39,17 +34,23 @@ router.get("/health", async (req, res) => {
  * GET /api/monitoring/metrics
  * Protected metrics summary endpoint (admin only)
  */
-router.get("/metrics", authenticate, async (req, res) => {
+router.get("/metrics", authenticate, async (req: AuthRequest, res) => {
   try {
-    // TODO: Add admin role check
+    if (req.userRole !== "admin") {
+      return res.status(403).json({
+        status: "error",
+        code: "FORBIDDEN",
+        message: "Admin privileges required",
+      });
+    }
     const summary = await metricsCollector.getMetricsSummary();
 
-    res.json({
+    return res.json({
       success: true,
       data: summary,
     });
   } catch (error: any) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message,
     });
@@ -60,7 +61,7 @@ router.get("/metrics", authenticate, async (req, res) => {
  * GET /api/monitoring/status
  * System status overview
  */
-router.get("/status", async (req, res) => {
+router.get("/status", async (_req, res) => {
   try {
     const [health, metrics] = await Promise.all([
       healthCheck(),
@@ -83,7 +84,7 @@ router.get("/status", async (req, res) => {
  * GET /api/monitoring/readiness
  * Kubernetes readiness probe
  */
-router.get("/readiness", async (req, res) => {
+router.get("/readiness", async (_req, res) => {
   try {
     const health = await healthCheck();
 
@@ -91,9 +92,9 @@ router.get("/readiness", async (req, res) => {
       return res.status(503).json({ ready: false });
     }
 
-    res.json({ ready: true });
+    return res.json({ ready: true });
   } catch (error) {
-    res.status(503).json({ ready: false });
+    return res.status(503).json({ ready: false });
   }
 });
 
@@ -101,7 +102,7 @@ router.get("/readiness", async (req, res) => {
  * GET /api/monitoring/liveness
  * Kubernetes liveness probe
  */
-router.get("/liveness", (req, res) => {
+router.get("/liveness", (_req, res) => {
   res.json({ alive: true });
 });
 

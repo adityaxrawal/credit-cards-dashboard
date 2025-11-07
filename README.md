@@ -204,7 +204,8 @@ credit-card-dashboard/
 7. **Access the application**
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:3001
-   - API Health Check: http://localhost:3001/health
+
+- API Health Check: http://localhost:3001/api/monitoring/health
 
 ### Manual Gmail Sync (Zero-Cost Architecture)
 

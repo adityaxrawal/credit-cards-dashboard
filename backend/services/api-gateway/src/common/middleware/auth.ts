@@ -10,16 +10,13 @@ import redis from "shared/cache/redis";
 export interface AuthRequest extends Request {
   userId?: string;
   email?: string;
+  userRole?: string; // simple role flag for admin-only endpoints
 }
 
 /**
  * Middleware to verify JWT token and attach user info to request
  */
-export const authenticate = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
+export const authenticate = async (req: AuthRequest, _res: Response, next: NextFunction) => {
   try {
     const token = req.headers.authorization?.replace("Bearer ", "");
 
@@ -31,6 +28,7 @@ export const authenticate = async (
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
       userId: string;
       email: string;
+      role?: string;
     };
 
     // Check if session exists in Redis
@@ -42,6 +40,7 @@ export const authenticate = async (
     // Attach user info to request
     req.userId = decoded.userId;
     req.email = decoded.email;
+    req.userRole = decoded.role || "user";
 
     next();
   } catch (error) {

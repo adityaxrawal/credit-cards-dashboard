@@ -4,7 +4,7 @@ import { OAuth2Client } from "google-auth-library";
 import { gmail_v1 } from "googleapis";
 import { supabase } from "shared/database/supabase";
 import { createTokenManager, TokenManager } from "./token-manager";
-import { logger } from "../../utils/logger";
+import { logger } from "shared/monitoring/logger";
 
 // Load environment variables
 dotenv.config();
@@ -68,7 +68,7 @@ export class GmailClient {
         expiryDate: tokens.expiry_date!,
       };
     } catch (error) {
-      logger.error("Error exchanging code for tokens", {  error  });
+      logger.error("Error exchanging code for tokens", error as Error);
       throw new Error("Failed to exchange authorization code for tokens");
     }
   }
@@ -95,7 +95,7 @@ export class GmailClient {
 
       return this.gmail;
     } catch (error) {
-      logger.error("Error initializing Gmail for user", {  error, userId  });
+      logger.error("Error initializing Gmail for user", error as Error);
       throw error;
     }
   }
@@ -336,7 +336,7 @@ export class GmailClient {
       await this.tokenManager.revokeTokens(userId);
       logger.info("Gmail disconnected successfully", {  userId  });
     } catch (error) {
-      logger.error("Error disconnecting Gmail", {  error, userId  });
+      logger.error("Error disconnecting Gmail", error as Error);
       throw new Error("Failed to disconnect Gmail");
     }
   }

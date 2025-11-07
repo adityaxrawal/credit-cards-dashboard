@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { BillReminderService } from "./bills.service";
 import { HTTP_STATUS, ERROR_MESSAGES } from "../../constants";
-import { logger } from "../../utils/logger";
+import { logger } from "shared/monitoring/logger";
 
 /**
  * Bills Controller

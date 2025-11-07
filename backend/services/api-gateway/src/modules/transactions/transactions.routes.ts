@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { TransactionsController } from "./transactions.controller";
 import { authenticate } from "@common/middleware/auth";
+import { validateBody } from "../../common/middleware/validation";
+import { CreateTransactionSchema } from "./dto/transaction.dto";
 
 const router = Router();
 
@@ -9,7 +11,12 @@ const router = Router();
  * @desc    Create new transactions
  * @access  Protected
  */
-router.post("/", authenticate, TransactionsController.create);
+router.post(
+  "/",
+  authenticate,
+  validateBody(CreateTransactionSchema),
+  TransactionsController.create
+);
 
 /**
  * @route   GET /api/transactions/:id
