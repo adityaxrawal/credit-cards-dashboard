@@ -21,7 +21,8 @@
     "prepare": "cd .. && husky install backend/.husky",
     "test": "echo \"No tests specified yet\"",
     "pre-push": "npm run lint && npm run typecheck && npm run build",
-    "deps:verify": "node services/api-gateway/scripts/deps-verify.js",
+    "ensure-deps": "bash scripts/ensure-deps.sh",
+    "deps:verify": "npm run ensure-deps && node services/api-gateway/scripts/deps-verify.js",
     "render:simulate": "node services/api-gateway/scripts/render-simulate.js"
   },
   "dependencies": {
