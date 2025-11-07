@@ -72,6 +72,20 @@ const globalLimiter = rateLimit({
 });
 app.use(globalLimiter);
 
+// Root route for health checks
+app.get("/", (_req: Request, res: Response) => {
+  res.json({
+    status: "ok",
+    service: "Credit Card Dashboard API",
+    version: process.env.APP_VERSION || "1.0.0",
+    environment: process.env.NODE_ENV || "development",
+    endpoints: {
+      health: "/api/monitoring/health",
+      docs: "/api/monitoring/status"
+    }
+  });
+});
+
 // Deprecated legacy health path (redirect)
 app.get("/health", (_req: Request, res: Response) => {
   res.redirect(301, "/api/monitoring/health");
