@@ -32,7 +32,9 @@ class UpstashRestRedis {
       const result = (await response.json()) as { result: any };
       return result.result;
     } catch (error) {
-      logger.error(`Upstash Redis error: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(
+        `Upstash Redis error: ${error instanceof Error ? error.message : String(error)}`
+      );
       return null;
     }
   }

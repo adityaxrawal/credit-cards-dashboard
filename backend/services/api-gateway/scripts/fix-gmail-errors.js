@@ -11,10 +11,7 @@ const apiGatewayDir = path.join(__dirname, "..");
 console.log("🔧 Fixing Gmail-related TypeScript errors...\n");
 
 // Fix email-fetcher.ts
-const emailFetcherPath = path.join(
-  apiGatewayDir,
-  "src/modules/gmail/email-fetcher.ts"
-);
+const emailFetcherPath = path.join(apiGatewayDir, "src/modules/gmail/email-fetcher.ts");
 let emailFetcherContent = fs.readFileSync(emailFetcherPath, "utf8");
 
 // Fix error.code type checking
@@ -24,13 +21,13 @@ emailFetcherContent = emailFetcherContent.replace(
 );
 
 emailFetcherContent = emailFetcherContent.replace(
-  "      logger.error(\"Failed to fetch email\", { error, messageId });",
-  "      logger.error(\"Failed to fetch email\", { error: error instanceof Error ? error.message : String(error), messageId });"
+  '      logger.error("Failed to fetch email", { error, messageId });',
+  '      logger.error("Failed to fetch email", { error: error instanceof Error ? error.message : String(error), messageId });'
 );
 
 emailFetcherContent = emailFetcherContent.replace(
-  "      logger.error(\"Failed to list messages\", { error, query });",
-  "      logger.error(\"Failed to list messages\", { error: error instanceof Error ? error.message : String(error), query });"
+  '      logger.error("Failed to list messages", { error, query });',
+  '      logger.error("Failed to list messages", { error: error instanceof Error ? error.message : String(error), query });'
 );
 
 emailFetcherContent = emailFetcherContent.replace(
@@ -39,8 +36,8 @@ emailFetcherContent = emailFetcherContent.replace(
 );
 
 emailFetcherContent = emailFetcherContent.replace(
-  "      logger.error(\"Failed to get history\", { error, historyId });",
-  "      logger.error(\"Failed to get history\", { error: error instanceof Error ? error.message : String(error), historyId });"
+  '      logger.error("Failed to get history", { error, historyId });',
+  '      logger.error("Failed to get history", { error: error instanceof Error ? error.message : String(error), historyId });'
 );
 
 fs.writeFileSync(emailFetcherPath, emailFetcherContent, "utf8");
@@ -54,39 +51,39 @@ const extractorPath = path.join(
 let extractorContent = fs.readFileSync(extractorPath, "utf8");
 
 extractorContent = extractorContent.replace(
-  "      logger.error(\"Extraction failed\", { error, emailId: email.id });",
-  "      logger.error(\"Extraction failed\", { error: error instanceof Error ? error.message : String(error), emailId: email.id });"
+  '      logger.error("Extraction failed", { error, emailId: email.id });',
+  '      logger.error("Extraction failed", { error: error instanceof Error ? error.message : String(error), emailId: email.id });'
 );
 
 // Fix type issues in extractFromMapping
 extractorContent = extractorContent.replace(
-  "    // Extract amount\n    if (mapping.amount !== undefined) {\n      const amountStr = typeof mapping.amount === \"number\" ? match[mapping.amount] : mapping.amount;\n      const amount = this.parseAmount(amountStr);",
+  '    // Extract amount\n    if (mapping.amount !== undefined) {\n      const amountStr = typeof mapping.amount === "number" ? match[mapping.amount] : mapping.amount;\n      const amount = this.parseAmount(amountStr);',
   "    // Extract amount\n    if (mapping.amount !== undefined) {\n      const amountStr = typeof mapping.amount === \"number\" ? match[mapping.amount] : mapping.amount;\n      const amount = this.parseAmount(String(amountStr || ''));"
 );
 
 extractorContent = extractorContent.replace(
   "    // Extract transaction type\n    if (mapping.transactionType) {\n      extracted.transactionType = mapping.transactionType;",
-  "    // Extract transaction type\n    if (mapping.transactionType) {\n      extracted.transactionType = mapping.transactionType as \"debit\" | \"credit\" | \"refund\";"
+  '    // Extract transaction type\n    if (mapping.transactionType) {\n      extracted.transactionType = mapping.transactionType as "debit" | "credit" | "refund";'
 );
 
 extractorContent = extractorContent.replace(
-  "    // Extract merchant\n    if (mapping.merchant !== undefined) {\n      const merchantStr =\n        typeof mapping.merchant === \"number\" ? match[mapping.merchant] : mapping.merchant;\n      extracted.merchant = this.cleanMerchantName(merchantStr);",
+  '    // Extract merchant\n    if (mapping.merchant !== undefined) {\n      const merchantStr =\n        typeof mapping.merchant === "number" ? match[mapping.merchant] : mapping.merchant;\n      extracted.merchant = this.cleanMerchantName(merchantStr);',
   "    // Extract merchant\n    if (mapping.merchant !== undefined) {\n      const merchantStr =\n        typeof mapping.merchant === \"number\" ? match[mapping.merchant] : mapping.merchant;\n      extracted.merchant = this.cleanMerchantName(String(merchantStr || ''));"
 );
 
 extractorContent = extractorContent.replace(
-  "    // Extract card last 4\n    if (mapping.cardLast4 !== undefined) {\n      const cardStr =\n        typeof mapping.cardLast4 === \"number\" ? match[mapping.cardLast4] : mapping.cardLast4;\n      extracted.cardLast4 = cardStr?.trim();",
+  '    // Extract card last 4\n    if (mapping.cardLast4 !== undefined) {\n      const cardStr =\n        typeof mapping.cardLast4 === "number" ? match[mapping.cardLast4] : mapping.cardLast4;\n      extracted.cardLast4 = cardStr?.trim();',
   "    // Extract card last 4\n    if (mapping.cardLast4 !== undefined) {\n      const cardStr =\n        typeof mapping.cardLast4 === \"number\" ? match[mapping.cardLast4] : mapping.cardLast4;\n      extracted.cardLast4 = String(cardStr || '').trim();"
 );
 
 extractorContent = extractorContent.replace(
-  "    // Extract balance\n    if (mapping.balance !== undefined) {\n      const balanceStr =\n        typeof mapping.balance === \"number\" ? match[mapping.balance] : mapping.balance;\n      const balance = this.parseAmount(balanceStr);",
+  '    // Extract balance\n    if (mapping.balance !== undefined) {\n      const balanceStr =\n        typeof mapping.balance === "number" ? match[mapping.balance] : mapping.balance;\n      const balance = this.parseAmount(balanceStr);',
   "    // Extract balance\n    if (mapping.balance !== undefined) {\n      const balanceStr =\n        typeof mapping.balance === \"number\" ? match[mapping.balance] : mapping.balance;\n      const balance = this.parseAmount(String(balanceStr || ''));"
 );
 
 extractorContent = extractorContent.replace(
-  "    // Currency\n    extracted.currency = mapping.currency || \"INR\";",
-  "    // Currency\n    extracted.currency = (mapping.currency as string) || \"INR\";"
+  '    // Currency\n    extracted.currency = mapping.currency || "INR";',
+  '    // Currency\n    extracted.currency = (mapping.currency as string) || "INR";'
 );
 
 fs.writeFileSync(extractorPath, extractorContent, "utf8");
