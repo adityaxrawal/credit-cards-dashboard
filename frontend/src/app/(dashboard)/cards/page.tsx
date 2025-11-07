@@ -322,11 +322,7 @@ function CardItem({
         </div>
 
         <div className="flex items-center justify-between pt-2 border-t border-muted-text/10">
-          <Badge
-            label="Active"
-            variant="success"
-            size="sm"
-          />
+          <Badge label="Active" variant="success" size="sm" />
 
           <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
