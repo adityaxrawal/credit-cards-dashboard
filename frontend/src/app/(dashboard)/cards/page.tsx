@@ -323,8 +323,8 @@ function CardItem({
 
         <div className="flex items-center justify-between pt-2 border-t border-muted-text/10">
           <Badge
-            label={card.is_active ? "Active" : "Inactive"}
-            variant={card.is_active ? "success" : "default"}
+            label="Active"
+            variant="success"
             size="sm"
           />
 

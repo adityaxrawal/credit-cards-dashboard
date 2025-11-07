@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiGet, apiPost, apiPut, apiDelete } from "./client";
 
 export interface Card {
   id: string;
@@ -41,32 +41,30 @@ export const cardApi = {
    * Get all cards for the authenticated user
    */
   getCards: async (): Promise<Card[]> => {
-    const response = await apiClient.get("/cards");
-    return response.data.data;
+    return apiGet<{ data: Card[] }>("/cards").then((res) => res.data);
   },
 
   /**
    * Get a single card by ID
    */
   getCard: async (cardId: string): Promise<Card> => {
-    const response = await apiClient.get(`/cards/${cardId}`);
-    return response.data.data;
+    return apiGet<{ data: Card }>(`/cards/${cardId}`).then((res) => res.data);
   },
 
   /**
    * Get statistics for a card
    */
   getCardStatistics: async (cardId: string): Promise<CardStatistics> => {
-    const response = await apiClient.get(`/cards/${cardId}/statistics`);
-    return response.data.data;
+    return apiGet<{ data: CardStatistics }>(`/cards/${cardId}/statistics`).then(
+      (res) => res.data
+    );
   },
 
   /**
    * Create a new card
    */
   createCard: async (data: CardFormData): Promise<Card> => {
-    const response = await apiClient.post("/cards", data);
-    return response.data.data;
+    return apiPost<{ data: Card }>("/cards", data).then((res) => res.data);
   },
 
   /**
@@ -76,14 +74,15 @@ export const cardApi = {
     cardId: string,
     data: Partial<CardFormData>
   ): Promise<Card> => {
-    const response = await apiClient.put(`/cards/${cardId}`, data);
-    return response.data.data;
+    return apiPut<{ data: Card }>(`/cards/${cardId}`, data).then(
+      (res) => res.data
+    );
   },
 
   /**
    * Delete a card
    */
   deleteCard: async (cardId: string): Promise<void> => {
-    await apiClient.delete(`/cards/${cardId}`);
+    await apiDelete<void>(`/cards/${cardId}`);
   },
 };

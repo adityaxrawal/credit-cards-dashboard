@@ -7,7 +7,6 @@ import {
   Download,
   Filter as FilterIcon,
   X,
-  Search,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout";
@@ -330,7 +329,7 @@ export default function TransactionsPage() {
             Edit
           </Button>
           <Button
-            variant="danger"
+            variant="destructive"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
@@ -370,7 +369,6 @@ export default function TransactionsPage() {
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
               className="w-full"
-              icon={<Search className="w-4 h-4" />}
             />
           </div>
 

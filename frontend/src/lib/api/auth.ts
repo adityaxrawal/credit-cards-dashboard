@@ -1,4 +1,4 @@
-import apiClient from "./client";
+import { apiGet, apiPost } from "./client";
 import type { AuthResponse } from "@/types";
 
 export const authApi = {
@@ -6,34 +6,31 @@ export const authApi = {
    * Exchange Google OAuth code for access token
    */
   async googleLogin(code: string): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>("/auth/google", {
+    return apiPost<AuthResponse>("/auth/google", {
       code,
     });
-    return response.data;
   },
 
   /**
    * Refresh access token
    */
   async refreshToken(refreshToken: string): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>("/auth/refresh", {
+    return apiPost<AuthResponse>("/auth/refresh", {
       refreshToken,
     });
-    return response.data;
   },
 
   /**
    * Logout user
    */
   async logout(): Promise<void> {
-    await apiClient.post("/auth/logout");
+    await apiPost<void>("/auth/logout");
   },
 
   /**
    * Get current user info
    */
   async getCurrentUser() {
-    const response = await apiClient.get("/auth/me");
-    return response.data;
+    return apiGet("/auth/me");
   },
 };
