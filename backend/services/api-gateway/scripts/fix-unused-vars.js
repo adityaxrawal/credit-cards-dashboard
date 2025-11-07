@@ -57,7 +57,7 @@ const fixes = [
     replacements: [
       {
         from: "      logger.error(`Get all analytics failed: ${error.message}`);",
-        to: '      logger.error(`Get all analytics failed: ${error instanceof Error ? error.message : String(error)}`);',
+        to: "      logger.error(`Get all analytics failed: ${error instanceof Error ? error.message : String(error)}`);",
       },
     ],
   },
