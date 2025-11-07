@@ -46,5 +46,8 @@
   ],
   "devDependencies": {
     "husky": "^9.0.0"
+  },
+  "dependencies": {
+    "redis": "^4.7.1"
   }
 }

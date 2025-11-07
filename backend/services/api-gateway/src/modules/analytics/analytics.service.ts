@@ -103,17 +103,10 @@ export class AdvancedAnalyticsService {
     const previousPeriodRange = this.getPreviousPeriodRange(period);
 
     // Calculate KPIs
-    const kpis = await this.calculateKPIs(
-      userId,
-      dateRange,
-      previousPeriodRange
-    );
+    const kpis = await this.calculateKPIs(userId, dateRange, previousPeriodRange);
 
     // Calculate financial health score
-    const healthComponents = await this.calculateFinancialHealth(
-      userId,
-      dateRange
-    );
+    const healthComponents = await this.calculateFinancialHealth(userId, dateRange);
     const financialHealthScore = Object.values(healthComponents).reduce(
       (sum, score) => sum + score,
       0
@@ -165,11 +158,7 @@ export class AdvancedAnalyticsService {
    */
   static async getCategoryAnalytics(
     userId: string,
-    period:
-      | "current_month"
-      | "last_3_months"
-      | "last_6_months"
-      | "last_year" = "current_month"
+    period: "current_month" | "last_3_months" | "last_6_months" | "last_year" = "current_month"
   ): Promise<{
     categories: CategoryAnalytics[];
     insights: string[];
@@ -192,22 +181,14 @@ export class AdvancedAnalyticsService {
    */
   static async getMerchantAnalytics(
     userId: string,
-    period:
-      | "current_month"
-      | "last_3_months"
-      | "last_6_months"
-      | "last_year" = "current_month",
+    period: "current_month" | "last_3_months" | "last_6_months" | "last_year" = "current_month",
     limit: number = 20
   ): Promise<{
     merchants: MerchantAnalytics[];
     insights: string[];
   }> {
     const dateRange = this.getDateRange(period);
-    const merchants = await this.calculateMerchantAnalytics(
-      userId,
-      dateRange,
-      limit
-    );
+    const merchants = await this.calculateMerchantAnalytics(userId, dateRange, limit);
     const insights = this.generateMerchantInsights(merchants);
 
     return {
@@ -221,11 +202,7 @@ export class AdvancedAnalyticsService {
    */
   static async getCardComparison(
     userId: string,
-    period:
-      | "current_month"
-      | "last_3_months"
-      | "last_6_months"
-      | "last_year" = "current_month"
+    period: "current_month" | "last_3_months" | "last_6_months" | "last_year" = "current_month"
   ): Promise<{
     cards: CardComparison[];
     recommendations: string[];
@@ -332,18 +309,13 @@ export class AdvancedAnalyticsService {
     const previousTransactionCount = (previousTransactions || []).length;
 
     const avgTransaction =
-      currentTransactionCount > 0
-        ? currentSpending / currentTransactionCount
-        : 0;
+      currentTransactionCount > 0 ? currentSpending / currentTransactionCount : 0;
     const prevAvgTransaction =
-      previousTransactionCount > 0
-        ? previousSpending / previousTransactionCount
-        : 0;
+      previousTransactionCount > 0 ? previousSpending / previousTransactionCount : 0;
 
     // Calculate daily spending rate
     const daysInPeriod = Math.ceil(
-      (currentRange.end.getTime() - currentRange.start.getTime()) /
-        (1000 * 60 * 60 * 24)
+      (currentRange.end.getTime() - currentRange.start.getTime()) / (1000 * 60 * 60 * 24)
     );
     const dailySpending = currentSpending / daysInPeriod;
 
@@ -375,8 +347,7 @@ export class AdvancedAnalyticsService {
         value: currentTransactionCount,
         change:
           previousTransactionCount > 0
-            ? ((currentTransactionCount - previousTransactionCount) /
-                previousTransactionCount) *
+            ? ((currentTransactionCount - previousTransactionCount) / previousTransactionCount) *
               100
             : 0,
         changeType:
@@ -402,8 +373,7 @@ export class AdvancedAnalyticsService {
             : avgTransaction < prevAvgTransaction
               ? "decrease"
               : "stable",
-        trend:
-          avgTransaction > prevAvgTransaction * 1.2 ? "negative" : "neutral",
+        trend: avgTransaction > prevAvgTransaction * 1.2 ? "negative" : "neutral",
         description: "Average amount per transaction",
       },
       {
@@ -422,32 +392,22 @@ export class AdvancedAnalyticsService {
     dateRange: { start: Date; end: Date }
   ): Promise<FinancialHealthComponents> {
     // Get budget adherence score
-    const budgetAdherence = await this.calculateBudgetAdherenceScore(
-      userId,
-      dateRange
-    );
+    const budgetAdherence = await this.calculateBudgetAdherenceScore(userId, dateRange);
 
     // Get spending velocity score
-    const spendingVelocity = await this.calculateSpendingVelocityScore(
-      userId,
-      dateRange
-    );
+    const spendingVelocity = await this.calculateSpendingVelocityScore(userId, dateRange);
 
     // Get category diversification score
-    const categoryDiversification =
-      await this.calculateCategoryDiversificationScore(userId, dateRange);
+    const categoryDiversification = await this.calculateCategoryDiversificationScore(
+      userId,
+      dateRange
+    );
 
     // Get card utilization score
-    const cardUtilization = await this.calculateCardUtilizationScore(
-      userId,
-      dateRange
-    );
+    const cardUtilization = await this.calculateCardUtilizationScore(userId, dateRange);
 
     // Get consistency score
-    const consistencyScore = await this.calculateConsistencyScore(
-      userId,
-      dateRange
-    );
+    const consistencyScore = await this.calculateConsistencyScore(userId, dateRange);
 
     return {
       budgetAdherence,
@@ -506,17 +466,12 @@ export class AdvancedAnalyticsService {
     const dailySpending = new Map<string, number>();
     transactions.forEach((t: any) => {
       const date = new Date(t.transaction_date).toISOString().split("T")[0];
-      dailySpending.set(
-        date,
-        (dailySpending.get(date) || 0) + Number(t.amount)
-      );
+      dailySpending.set(date, (dailySpending.get(date) || 0) + Number(t.amount));
     });
 
     const amounts = Array.from(dailySpending.values());
     const avg = amounts.reduce((sum, amt) => sum + amt, 0) / amounts.length;
-    const variance =
-      amounts.reduce((sum, amt) => sum + Math.pow(amt - avg, 2), 0) /
-      amounts.length;
+    const variance = amounts.reduce((sum, amt) => sum + Math.pow(amt - avg, 2), 0) / amounts.length;
     const coefficient = Math.sqrt(variance) / avg;
 
     // Lower coefficient of variation = higher score (more consistent spending)
@@ -547,10 +502,7 @@ export class AdvancedAnalyticsService {
     transactions.forEach((t: any) => {
       const category = t.merchant_category || "Other";
       const amount = Number(t.amount);
-      categorySpending.set(
-        category,
-        (categorySpending.get(category) || 0) + amount
-      );
+      categorySpending.set(category, (categorySpending.get(category) || 0) + amount);
       totalSpending += amount;
     });
 
@@ -634,19 +586,14 @@ export class AdvancedAnalyticsService {
     const monthlySpending = new Map<string, number>();
     transactions.forEach((t: any) => {
       const monthKey = new Date(t.transaction_date).toISOString().substr(0, 7); // YYYY-MM
-      monthlySpending.set(
-        monthKey,
-        (monthlySpending.get(monthKey) || 0) + Number(t.amount)
-      );
+      monthlySpending.set(monthKey, (monthlySpending.get(monthKey) || 0) + Number(t.amount));
     });
 
     if (monthlySpending.size < 2) return 15;
 
     const amounts = Array.from(monthlySpending.values());
     const avg = amounts.reduce((sum, amt) => sum + amt, 0) / amounts.length;
-    const variance =
-      amounts.reduce((sum, amt) => sum + Math.pow(amt - avg, 2), 0) /
-      amounts.length;
+    const variance = amounts.reduce((sum, amt) => sum + Math.pow(amt - avg, 2), 0) / amounts.length;
     const coefficient = Math.sqrt(variance) / avg;
 
     // Lower coefficient = higher consistency score
@@ -703,27 +650,19 @@ export class AdvancedAnalyticsService {
     const firstHalf = trends.slice(0, Math.floor(trends.length / 2));
     const secondHalf = trends.slice(Math.floor(trends.length / 2));
 
-    const firstAvg =
-      firstHalf.reduce((sum, t) => sum + t.value, 0) / firstHalf.length;
-    const secondAvg =
-      secondHalf.reduce((sum, t) => sum + t.value, 0) / secondHalf.length;
+    const firstAvg = firstHalf.reduce((sum, t) => sum + t.value, 0) / firstHalf.length;
+    const secondAvg = secondHalf.reduce((sum, t) => sum + t.value, 0) / secondHalf.length;
 
     const direction =
-      secondAvg > firstAvg * 1.1
-        ? "upward"
-        : secondAvg < firstAvg * 0.9
-          ? "downward"
-          : "stable";
+      secondAvg > firstAvg * 1.1 ? "upward" : secondAvg < firstAvg * 0.9 ? "downward" : "stable";
 
     // Calculate volatility
     const values = trends.map((t) => t.value);
     const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
-    const variance =
-      values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length;
+    const variance = values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length;
     const coefficient = Math.sqrt(variance) / avg;
 
-    const volatility =
-      coefficient > 0.5 ? "high" : coefficient > 0.2 ? "medium" : "low";
+    const volatility = coefficient > 0.5 ? "high" : coefficient > 0.2 ? "medium" : "low";
 
     // Simple seasonality detection (placeholder)
     const seasonality = false; // Would need more sophisticated analysis
@@ -731,10 +670,7 @@ export class AdvancedAnalyticsService {
     return { direction, volatility, seasonality };
   }
 
-  private static generateProjection(
-    trends: TrendPoint[],
-    periods: number
-  ): TrendPoint[] {
+  private static generateProjection(trends: TrendPoint[], periods: number): TrendPoint[] {
     if (trends.length < 2) return [];
 
     // Simple linear projection
@@ -810,8 +746,7 @@ export class AdvancedAnalyticsService {
       category: data.category,
       totalSpent: Math.round(data.totalSpent * 100) / 100,
       transactionCount: data.transactionCount,
-      averageTransaction:
-        Math.round((data.totalSpent / data.transactionCount) * 100) / 100,
+      averageTransaction: Math.round((data.totalSpent / data.transactionCount) * 100) / 100,
       percentage: Math.round((data.totalSpent / totalSpending) * 10000) / 100,
       monthlyGrowth: 0, // Would need previous period comparison
       topMerchants: Array.from(data.merchants.entries())
@@ -872,8 +807,7 @@ export class AdvancedAnalyticsService {
         merchant: data.merchant,
         totalSpent: Math.round(data.totalSpent * 100) / 100,
         transactionCount: data.transactionCount,
-        averageTransaction:
-          Math.round((data.totalSpent / data.transactionCount) * 100) / 100,
+        averageTransaction: Math.round((data.totalSpent / data.transactionCount) * 100) / 100,
         category: data.category,
         lastTransactionDate: data.lastTransactionDate,
         frequency: this.calculateFrequency(data.dates, dateRange) as
@@ -926,10 +860,7 @@ export class AdvancedAnalyticsService {
         continue;
       }
 
-      const totalSpent = transactions.reduce(
-        (sum, t: any) => sum + Number(t.amount),
-        0
-      );
+      const totalSpent = transactions.reduce((sum, t: any) => sum + Number(t.amount), 0);
       const categoryCount = new Map<string, number>();
 
       transactions.forEach((t: any) => {
@@ -938,20 +869,16 @@ export class AdvancedAnalyticsService {
       });
 
       const mostUsedCategory =
-        Array.from(categoryCount.entries()).sort(
-          ([, a], [, b]) => b - a
-        )[0]?.[0] || "Other";
+        Array.from(categoryCount.entries()).sort(([, a], [, b]) => b - a)[0]?.[0] || "Other";
 
-      const utilizationRate =
-        card.credit_limit > 0 ? (totalSpent / card.credit_limit) * 100 : 0;
+      const utilizationRate = card.credit_limit > 0 ? (totalSpent / card.credit_limit) * 100 : 0;
 
       cardComparisons.push({
         cardId: card.id,
         cardName: card.card_name,
         totalSpent: Math.round(totalSpent * 100) / 100,
         transactionCount: transactions.length,
-        averageTransaction:
-          Math.round((totalSpent / transactions.length) * 100) / 100,
+        averageTransaction: Math.round((totalSpent / transactions.length) * 100) / 100,
         mostUsedCategory,
         utilizationRate: Math.round(utilizationRate * 100) / 100,
         monthlyGrowth: 0, // Would need previous period comparison
@@ -962,23 +889,18 @@ export class AdvancedAnalyticsService {
     return cardComparisons;
   }
 
-  private static calculateFrequency(
-    dates: Date[],
-    dateRange: { start: Date; end: Date }
-  ): string {
+  private static calculateFrequency(dates: Date[], dateRange: { start: Date; end: Date }): string {
     if (dates.length <= 1) return "occasional";
 
     dates.sort((a, b) => a.getTime() - b.getTime());
-    const intervals = [];
+    const intervals: number[] = [];
 
     for (let i = 1; i < dates.length; i++) {
-      const interval =
-        (dates[i].getTime() - dates[i - 1].getTime()) / (1000 * 60 * 60 * 24);
+      const interval = (dates[i].getTime() - dates[i - 1].getTime()) / (1000 * 60 * 60 * 24);
       intervals.push(interval);
     }
 
-    const avgInterval =
-      intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
+    const avgInterval = intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
 
     if (avgInterval <= 3) return "daily";
     if (avgInterval <= 10) return "weekly";
@@ -1013,11 +935,9 @@ export class AdvancedAnalyticsService {
     } else if (healthScore >= 60) {
       summary += "Good financial habits with room for improvement. ";
     } else if (healthScore >= 40) {
-      summary +=
-        "Moderate financial health - consider reviewing your spending patterns. ";
+      summary += "Moderate financial health - consider reviewing your spending patterns. ";
     } else {
-      summary +=
-        "Consider implementing better budgeting and spending controls. ";
+      summary += "Consider implementing better budgeting and spending controls. ";
     }
 
     if (Math.abs(spendingTrend) > 20) {
@@ -1029,13 +949,10 @@ export class AdvancedAnalyticsService {
     return summary;
   }
 
-  private static generateCategoryInsights(
-    categories: CategoryAnalytics[]
-  ): string[] {
+  private static generateCategoryInsights(categories: CategoryAnalytics[]): string[] {
     const insights: string[] = [];
 
-    if (categories.length === 0)
-      return ["No spending data available for analysis."];
+    if (categories.length === 0) return ["No spending data available for analysis."];
 
     const topCategory = categories[0];
     insights.push(
@@ -1051,23 +968,17 @@ export class AdvancedAnalyticsService {
 
     const diversificationScore = categories.length;
     if (diversificationScore >= 6) {
-      insights.push(
-        "Good spending diversification across multiple categories."
-      );
+      insights.push("Good spending diversification across multiple categories.");
     } else if (diversificationScore >= 4) {
       insights.push("Moderate spending diversification.");
     } else {
-      insights.push(
-        "Limited spending diversification - consider exploring different categories."
-      );
+      insights.push("Limited spending diversification - consider exploring different categories.");
     }
 
     return insights;
   }
 
-  private static generateCategoryRecommendations(
-    categories: CategoryAnalytics[]
-  ): string[] {
+  private static generateCategoryRecommendations(categories: CategoryAnalytics[]): string[] {
     const recommendations: string[] = [];
 
     if (categories.length === 0) return [];
@@ -1079,29 +990,22 @@ export class AdvancedAnalyticsService {
       );
     }
 
-    const highAvgCategories = categories.filter(
-      (c) => c.averageTransaction > 2000
-    );
+    const highAvgCategories = categories.filter((c) => c.averageTransaction > 2000);
     if (highAvgCategories.length > 0) {
       recommendations.push(
         `Review high-value transactions in: ${highAvgCategories.map((c) => c.category).join(", ")}.`
       );
     }
 
-    recommendations.push(
-      "Set category-specific budgets to better control spending in each area."
-    );
+    recommendations.push("Set category-specific budgets to better control spending in each area.");
 
     return recommendations;
   }
 
-  private static generateMerchantInsights(
-    merchants: MerchantAnalytics[]
-  ): string[] {
+  private static generateMerchantInsights(merchants: MerchantAnalytics[]): string[] {
     const insights: string[] = [];
 
-    if (merchants.length === 0)
-      return ["No merchant data available for analysis."];
+    if (merchants.length === 0) return ["No merchant data available for analysis."];
 
     const topMerchant = merchants[0];
     insights.push(
@@ -1117,9 +1021,7 @@ export class AdvancedAnalyticsService {
       );
     }
 
-    const highValueMerchants = merchants.filter(
-      (m) => m.averageTransaction > 1000
-    );
+    const highValueMerchants = merchants.filter((m) => m.averageTransaction > 1000);
     if (highValueMerchants.length > 0) {
       insights.push(
         `${highValueMerchants.length} merchants have high average transaction values (>₹1,000).`
@@ -1129,16 +1031,12 @@ export class AdvancedAnalyticsService {
     return insights;
   }
 
-  private static generateCardRecommendations(
-    cards: CardComparison[]
-  ): string[] {
+  private static generateCardRecommendations(cards: CardComparison[]): string[] {
     const recommendations: string[] = [];
 
     if (cards.length === 0) return [];
 
-    const underutilizedCards = cards.filter(
-      (c) => c.utilizationRate < 5 && c.transactionCount < 2
-    );
+    const underutilizedCards = cards.filter((c) => c.utilizationRate < 5 && c.transactionCount < 2);
     if (underutilizedCards.length > 0) {
       recommendations.push(
         `Consider using or closing underutilized cards: ${underutilizedCards.map((c) => c.cardName).join(", ")}.`
@@ -1168,27 +1066,19 @@ export class AdvancedAnalyticsService {
       .filter((c) => c.utilizationRate < 5 && c.transactionCount < 2)
       .map((c) => c.cardName);
 
-    const overusedCards = cards
-      .filter((c) => c.utilizationRate > 30)
-      .map((c) => c.cardName);
+    const overusedCards = cards.filter((c) => c.utilizationRate > 30).map((c) => c.cardName);
 
     const suggestions: string[] = [];
 
     if (underutilizedCards.length > 0) {
-      suggestions.push(
-        "Use underutilized cards occasionally to keep them active."
-      );
+      suggestions.push("Use underutilized cards occasionally to keep them active.");
     }
 
     if (overusedCards.length > 0) {
-      suggestions.push(
-        "Reduce utilization on overused cards to improve credit score."
-      );
+      suggestions.push("Reduce utilization on overused cards to improve credit score.");
     }
 
-    suggestions.push(
-      "Consider card-specific benefits when choosing which card to use."
-    );
+    suggestions.push("Consider card-specific benefits when choosing which card to use.");
 
     return {
       underutilizedCards,
@@ -1210,10 +1100,7 @@ export class AdvancedAnalyticsService {
   }
 
   static async getAnalytics(userId: string): Promise<any> {
-    return await AdvancedAnalyticsService.getCategoryAnalytics(
-      userId,
-      "current_month"
-    );
+    return await AdvancedAnalyticsService.getCategoryAnalytics(userId, "current_month");
   }
 
   static async update(id: string, data: any): Promise<any> {

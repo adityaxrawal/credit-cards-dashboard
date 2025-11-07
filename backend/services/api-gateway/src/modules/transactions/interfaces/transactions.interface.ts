@@ -10,6 +10,5 @@ export interface ITransactions {
   // Add specific fields based on module
 }
 
-export interface ITransactionsResponse extends ITransactions {
-  // Response specific fields
-}
+// Use type alias instead of empty interface
+export type ITransactionsResponse = ITransactions;

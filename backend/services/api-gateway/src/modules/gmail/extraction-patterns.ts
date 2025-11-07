@@ -41,22 +41,16 @@ const HDFC_PATTERNS: ExtractionPattern = {
       /transaction of (?:rs\.?|inr|₹)?\s*([\d,]+\.?\d*)/gi,
     ],
     merchant: [
-      /(?:at|on|to)\s+([A-Z][A-Z0-9\s&\-\.]+?)(?:\s+on|\s+for|\s+amounting|\s+of|\.|\s*$)/gi,
-      /(?:merchant|vendor)[\s:]+([A-Z][A-Z0-9\s&\-\.]+?)(?:\s+on|\.|$)/gi,
+      /(?:at|on|to)\s+([A-Z][A-Z0-9\s&\-.]+?)(?:\s+on|\s+for|\s+amounting|\s+of|\.|\s*$)/gi,
+      /(?:merchant|vendor)[\s:]+([A-Z][A-Z0-9\s&\-.]+?)(?:\s+on|\.|$)/gi,
     ],
     date: [
-      /on\s+(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/gi,
-      /date[\s:]+(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/gi,
+      /on\s+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/gi,
+      /date[\s:]+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/gi,
       /(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4})/gi,
     ],
-    cardLastFour: [
-      /card\s+(?:ending|no\.?|number)[\s:]+\*+(\d{4})/gi,
-      /xx+(\d{4})/gi,
-    ],
-    transactionType: [
-      /(debited|spent|charged|purchase)/gi,
-      /(credited|refund|reversal)/gi,
-    ],
+    cardLastFour: [/card\s+(?:ending|no\.?|number)[\s:]+\*+(\d{4})/gi, /xx+(\d{4})/gi],
+    transactionType: [/(debited|spent|charged|purchase)/gi, /(credited|refund|reversal)/gi],
   },
   examples: [
     "Rs 1,234.56 spent on SWIGGY on 15/01/2024 using Card xx1234",
@@ -75,25 +69,12 @@ const SBI_PATTERNS: ExtractionPattern = {
       /(?:rs\.?|inr|₹)\s*([\d,]+\.?\d*)/gi,
       /(?:amount|value)[\s:]+(?:rs\.?|inr|₹)?\s*([\d,]+\.?\d*)/gi,
     ],
-    merchant: [
-      /(?:at|on)\s+([A-Z][A-Z0-9\s&\-\.]+?)(?:\s+on|\s+dated|\.|\s*$)/gi,
-    ],
-    date: [
-      /(?:on|dated)\s+(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/gi,
-      /(\d{1,2}-[A-Z][a-z]{2}-\d{2,4})/gi,
-    ],
-    cardLastFour: [
-      /card\s+ending[\s:]+(\d{4})/gi,
-      /card\s+xx+(\d{4})/gi,
-    ],
-    transactionType: [
-      /(purchase|transaction|spent)/gi,
-      /(credit|refund)/gi,
-    ],
+    merchant: [/(?:at|on)\s+([A-Z][A-Z0-9\s&\-.]+?)(?:\s+on|\s+dated|\.|\s*$)/gi],
+    date: [/(?:on|dated)\s+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/gi, /(\d{1,2}-[A-Z][a-z]{2}-\d{2,4})/gi],
+    cardLastFour: [/card\s+ending[\s:]+(\d{4})/gi, /card\s+xx+(\d{4})/gi],
+    transactionType: [/(purchase|transaction|spent)/gi, /(credit|refund)/gi],
   },
-  examples: [
-    "SBI Card transaction of Rs. 2,500 at FLIPKART on 15/01/2024",
-  ],
+  examples: ["SBI Card transaction of Rs. 2,500 at FLIPKART on 15/01/2024"],
 };
 
 /**
@@ -107,24 +88,12 @@ const ICICI_PATTERNS: ExtractionPattern = {
       /(?:rs\.?|inr|₹)\s*([\d,]+\.?\d*)/gi,
       /transaction of (?:rs\.?|inr|₹)?\s*([\d,]+\.?\d*)/gi,
     ],
-    merchant: [
-      /(?:at|on)\s+([A-Z][A-Z0-9\s&\-\.]+?)(?:\s+on|\.|\s*$)/gi,
-    ],
-    date: [
-      /on\s+(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/gi,
-      /(\d{2}-[A-Z][a-z]{2}-\d{4})/gi,
-    ],
-    cardLastFour: [
-      /card\s+(?:ending|no)[\s:]+xx+(\d{4})/gi,
-    ],
-    transactionType: [
-      /(debited|spent)/gi,
-      /(credited|refund)/gi,
-    ],
+    merchant: [/(?:at|on)\s+([A-Z][A-Z0-9\s&\-\.]+?)(?:\s+on|\.|\s*$)/gi],
+    date: [/on\s+(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/gi, /(\d{2}-[A-Z][a-z]{2}-\d{4})/gi],
+    cardLastFour: [/card\s+(?:ending|no)[\s:]+xx+(\d{4})/gi],
+    transactionType: [/(debited|spent)/gi, /(credited|refund)/gi],
   },
-  examples: [
-    "ICICI Bank Credit Card transaction of Rs. 1,500 at ZOMATO on 01/02/2024",
-  ],
+  examples: ["ICICI Bank Credit Card transaction of Rs. 1,500 at ZOMATO on 01/02/2024"],
 };
 
 /**
@@ -134,27 +103,13 @@ const AXIS_PATTERNS: ExtractionPattern = {
   bankCode: "axis",
   bankName: "Axis Bank",
   patterns: {
-    amount: [
-      /(?:rs\.?|inr|₹)\s*([\d,]+\.?\d*)/gi,
-      /amt[\s:]+(?:rs\.?|inr|₹)?\s*([\d,]+\.?\d*)/gi,
-    ],
-    merchant: [
-      /(?:at|on)\s+([A-Z][A-Z0-9\s&\-\.]+?)(?:\s+on|\.|\s*$)/gi,
-    ],
-    date: [
-      /on\s+(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/gi,
-    ],
-    cardLastFour: [
-      /card\s+xx+(\d{4})/gi,
-    ],
-    transactionType: [
-      /(debited|purchase)/gi,
-      /(credited|refund)/gi,
-    ],
+    amount: [/(?:rs\.?|inr|₹)\s*([\d,]+\.?\d*)/gi, /amt[\s:]+(?:rs\.?|inr|₹)?\s*([\d,]+\.?\d*)/gi],
+    merchant: [/(?:at|on)\s+([A-Z][A-Z0-9\s&\-\.]+?)(?:\s+on|\.|\s*$)/gi],
+    date: [/on\s+(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/gi],
+    cardLastFour: [/card\s+xx+(\d{4})/gi],
+    transactionType: [/(debited|purchase)/gi, /(credited|refund)/gi],
   },
-  examples: [
-    "Axis Bank Card xx1234: Rs. 850 debited at UBER on 10/01/2024",
-  ],
+  examples: ["Axis Bank Card xx1234: Rs. 850 debited at UBER on 10/01/2024"],
 };
 
 /**
@@ -164,26 +119,13 @@ const IDFC_PATTERNS: ExtractionPattern = {
   bankCode: "idfc",
   bankName: "IDFC First Bank",
   patterns: {
-    amount: [
-      /(?:rs\.?|inr|₹)\s*([\d,]+\.?\d*)/gi,
-    ],
-    merchant: [
-      /(?:at|on)\s+([A-Z][A-Z0-9\s&\-\.]+?)(?:\s+on|\.|\s*$)/gi,
-    ],
-    date: [
-      /on\s+(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/gi,
-    ],
-    cardLastFour: [
-      /card\s+ending[\s:]+(\d{4})/gi,
-    ],
-    transactionType: [
-      /(spent|debited)/gi,
-      /(credited|refund)/gi,
-    ],
+    amount: [/(?:rs\.?|inr|₹)\s*([\d,]+\.?\d*)/gi],
+    merchant: [/(?:at|on)\s+([A-Z][A-Z0-9\s&\-\.]+?)(?:\s+on|\.|\s*$)/gi],
+    date: [/on\s+(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/gi],
+    cardLastFour: [/card\s+ending[\s:]+(\d{4})/gi],
+    transactionType: [/(spent|debited)/gi, /(credited|refund)/gi],
   },
-  examples: [
-    "IDFC First Bank: Rs 1,200 spent at MYNTRA on 05/02/2024",
-  ],
+  examples: ["IDFC First Bank: Rs 1,200 spent at MYNTRA on 05/02/2024"],
 };
 
 /**

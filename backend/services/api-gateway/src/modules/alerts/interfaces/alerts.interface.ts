@@ -10,6 +10,5 @@ export interface IAlerts {
   // Add specific fields based on module
 }
 
-export interface IAlertsResponse extends IAlerts {
-  // Response specific fields
-}
+// Use type alias instead of empty interface
+export type IAlertsResponse = IAlerts;

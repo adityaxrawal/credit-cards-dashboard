@@ -10,6 +10,5 @@ export interface IAiInsights {
   // Add specific fields based on module
 }
 
-export interface IAiInsightsResponse extends IAiInsights {
-  // Response specific fields
-}
+// Use type alias instead of empty interface
+export type IAiInsightsResponse = IAiInsights;

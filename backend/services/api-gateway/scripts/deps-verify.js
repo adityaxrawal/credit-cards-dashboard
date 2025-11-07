@@ -105,22 +105,44 @@ for (const dep of requiredDeps.devDependencies) {
 
 console.log("");
 
-// Check that node_modules exists
-const nodeModulesPath = path.join(__dirname, "..", "node_modules");
-if (!fs.existsSync(nodeModulesPath)) {
-  error("node_modules directory not found!");
-  info("  Fix: npm install");
-  hasErrors = true;
-} else {
-  success("node_modules directory exists");
+// Check that node_modules exists (check workspace root first for npm workspaces)
+const localNodeModules = path.join(__dirname, "..", "node_modules");
+const workspaceRoot = path.join(__dirname, "..", "..", "..", "..");
+const workspaceNodeModules = path.join(workspaceRoot, "node_modules");
 
-  // Verify critical modules are actually installed
+let nodeModulesPath;
+// Prefer workspace root for npm workspaces setup
+if (fs.existsSync(workspaceNodeModules)) {
+  // Check if this is actually a workspace by looking for critical modules
+  const isWorkspace = fs.existsSync(path.join(workspaceNodeModules, "express"));
+  if (isWorkspace) {
+    nodeModulesPath = workspaceNodeModules;
+    success("node_modules directory exists (workspace root)");
+  } else if (fs.existsSync(localNodeModules)) {
+    nodeModulesPath = localNodeModules;
+    success("node_modules directory exists (local)");
+  } else {
+    error("node_modules directory not found!");
+    info("  Fix: npm install (from workspace root)");
+    hasErrors = true;
+  }
+} else if (fs.existsSync(localNodeModules)) {
+  nodeModulesPath = localNodeModules;
+  success("node_modules directory exists (local)");
+} else {
+  error("node_modules directory not found!");
+  info("  Fix: npm install (from workspace root)");
+  hasErrors = true;
+}
+
+// Verify critical modules are actually installed
+if (nodeModulesPath) {
   const criticalModules = ["express", "redis", "typescript", "tsc-alias"];
   for (const mod of criticalModules) {
     const modPath = path.join(nodeModulesPath, mod);
     if (!fs.existsSync(modPath)) {
       error(`Module ${mod} is listed in package.json but not installed`);
-      info("  Fix: npm install");
+      info("  Fix: npm install (from workspace root)");
       hasErrors = true;
     }
   }
@@ -165,6 +187,17 @@ if (!fs.existsSync(tsconfigPath)) {
 
   // Verify tsconfig has required settings
   const tsconfig = JSON.parse(fs.readFileSync(tsconfigPath, "utf8"));
+
+  // Resolve types from base config if using extends
+  let resolvedTypes = tsconfig.compilerOptions?.types;
+  if (tsconfig.extends && !resolvedTypes) {
+    const baseTsconfigPath = path.join(__dirname, "..", tsconfig.extends);
+    if (fs.existsSync(baseTsconfigPath)) {
+      const baseConfig = JSON.parse(fs.readFileSync(baseTsconfigPath, "utf8"));
+      resolvedTypes = baseConfig.compilerOptions?.types;
+    }
+  }
+
   if (!tsconfig.compilerOptions) {
     error("tsconfig.json missing compilerOptions");
     hasErrors = true;
@@ -176,7 +209,7 @@ if (!fs.existsSync(tsconfigPath)) {
       success(`Build output directory: ${tsconfig.compilerOptions.outDir}`);
     }
 
-    if (!tsconfig.compilerOptions.types || !tsconfig.compilerOptions.types.includes("node")) {
+    if (!resolvedTypes || !resolvedTypes.includes("node")) {
       warning('tsconfig.json types array should include "node"');
       hasWarnings = true;
     }

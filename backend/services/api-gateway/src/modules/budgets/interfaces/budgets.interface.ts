@@ -10,6 +10,5 @@ export interface IBudgets {
   // Add specific fields based on module
 }
 
-export interface IBudgetsResponse extends IBudgets {
-  // Response specific fields
-}
+// Use type alias instead of empty interface
+export type IBudgetsResponse = IBudgets;
