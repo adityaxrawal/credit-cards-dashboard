@@ -5,7 +5,7 @@
   "main": "services/api-gateway/dist/api-gateway/src/index.js",
   "private": true,
   "scripts": {
-    "dev": "nodemon --exec ts-node -r tsconfig-paths/register services/api-gateway/src/index.ts",
+    "dev": "nodemon --exec ts-node -r tsconfig-paths/register --project services/api-gateway/tsconfig.json services/api-gateway/src/index.ts",
     "build": "npm run build:shared && npm run build:gateway",
     "build:shared": "tsc --project services/shared/tsconfig.json",
     "build:gateway": "tsc --project services/api-gateway/tsconfig.json && tsc-alias -p services/api-gateway/tsconfig.json",
