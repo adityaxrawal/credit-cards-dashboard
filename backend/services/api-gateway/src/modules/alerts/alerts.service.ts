@@ -61,10 +61,7 @@ export class EnhancedAlertService {
 
     // Substitute variables in title and message
     const title = this.substituteVariables(template.title_template, variables);
-    const message = this.substituteVariables(
-      template.message_template,
-      variables
-    );
+    const message = this.substituteVariables(template.message_template, variables);
     const actionUrl = template.action_url_template
       ? this.substituteVariables(template.action_url_template, variables)
       : null;
@@ -126,10 +123,7 @@ export class EnhancedAlertService {
   /**
    * Update notification preferences
    */
-  static async updateNotificationPreferences(
-    userId: string,
-    preferences: any
-  ): Promise<any> {
+  static async updateNotificationPreferences(userId: string, preferences: any): Promise<any> {
     const { data, error } = await supabase
       .from("user_notification_preferences")
       .update({
@@ -176,10 +170,7 @@ export class EnhancedAlertService {
   /**
    * Get all alert rules for user
    */
-  static async getAlertRules(
-    userId: string,
-    activeOnly: boolean = true
-  ): Promise<AlertRule[]> {
+  static async getAlertRules(userId: string, activeOnly: boolean = true): Promise<AlertRule[]> {
     let query = supabase
       .from("alert_rules")
       .select("*")
@@ -235,9 +226,7 @@ export class EnhancedAlertService {
   /**
    * Get alert delivery status
    */
-  static async getAlertDeliveryStatus(
-    alertId: string
-  ): Promise<AlertDeliveryLog[]> {
+  static async getAlertDeliveryStatus(alertId: string): Promise<AlertDeliveryLog[]> {
     const { data, error } = await supabase
       .from("alert_delivery_log")
       .select("*")
@@ -262,10 +251,7 @@ export class EnhancedAlertService {
       .from("alert_delivery_log")
       .select("*")
       .eq("user_id", userId)
-      .gte(
-        "created_at",
-        new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-      );
+      .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
 
     if (error) throw error;
 
@@ -362,9 +348,7 @@ export class EnhancedAlertService {
     const totalAlerts = allAlerts.length;
     const readCount = allAlerts.filter((a) => a.is_read).length;
     const dismissedCount = allAlerts.filter((a) => a.dismissed).length;
-    const clickedCount = allInteractions.filter(
-      (i) => i.interaction_type === "clicked"
-    ).length;
+    const clickedCount = allInteractions.filter((i) => i.interaction_type === "clicked").length;
 
     const byType: Record<string, number> = {};
     const byPriority: Record<string, number> = {};
@@ -381,8 +365,7 @@ export class EnhancedAlertService {
       totalAlerts,
       readRate: totalAlerts > 0 ? (readCount / totalAlerts) * 100 : 0,
       dismissRate: totalAlerts > 0 ? (dismissedCount / totalAlerts) * 100 : 0,
-      clickThroughRate:
-        totalAlerts > 0 ? (clickedCount / totalAlerts) * 100 : 0,
+      clickThroughRate: totalAlerts > 0 ? (clickedCount / totalAlerts) * 100 : 0,
       byType,
       byPriority,
       trends,
@@ -392,10 +375,7 @@ export class EnhancedAlertService {
   /**
    * Generate daily or weekly digest
    */
-  static async generateDigest(
-    userId: string,
-    digestType: "daily" | "weekly"
-  ): Promise<any> {
+  static async generateDigest(userId: string, digestType: "daily" | "weekly"): Promise<any> {
     const now = new Date();
     let periodStart: Date;
     let periodEnd: Date;
@@ -516,11 +496,7 @@ export class EnhancedAlertService {
     for (const log of pending || []) {
       try {
         // Send notification based on channel
-        await this.sendNotificationViaChannel(
-          log.channel,
-          log.user_id,
-          log.alerts
-        );
+        await this.sendNotificationViaChannel(log.channel, log.user_id, log.alerts);
 
         // Update delivery log
         await supabase
@@ -539,8 +515,7 @@ export class EnhancedAlertService {
           .update({
             delivery_status: "failed",
             failed_at: new Date().toISOString(),
-            error_message:
-              error instanceof Error ? error.message : "Unknown error",
+            error_message: error instanceof Error ? error.message : "Unknown error",
           })
           .eq("id", log.id);
 
@@ -553,10 +528,7 @@ export class EnhancedAlertService {
 
   // Private helper methods
 
-  private static substituteVariables(
-    template: string,
-    variables: Record<string, any>
-  ): string {
+  private static substituteVariables(template: string, variables: Record<string, any>): string {
     let result = template;
     Object.entries(variables).forEach(([key, value]) => {
       const placeholder = `{${key}}`;
@@ -565,12 +537,14 @@ export class EnhancedAlertService {
     return result;
   }
 
-  private static calculateDailyTrends(
-    alerts: any[],
-    startDate: Date,
-    endDate: Date
-  ): any[] {
-    const trends = [];
+  private static calculateDailyTrends(alerts: any[], startDate: Date, endDate: Date): any[] {
+    const trends: Array<{
+      date: string;
+      count: number;
+      high: number;
+      medium: number;
+      low: number;
+    }> = [];
     const current = new Date(startDate);
 
     while (current <= endDate) {
@@ -631,18 +605,14 @@ export class EnhancedAlertService {
   static async createAlert(data: any): Promise<any> {
     return await this.createAlertFromTemplate(
       data.userId,
-      data.type || 'budget_exceeded',
-      data.title || 'Alert',
-      data.message || ''
+      data.type || "budget_exceeded",
+      data.title || "Alert",
+      data.message || ""
     );
   }
 
   static async getAlertById(id: string): Promise<any> {
-    const { data } = await supabase
-      .from('alerts')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const { data } = await supabase.from("alerts").select("*").eq("id", id).single();
     return data;
   }
 
@@ -655,12 +625,9 @@ export class EnhancedAlertService {
   }
 
   static async deleteAlert(id: string): Promise<void> {
-    await this.deleteAlertRule(id, '');
+    await this.deleteAlertRule(id, "");
   }
-
 }
-
-
 
 // Export singleton instance
 export const enhancedAlertService = new EnhancedAlertService();

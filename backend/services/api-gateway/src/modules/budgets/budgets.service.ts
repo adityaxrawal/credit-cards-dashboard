@@ -43,12 +43,7 @@ export interface BudgetAuditLog {
   id: string;
   user_id: string;
   budget_id?: string;
-  action_type:
-    | "create"
-    | "update"
-    | "delete"
-    | "threshold_breach"
-    | "alert_triggered";
+  action_type: "create" | "update" | "delete" | "threshold_breach" | "alert_triggered";
   entity_type: "budget_tracking" | "budget_category" | "card_budget";
   old_value?: any;
   new_value?: any;
@@ -136,15 +131,7 @@ export class EnhancedBudgetService {
     if (error) throw error;
 
     // Log the creation
-    await this.logBudgetAction(
-      userId,
-      data.id,
-      "create",
-      "budget_category",
-      null,
-      data,
-      metadata
-    );
+    await this.logBudgetAction(userId, data.id, "create", "budget_category", null, data, metadata);
 
     return data;
   }
@@ -345,15 +332,7 @@ export class EnhancedBudgetService {
       if (error) throw error;
       result = data;
 
-      await this.logBudgetAction(
-        userId,
-        data.id,
-        "create",
-        "card_budget",
-        null,
-        data,
-        metadata
-      );
+      await this.logBudgetAction(userId, data.id, "create", "card_budget", null, data, metadata);
     }
 
     return result;
@@ -417,9 +396,7 @@ export class EnhancedBudgetService {
   /**
    * Get or create budget alert configuration
    */
-  static async getBudgetAlertConfig(
-    userId: string
-  ): Promise<BudgetAlertConfig> {
+  static async getBudgetAlertConfig(userId: string): Promise<BudgetAlertConfig> {
     const { data, error } = await supabase
       .from("budget_alert_config")
       .select("*")
@@ -504,8 +481,7 @@ export class EnhancedBudgetService {
     const amounts = Object.values(dailySpending);
     const mean = amounts.reduce((a, b) => a + b, 0) / amounts.length;
     const variance =
-      amounts.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) /
-      amounts.length;
+      amounts.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / amounts.length;
     const stdDev = Math.sqrt(variance);
 
     // Generate forecasts
@@ -541,22 +517,20 @@ export class EnhancedBudgetService {
     }
 
     // Store forecasts
-    const { error: insertError } = await supabase
-      .from("spending_forecasts")
-      .upsert(
-        forecasts.map((f) => ({
-          user_id: f.user_id,
-          forecast_date: f.forecast_date,
-          forecast_type: f.forecast_type,
-          predicted_amount: f.predicted_amount,
-          confidence_level: f.confidence_level,
-          model_version: f.model_version,
-          metadata: f.metadata,
-        })),
-        {
-          onConflict: "user_id,forecast_date,forecast_type",
-        }
-      );
+    const { error: insertError } = await supabase.from("spending_forecasts").upsert(
+      forecasts.map((f) => ({
+        user_id: f.user_id,
+        forecast_date: f.forecast_date,
+        forecast_type: f.forecast_type,
+        predicted_amount: f.predicted_amount,
+        confidence_level: f.confidence_level,
+        model_version: f.model_version,
+        metadata: f.metadata,
+      })),
+      {
+        onConflict: "user_id,forecast_date,forecast_type",
+      }
+    );
 
     if (insertError) console.error("Error storing forecasts:", insertError);
 
@@ -600,10 +574,7 @@ export class EnhancedBudgetService {
     }
 
     if (options.offset) {
-      query = query.range(
-        options.offset,
-        options.offset + (options.limit || 50) - 1
-      );
+      query = query.range(options.offset, options.offset + (options.limit || 50) - 1);
     }
 
     const { data, error, count } = await query;
@@ -648,11 +619,7 @@ export class EnhancedBudgetService {
     // Get category spending
     const startOfMonth = new Date(year, month - 1, 1);
     const endOfMonth = new Date(year, month, 0, 23, 59, 59);
-    const categories = await this.getCategorySpending(
-      userId,
-      startOfMonth,
-      endOfMonth
-    );
+    const categories = await this.getCategorySpending(userId, startOfMonth, endOfMonth);
 
     // Get card budgets
     const cards = await this.getCardBudgets(userId, month, year);
@@ -674,8 +641,7 @@ export class EnhancedBudgetService {
         budget: h.budget_limit,
       })),
       averageMonthlySpend:
-        (historical || []).reduce((sum, h) => sum + h.total_spent, 0) /
-        (historical?.length || 1),
+        (historical || []).reduce((sum, h) => sum + h.total_spent, 0) / (historical?.length || 1),
     };
 
     // Generate forecasts
@@ -719,12 +685,7 @@ export class EnhancedBudgetService {
   private static async logBudgetAction(
     userId: string,
     budgetId: string,
-    actionType:
-      | "create"
-      | "update"
-      | "delete"
-      | "threshold_breach"
-      | "alert_triggered",
+    actionType: "create" | "update" | "delete" | "threshold_breach" | "alert_triggered",
     entityType: "budget_tracking" | "budget_category" | "card_budget",
     oldValue: any,
     newValue: any,
@@ -743,9 +704,7 @@ export class EnhancedBudgetService {
     if (error) console.error("Error logging budget action:", error);
   }
 
-  private static aggregateDailySpending(
-    transactions: any[]
-  ): Record<string, number> {
+  private static aggregateDailySpending(transactions: any[]): Record<string, number> {
     return transactions.reduce(
       (acc, t) => {
         const date = t.transaction_date.split("T")[0];
@@ -763,7 +722,13 @@ export class EnhancedBudgetService {
     trends: any,
     forecasts: SpendingForecast[]
   ): any[] {
-    const recommendations = [];
+    const recommendations: Array<{
+      priority: string;
+      type: string;
+      title: string;
+      message: string;
+      action: string;
+    }> = [];
 
     // Budget status recommendations
     if (percentage >= 90) {
@@ -771,16 +736,13 @@ export class EnhancedBudgetService {
         priority: "high",
         type: "spending_control",
         title: "Critical Budget Alert",
-        message:
-          "You've used over 90% of your budget. Consider freezing non-essential spending.",
+        message: "You've used over 90% of your budget. Consider freezing non-essential spending.",
         action: "Review and cut discretionary expenses",
       });
     }
 
     // Category-based recommendations
-    const topSpendingCategories = categories
-      .sort((a, b) => b.spent - a.spent)
-      .slice(0, 3);
+    const topSpendingCategories = categories.sort((a, b) => b.spent - a.spent).slice(0, 3);
 
     if (topSpendingCategories[0] && topSpendingCategories[0].percentage > 80) {
       recommendations.push({
@@ -805,8 +767,7 @@ export class EnhancedBudgetService {
     }
 
     // Forecast-based recommendations
-    const avgForecast =
-      forecasts.slice(0, 7).reduce((sum, f) => sum + f.predicted_amount, 0) / 7;
+    const avgForecast = forecasts.slice(0, 7).reduce((sum, f) => sum + f.predicted_amount, 0) / 7;
     const avgHistorical = trends.averageMonthlySpend / 30;
 
     if (avgForecast > avgHistorical * 1.2) {
@@ -814,8 +775,7 @@ export class EnhancedBudgetService {
         priority: "medium",
         type: "trend_alert",
         title: "Increasing Spending Trend",
-        message:
-          "Your predicted spending is 20% higher than your historical average",
+        message: "Your predicted spending is 20% higher than your historical average",
         action: "Review recent transactions and identify new spending patterns",
       });
     }
@@ -831,18 +791,14 @@ export class EnhancedBudgetService {
       data.userId,
       data.category,
       data.amount,
-      data.period || 'monthly',
+      data.period || "monthly",
       data.startDate ? new Date(data.startDate) : new Date(),
       data.endDate ? new Date(data.endDate) : undefined
     );
   }
 
   static async getBudgetById(id: string): Promise<any> {
-    const { data } = await supabase
-      .from('budgets')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const { data } = await supabase.from("budgets").select("*").eq("id", id).single();
     return data;
   }
 
@@ -855,12 +811,9 @@ export class EnhancedBudgetService {
   }
 
   static async deleteBudget(id: string): Promise<void> {
-    await supabase.from('budgets').delete().eq('id', id);
+    await supabase.from("budgets").delete().eq("id", id);
   }
-
 }
-
-
 
 // Export singleton instance
 export const enhancedBudgetService = new EnhancedBudgetService();
