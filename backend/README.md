@@ -3,6 +3,7 @@
 ## 🚀 Quick Start
 
 ### Installation
+
 ```bash
 # From the backend directory
 cd backend
@@ -30,18 +31,19 @@ backend/
 │       ├── database/
 │       └── tsconfig.json
 ├── .eslintrc.json       # Root ESLint config
-├── .prettierrc          # Root Prettier config
-└── .husky/              # Git hooks
+└── .prettierrc          # Root Prettier config
 ```
 
 ## 🔧 Available Scripts
 
 ### Development
+
 ```bash
 npm run dev              # Start development server with hot reload
 ```
 
 ### Building
+
 ```bash
 npm run build            # Build both shared and api-gateway
 npm run build:shared     # Build only shared module
@@ -50,6 +52,7 @@ npm run build:clean      # Clean dist/ and rebuild
 ```
 
 ### Quality Checks
+
 ```bash
 npm run lint             # Run ESLint
 npm run lint:fix         # Auto-fix ESLint issues
@@ -60,13 +63,18 @@ npm run format:check     # Check code formatting
 ```
 
 ### Pre-deployment Checks
+
 ```bash
 npm run deps:verify      # Verify all dependencies are installed
 npm run render:simulate  # Simulate Render.com build process
-npm run pre-push         # Run all quality checks before git push
+npm run prepush          # Run all quality checks (what Husky runs)
+
+Note: Git hooks (Husky) are managed at the repository root in `.husky/`.
+Only the root Husky setup is used.
 ```
 
 ### Production
+
 ```bash
 npm start                # Start production server (requires build first)
 ```
@@ -78,6 +86,7 @@ npm start                # Start production server (requires build first)
 **Cause:** The `backend/node_modules` directory is missing or incomplete.
 
 **Solution:**
+
 ```bash
 cd backend
 rm -rf node_modules package-lock.json
@@ -87,6 +96,7 @@ npm install
 ### Issue: Prepush checks failing
 
 **Solution:** Run the verification script to see what's wrong:
+
 ```bash
 cd backend
 npm run deps:verify
@@ -97,6 +107,7 @@ npm run deps:verify
 **Cause:** TypeScript path mappings not set up correctly or build order issue.
 
 **Solution:**
+
 ```bash
 npm run build:clean
 ```
@@ -104,6 +115,7 @@ npm run build:clean
 ## 🏗️ Build Output Structure
 
 After running `npm run build`, the output structure will be:
+
 ```
 backend/services/api-gateway/dist/
 ├── api-gateway/
@@ -127,6 +139,7 @@ The entry point for production is: `services/api-gateway/dist/api-gateway/src/in
 - **TypeScript path mappings** handle module resolution between api-gateway and shared
 
 ### Key Dependencies:
+
 - **Runtime:** Express, Supabase, Redis (ioredis), JWT, Google APIs
 - **Build:** TypeScript, tsc-alias
 - **Quality:** ESLint, Prettier, Husky
@@ -146,6 +159,7 @@ Run all checks: `npm run pre-push`
 ## 🚀 Deployment (Render.com)
 
 The Render deployment uses:
+
 - **Root Directory:** `backend`
 - **Build Command:** `npm install && npm run build`
 - **Start Command:** `npm start`
@@ -155,18 +169,21 @@ Environment variables must be set in Render Dashboard (see `.env.production.exam
 ## 🐛 Debugging
 
 ### Check if dependencies are properly installed:
+
 ```bash
 ls backend/node_modules | wc -l
 # Should show ~462 packages
 ```
 
 ### Verify TypeScript can find shared module:
+
 ```bash
 cd backend
 npm run typecheck
 ```
 
 ### Test the build locally:
+
 ```bash
 cd backend
 npm run build:clean
@@ -174,6 +191,7 @@ npm start
 ```
 
 ### Simulate Render deployment:
+
 ```bash
 cd backend
 npm run render:simulate
