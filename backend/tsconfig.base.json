@@ -11,7 +11,7 @@
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "isolatedModules": true,
-    "types": ["node", "express"],
+    "types": ["node"],
     "sourceMap": true,
     "declaration": true
   }
