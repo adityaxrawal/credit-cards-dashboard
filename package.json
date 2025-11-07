@@ -27,7 +27,8 @@
     "render:simulate": "cd backend && npm run render:simulate",
     "prepush": "npm run deps:verify && npm run typecheck:strict && npm run lint && npm run render:simulate",
     "setup:quality-gate": "./setup-quality-gate.sh",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "postinstall": "echo '\n⚠️  NOTE: This installed root workspace dependencies.\nTo set up the backend, run: cd backend && npm install\n'"
   },
   "keywords": [
     "credit-card",
