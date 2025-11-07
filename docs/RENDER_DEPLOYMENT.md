@@ -40,7 +40,7 @@ If you prefer manual setup or need to troubleshoot:
 4. **Runtime**: Node
 5. **Build Command**: 
    ```bash
-   cd backend && npm install && npm run build
+   cd backend && npm install --include=dev && npm run build
    ```
 6. **Start Command**: 
    ```bash
@@ -73,19 +73,26 @@ ENCRYPTION_KEY=your_32_char_key
 
 ## 🔍 Common Issues & Solutions
 
-### Issue 1: "Cannot find module" errors
+### Issue 1: "Cannot find type definition file" errors
+**Solution**: Use `npm install --include=dev` to ensure TypeScript and type definitions are installed during build.
+
+### Issue 2: "Cannot find module" errors
 **Solution**: Ensure the build command includes `cd backend` before running npm commands.
 
 ### Issue 2: Port binding issues
+
 **Solution**: Use `PORT=10000` in environment variables (Render uses port 10000).
 
 ### Issue 3: CORS errors
+
 **Solution**: Make sure `CORS_ORIGINS` matches your frontend URL exactly (no trailing slashes).
 
 ### Issue 4: Build fails with "husky not found"
+
 **Solution**: Already fixed! The root `package.json` has `prepare: "husky install || true"`.
 
 ### Issue 5: Redis connection issues
+
 **Solution**: Use `USE_REDIS_REST_API=true` and provide `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
 
 ## 📁 Project Structure
@@ -112,6 +119,7 @@ npm run render:simulate
 ```
 
 This will:
+
 1. Clean previous builds
 2. Install dependencies (like Render does)
 3. Build TypeScript
@@ -129,6 +137,7 @@ This will:
 ## 📊 Monitoring
 
 After deployment:
+
 - Check Render logs for startup messages
 - Test API endpoints: `https://your-service.onrender.com/health`
 - Monitor error tracking (if Sentry/GlitchTip enabled)
@@ -145,6 +154,7 @@ After deployment:
 ## 📞 Support
 
 If you encounter issues:
+
 1. Check Render logs for error messages
 2. Run `npm run render:simulate` locally to reproduce
 3. Verify all environment variables are set correctly
