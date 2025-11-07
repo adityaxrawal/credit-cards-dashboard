@@ -44,10 +44,11 @@ function warning(message) {
   log(`⚠ ${message}`, "yellow");
 }
 
-// Read package.json
-const packageJsonPath = path.join(__dirname, "..", "package.json");
+// Read package.json from backend root (3 levels up from scripts/)
+const packageJsonPath = path.join(__dirname, "..", "..", "..", "package.json");
 if (!fs.existsSync(packageJsonPath)) {
   error("package.json not found!");
+  error(`Expected at: ${packageJsonPath}`);
   process.exit(1);
 }
 
@@ -58,12 +59,12 @@ const requiredDeps = {
   dependencies: [
     { name: "express", reason: "Core web framework" },
     { name: "redis", reason: "Required by shared/monitoring modules" },
-    { name: "typescript", reason: "TypeScript compiler for build" },
-    { name: "tsc-alias", reason: "Path alias resolution after tsc" },
     { name: "@sentry/node", reason: "Error monitoring" },
     { name: "@supabase/supabase-js", reason: "Database client" },
   ],
   devDependencies: [
+    { name: "typescript", reason: "TypeScript compiler for build" },
+    { name: "tsc-alias", reason: "Path alias resolution after tsc" },
     { name: "@types/node", reason: "Node.js type definitions" },
     { name: "@types/express", reason: "Express type definitions" },
     { name: "ts-node", reason: "Development execution" },
@@ -105,33 +106,16 @@ for (const dep of requiredDeps.devDependencies) {
 
 console.log("");
 
-// Check that node_modules exists (check workspace root first for npm workspaces)
-const localNodeModules = path.join(__dirname, "..", "node_modules");
-const workspaceRoot = path.join(__dirname, "..", "..", "..", "..");
-const workspaceNodeModules = path.join(workspaceRoot, "node_modules");
+// Check that node_modules exists at backend root
+const backendNodeModules = path.join(__dirname, "..", "..", "..", "node_modules");
 
 let nodeModulesPath;
-// Prefer workspace root for npm workspaces setup
-if (fs.existsSync(workspaceNodeModules)) {
-  // Check if this is actually a workspace by looking for critical modules
-  const isWorkspace = fs.existsSync(path.join(workspaceNodeModules, "express"));
-  if (isWorkspace) {
-    nodeModulesPath = workspaceNodeModules;
-    success("node_modules directory exists (workspace root)");
-  } else if (fs.existsSync(localNodeModules)) {
-    nodeModulesPath = localNodeModules;
-    success("node_modules directory exists (local)");
-  } else {
-    error("node_modules directory not found!");
-    info("  Fix: npm install (from workspace root)");
-    hasErrors = true;
-  }
-} else if (fs.existsSync(localNodeModules)) {
-  nodeModulesPath = localNodeModules;
-  success("node_modules directory exists (local)");
+if (fs.existsSync(backendNodeModules)) {
+  nodeModulesPath = backendNodeModules;
+  success("node_modules directory exists (backend root)");
 } else {
-  error("node_modules directory not found!");
-  info("  Fix: npm install (from workspace root)");
+  error("node_modules directory not found at backend root!");
+  info("  Fix: cd backend && npm install");
   hasErrors = true;
 }
 
@@ -150,28 +134,23 @@ if (nodeModulesPath) {
 
 console.log("");
 
-// Check shared workspace link
-log("Checking workspace dependencies:", "blue");
-const sharedPath = path.join(__dirname, "..", "..", "..", "shared");
+// Check shared module exists (now part of the monolithic backend structure)
+log("Checking shared module:", "blue");
+const sharedPath = path.join(__dirname, "..", "..", "shared");
 if (!fs.existsSync(sharedPath)) {
-  error("Shared workspace not found at ../../shared");
+  error("Shared module not found at ../shared");
   hasErrors = true;
 } else {
-  success("Shared workspace exists");
+  success("Shared module exists");
 
-  // Check if shared has its own dependencies satisfied
-  const sharedPackageJson = path.join(sharedPath, "package.json");
-  if (fs.existsSync(sharedPackageJson)) {
-    const sharedPkg = JSON.parse(fs.readFileSync(sharedPackageJson, "utf8"));
-
-    // Check if shared needs redis (since monitoring uses it)
-    const sharedNodeModules = path.join(sharedPath, "node_modules", "redis");
-    if (!fs.existsSync(sharedNodeModules)) {
-      warning("Redis not found in shared/node_modules - monitoring modules may fail");
-      info("  The shared package imports redis but it may not be installed there");
-      info("  Since api-gateway has redis, it should work via hoisting");
-      hasWarnings = true;
-    }
+  // Check if shared has redis available (monitoring modules need it)
+  const sharedRedis = path.join(backendNodeModules, "redis");
+  if (!fs.existsSync(sharedRedis)) {
+    warning("Redis not found in node_modules - monitoring modules may fail");
+    info("  Install redis with: cd backend && npm install redis");
+    hasWarnings = true;
+  } else {
+    success("Redis available for shared monitoring modules");
   }
 }
 
@@ -223,7 +202,7 @@ log("═".repeat(60), "blue");
 if (hasErrors) {
   error("❌ Dependency verification FAILED");
   log("\n📋 To fix all issues, run:", "yellow");
-  log("   cd backend/services/api-gateway && npm install", "yellow");
+  log("   cd backend && npm install", "yellow");
   process.exit(1);
 } else if (hasWarnings) {
   warning("⚠️  Dependency verification passed with warnings");
