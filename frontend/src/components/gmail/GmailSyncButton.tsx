@@ -43,19 +43,13 @@ export function GmailSyncButton({
     setSyncing(true);
 
     try {
-      const accessToken = localStorage.getItem("accessToken");
-      if (!accessToken) {
-        showToast("error", "Authentication token not found");
-        return;
-      }
-
-      // Step 1: Trigger Gmail sync
+      // Step 1: Trigger Gmail sync (httpOnly cookie sent automatically)
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/gmail/sync`,
         {
           method: "POST",
+          credentials: "include", // Send httpOnly cookie
           headers: {
-            Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
           },
         }
@@ -77,7 +71,7 @@ export function GmailSyncButton({
 
         // Step 2: Trigger downstream services if new transactions found
         if (data.summary && data.summary.newTransactions > 0) {
-          await triggerDownstreamServices(accessToken);
+          await triggerDownstreamServices();
         }
 
         // Step 3: Refresh UI
@@ -102,7 +96,7 @@ export function GmailSyncButton({
   /**
    * Trigger all downstream services in parallel after sync
    */
-  const triggerDownstreamServices = async (token: string) => {
+  const triggerDownstreamServices = async () => {
     const services = [
       {
         name: "update-budget",
@@ -125,7 +119,7 @@ export function GmailSyncButton({
     const servicePromises = services.map((service) =>
       fetch(service.url, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include", // Send httpOnly cookie
       }).catch((err) => {
         console.error(`Service ${service.name} failed:`, err);
         return null;

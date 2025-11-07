@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiGet } from "./client";
 
 export interface DashboardOverview {
   total_cards: number;
@@ -61,8 +61,9 @@ export const analyticsApi = {
    * Get dashboard overview statistics
    */
   getDashboardOverview: async (): Promise<DashboardOverview> => {
-    const response = await apiClient.get("/analytics/dashboard");
-    return response.data.data;
+    return apiGet<{ data: DashboardOverview }>("/analytics/dashboard").then(
+      (res) => res.data
+    );
   },
 
   /**
@@ -76,10 +77,9 @@ export const analyticsApi = {
     if (startDate) params.append("startDate", startDate);
     if (endDate) params.append("endDate", endDate);
 
-    const response = await apiClient.get(
+    return apiGet<{ data: CategorySpending[] }>(
       `/analytics/spending-by-category?${params.toString()}`
-    );
-    return response.data.data;
+    ).then((res) => res.data);
   },
 
   /**
@@ -89,35 +89,35 @@ export const analyticsApi = {
     period: "week" | "month" | "year" = "month",
     limit: number = 12
   ): Promise<SpendingTrendItem[]> => {
-    const response = await apiClient.get(
+    return apiGet<{ data: { trend: SpendingTrendItem[] } }>(
       `/analytics/spending-trend?period=${period}&limit=${limit}`
-    );
-    return response.data.data.trend;
+    ).then((res) => res.data.trend);
   },
 
   /**
    * Get upcoming bills
    */
   getUpcomingBills: async (days: number = 30): Promise<UpcomingBill[]> => {
-    const response = await apiClient.get(
+    return apiGet<{ data: { bills: UpcomingBill[] } }>(
       `/analytics/upcoming-bills?days=${days}`
-    );
-    return response.data.data.bills;
+    ).then((res) => res.data.bills);
   },
 
   /**
    * Get card utilization
    */
   getCardUtilization: async (): Promise<CardUtilization[]> => {
-    const response = await apiClient.get("/analytics/card-utilization");
-    return response.data.data.cards;
+    return apiGet<{ data: { cards: CardUtilization[] } }>(
+      "/analytics/card-utilization"
+    ).then((res) => res.data.cards);
   },
 
   /**
    * Get monthly comparison
    */
   getMonthlyComparison: async (): Promise<MonthlyComparison> => {
-    const response = await apiClient.get("/analytics/monthly-comparison");
-    return response.data.data;
+    return apiGet<{ data: MonthlyComparison }>(
+      "/analytics/monthly-comparison"
+    ).then((res) => res.data);
   },
 };

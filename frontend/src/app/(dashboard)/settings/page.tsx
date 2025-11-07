@@ -2,9 +2,12 @@
 
 import React from "react";
 import { Save, Mail, CreditCard, Smartphone } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout";
 import { Button, Input, Toggle, ProgressBar } from "@/components/ui";
 import { cn, formatCurrency } from "@/lib/utils";
+import { settingsApi, type UserSettings } from "@/lib/api/settings";
+import { useToast } from "@/components/ui/Toast";
 
 const tabs = [
   { key: "spending", label: "Spending Limits", icon: CreditCard },
@@ -54,16 +57,73 @@ export default function SettingsPage() {
 }
 
 function SpendingLimitsSettings() {
+  const queryClient = useQueryClient();
+  const { success, error: errorToast } = useToast();
+
+  // Fetch settings
+  const { data: userSettings, isLoading } = useQuery({
+    queryKey: ["user-settings"],
+    queryFn: () => settingsApi.getSettings(),
+  });
+
   const [settings, setSettings] = React.useState({
-    monthlyLimit: "2000",
+    monthlyLimit: "",
     alertThreshold: "80",
     isActive: true,
     dailyLimit: "500",
     enableDailyLimit: false,
   });
 
+  // Update local state when data is fetched
+  React.useEffect(() => {
+    if (userSettings) {
+      setSettings({
+        monthlyLimit: userSettings.monthly_budget?.toString() || "",
+        alertThreshold: userSettings.alert_threshold?.toString() || "80",
+        isActive: userSettings.email_notifications !== false,
+        dailyLimit: "500",
+        enableDailyLimit: false,
+      });
+    }
+  }, [userSettings]);
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: (data: Partial<UserSettings>) =>
+      settingsApi.updateSettings(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-settings"] });
+      success("Settings saved successfully");
+    },
+    onError: (error: Error) => {
+      errorToast(
+        (error as any)?.response?.data?.message || "Failed to save settings"
+      );
+    },
+  });
+
+  const handleSave = () => {
+    const data: Partial<UserSettings> = {
+      monthly_budget: parseFloat(settings.monthlyLimit) || 0,
+      alert_threshold: parseFloat(settings.alertThreshold) || 80,
+      email_notifications: settings.isActive,
+    };
+    updateMutation.mutate(data);
+  };
+
   const currentSpending = 400;
   const monthlyLimit = parseInt(settings.monthlyLimit) || 0;
+
+  if (isLoading) {
+    return (
+      <div className="bg-card-bg rounded-lg p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-4 bg-hover-bg rounded w-3/4"></div>
+          <div className="h-4 bg-hover-bg rounded w-1/2"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-card-bg rounded-lg p-6 space-y-6">
@@ -152,15 +212,28 @@ function SpendingLimitsSettings() {
         />
       </div>
 
-      <Button className="w-full">
+      <Button
+        className="w-full"
+        onClick={handleSave}
+        disabled={updateMutation.isPending}
+      >
         <Save className="w-4 h-4 mr-2" />
-        Save Settings
+        {updateMutation.isPending ? "Saving..." : "Save Settings"}
       </Button>
     </div>
   );
 }
 
 function EmailPreferencesSettings() {
+  const queryClient = useQueryClient();
+  const { success, error: errorToast } = useToast();
+
+  // Fetch settings
+  const { data: userSettings, isLoading } = useQuery({
+    queryKey: ["user-settings"],
+    queryFn: () => settingsApi.getSettings(),
+  });
+
   const [preferences, setPreferences] = React.useState({
     emailNotifications: true,
     spendingAlerts: true,
@@ -170,6 +243,58 @@ function EmailPreferencesSettings() {
     weeklySummary: true,
     monthlyReport: true,
   });
+
+  // Update local state when data is fetched
+  React.useEffect(() => {
+    if (userSettings) {
+      const notifPrefs = userSettings.notification_preferences || {};
+      setPreferences({
+        emailNotifications: userSettings.email_notifications !== false,
+        spendingAlerts: notifPrefs.spending_alerts !== false,
+        billReminders: notifPrefs.bill_reminders !== false,
+        reminderDays: "3",
+        unusualTransactions: false,
+        weeklySummary: notifPrefs.weekly_summary !== false,
+        monthlyReport: true,
+      });
+    }
+  }, [userSettings]);
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: (data: Partial<UserSettings>) =>
+      settingsApi.updateSettings(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-settings"] });
+      success("Preferences saved successfully");
+    },
+    onError: () => {
+      errorToast("Failed to save preferences");
+    },
+  });
+
+  const handleSave = () => {
+    const data: Partial<UserSettings> = {
+      email_notifications: preferences.emailNotifications,
+      notification_preferences: {
+        bill_reminders: preferences.billReminders,
+        spending_alerts: preferences.spendingAlerts,
+        weekly_summary: preferences.weeklySummary,
+      },
+    };
+    updateMutation.mutate(data);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="bg-card-bg rounded-lg p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-4 bg-hover-bg rounded w-3/4"></div>
+          <div className="h-4 bg-hover-bg rounded w-1/2"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-card-bg rounded-lg p-6 space-y-6">
@@ -259,9 +384,13 @@ function EmailPreferencesSettings() {
         </div>
       </div>
 
-      <Button className="w-full">
+      <Button
+        className="w-full"
+        onClick={handleSave}
+        disabled={updateMutation.isPending}
+      >
         <Save className="w-4 h-4 mr-2" />
-        Save Preferences
+        {updateMutation.isPending ? "Saving..." : "Save Preferences"}
       </Button>
     </div>
   );
