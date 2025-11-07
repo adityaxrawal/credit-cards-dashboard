@@ -48,10 +48,11 @@ function step(message) {
   log("─".repeat(60), "cyan");
 }
 
-// Configuration
-const SERVICE_DIR = path.join(__dirname, "..");
-const DIST_DIR = path.join(SERVICE_DIR, "dist");
-const ENTRY_POINT = path.join(DIST_DIR, "index.js");
+// Configuration - updated for single package.json structure
+const BACKEND_ROOT = path.join(__dirname, "..", "..", "..");
+const API_GATEWAY_DIR = path.join(__dirname, "..");
+const DIST_DIR = path.join(API_GATEWAY_DIR, "dist");
+const ENTRY_POINT = path.join(DIST_DIR, "api-gateway", "src", "index.js");
 
 let hasErrors = false;
 
@@ -60,7 +61,8 @@ try {
   log("║       RENDER BUILD SIMULATION FOR API-GATEWAY            ║", "magenta");
   log("╚═══════════════════════════════════════════════════════════╝\n", "magenta");
 
-  info(`Service directory: ${SERVICE_DIR}`);
+  info(`Backend root: ${BACKEND_ROOT}`);
+  info(`API Gateway: ${API_GATEWAY_DIR}`);
   info(`Expected output: ${ENTRY_POINT}\n`);
 
   // Step 1: Clean dist directory
@@ -75,10 +77,11 @@ try {
   // Step 2: Install dependencies (like Render does)
   step("STEP 2: Installing dependencies (npm install)");
   info("This simulates Render's: npm install");
+  info("Running from backend root (single package.json structure)");
   try {
     // Use npm install (not ci) since Render uses install
     execSync("npm install", {
-      cwd: SERVICE_DIR,
+      cwd: BACKEND_ROOT,
       stdio: "inherit",
       env: { ...process.env, NODE_ENV: "production" },
     });
@@ -92,10 +95,10 @@ try {
 
   // Step 3: Run build
   step("STEP 3: Building TypeScript (npm run build)");
-  info("This runs: tsc && tsc-alias");
+  info("This runs: npm run build (builds shared + api-gateway)");
   try {
     execSync("npm run build", {
-      cwd: SERVICE_DIR,
+      cwd: BACKEND_ROOT,
       stdio: "inherit",
     });
     success("Build completed successfully");
@@ -177,33 +180,30 @@ try {
     info(`  ... and ${distContents.length - 10} more`);
   }
 
-  // Step 9: Verify required directories exist in dist
-  const requiredDirs = ["common", "modules", "config"];
+  // Step 9: Verify main directories exist in dist
+  const requiredDirs = ["api-gateway", "shared"];
   for (const dir of requiredDirs) {
     const dirPath = path.join(DIST_DIR, dir);
     if (fs.existsSync(dirPath)) {
       success(`dist/${dir}/ exists`);
     } else {
       error(`dist/${dir}/ is missing`);
-      info(`  Check tsconfig include/exclude and rootDir settings`);
+      info(`  Check tsconfig include/exclude settings`);
       hasErrors = true;
     }
   }
 
   // Step 10: Simulate start command check
   step("STEP 5: Verifying start command readiness");
-  info("Render will run: npm start (which executes: node dist/index.js)");
+  info("Render will run: npm start");
 
   // Check package.json has correct start script
-  const packageJson = JSON.parse(fs.readFileSync(path.join(SERVICE_DIR, "package.json"), "utf8"));
+  const packageJson = JSON.parse(fs.readFileSync(path.join(BACKEND_ROOT, "package.json"), "utf8"));
   if (!packageJson.scripts || !packageJson.scripts.start) {
     error('package.json missing "start" script!');
     hasErrors = true;
-  } else if (packageJson.scripts.start !== "node dist/index.js") {
-    warning(`Start script is: "${packageJson.scripts.start}"`);
-    warning('Expected: "node dist/index.js"');
   } else {
-    success("Start script correctly configured: node dist/index.js");
+    success(`Start script: "${packageJson.scripts.start}"`);
   }
 
   // Final summary

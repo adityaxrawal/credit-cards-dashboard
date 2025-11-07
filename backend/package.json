@@ -2,7 +2,7 @@
   "name": "credit-card-backend",
   "version": "1.0.0",
   "description": "Backend services for Credit Card Dashboard",
-  "main": "services/api-gateway/dist/index.js",
+  "main": "services/api-gateway/dist/api-gateway/src/index.js",
   "private": true,
   "scripts": {
     "dev": "nodemon --exec ts-node -r tsconfig-paths/register services/api-gateway/src/index.ts",
@@ -10,7 +10,7 @@
     "build:shared": "tsc --project services/shared/tsconfig.json",
     "build:gateway": "tsc --project services/api-gateway/tsconfig.json && tsc-alias -p services/api-gateway/tsconfig.json",
     "build:clean": "rm -rf services/api-gateway/dist services/shared/dist && npm run build",
-    "start": "node services/api-gateway/dist/index.js",
+    "start": "node services/api-gateway/dist/api-gateway/src/index.js",
     "lint": "eslint services/api-gateway/src --ext .ts",
     "lint:fix": "eslint services/api-gateway/src --ext .ts --fix",
     "format": "prettier --write \"services/api-gateway/src/**/*.ts\" \"services/shared/**/*.ts\"",
