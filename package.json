@@ -4,6 +4,10 @@
   "description": "Personal credit card management and analytics dashboard",
   "private": true,
   "scripts": {
+    "setup": "npm run setup:backend && npm run setup:frontend && npm run setup:database",
+    "setup:backend": "cd backend && npm install",
+    "setup:frontend": "cd frontend && npm install",
+    "setup:database": "cd database && npm install",
     "frontend:dev": "cd frontend && npm run dev",
     "frontend:build": "cd frontend && npm run build",
     "backend:dev": "cd backend && npm run dev",
