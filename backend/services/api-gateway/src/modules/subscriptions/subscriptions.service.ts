@@ -1,3 +1,4 @@
+import { logger } from "shared/monitoring/logger";
 import { supabase } from "shared/database/supabase";
 
 /**
@@ -72,8 +73,7 @@ export class SubscriptionService {
 
     // Software & Apps
     {
-      pattern:
-        /adobe|microsoft office|google workspace|dropbox|icloud|onedrive/i,
+      pattern: /adobe|microsoft office|google workspace|dropbox|icloud|onedrive/i,
       category: "Software",
     },
     {
@@ -89,8 +89,7 @@ export class SubscriptionService {
 
     // Utilities & Services
     {
-      pattern:
-        /electricity|gas|water|internet|broadband|mobile|airtel|jio|vodafone/i,
+      pattern: /electricity|gas|water|internet|broadband|mobile|airtel|jio|vodafone/i,
       category: "Utilities",
     },
 
@@ -128,19 +127,14 @@ export class SubscriptionService {
   /**
    * Detect subscriptions for a user
    */
-  static async detectSubscriptions(
-    userId: string
-  ): Promise<DetectedSubscription[]> {
+  static async detectSubscriptions(userId: string): Promise<DetectedSubscription[]> {
     try {
       // Get transactions from last 24 months for pattern analysis
       const { data: transactions, error } = await supabase
         .from("transactions")
         .select("*")
         .eq("user_id", userId)
-        .gte(
-          "transaction_date",
-          new Date(Date.now() - 24 * 30 * 24 * 60 * 60 * 1000).toISOString()
-        )
+        .gte("transaction_date", new Date(Date.now() - 24 * 30 * 24 * 60 * 60 * 1000).toISOString())
         .order("transaction_date", { ascending: false });
 
       if (error || !transactions?.length) {
@@ -151,9 +145,7 @@ export class SubscriptionService {
       const merchantGroups = this.groupTransactionsByMerchant(transactions);
       const detectedSubscriptions: DetectedSubscription[] = [];
 
-      for (const [merchantName, merchantTransactions] of Object.entries(
-        merchantGroups
-      )) {
+      for (const [merchantName, merchantTransactions] of Object.entries(merchantGroups)) {
         const subscription = await this.analyzeSubscriptionPattern(
           userId,
           merchantName,
@@ -168,11 +160,9 @@ export class SubscriptionService {
       // Save detected subscriptions to database
       await this.saveDetectedSubscriptions(detectedSubscriptions);
 
-      return detectedSubscriptions.sort(
-        (a, b) => b.confidence_score - a.confidence_score
-      );
+      return detectedSubscriptions.sort((a, b) => b.confidence_score - a.confidence_score);
     } catch (error) {
-      console.error("Error detecting subscriptions:", error);
+      logger.error("Error detecting subscriptions", error as Error);
       return [];
     }
   }
@@ -180,9 +170,7 @@ export class SubscriptionService {
   /**
    * Get user's confirmed subscriptions
    */
-  static async getUserSubscriptions(
-    userId: string
-  ): Promise<DetectedSubscription[]> {
+  static async getUserSubscriptions(userId: string): Promise<DetectedSubscription[]> {
     try {
       const { data: subscriptions, error } = await supabase
         .from("subscriptions")
@@ -197,7 +185,7 @@ export class SubscriptionService {
 
       return subscriptions || [];
     } catch (error) {
-      console.error("Error fetching user subscriptions:", error);
+      logger.error("Error fetching user subscriptions", error as Error);
       throw error;
     }
   }
@@ -224,7 +212,7 @@ export class SubscriptionService {
         throw new Error(`Failed to update subscription: ${error.message}`);
       }
     } catch (error) {
-      console.error("Error updating subscription status:", error);
+      logger.error("Error updating subscription status", error as Error);
       throw error;
     }
   }
@@ -266,10 +254,7 @@ export class SubscriptionService {
       // Group by category
       const categoryMap = new Map<string, { amount: number; count: number }>();
       subscriptions.forEach((sub) => {
-        const monthlyAmount = this.calculateMonthlyAmount(
-          sub.amount,
-          sub.frequency
-        );
+        const monthlyAmount = this.calculateMonthlyAmount(sub.amount, sub.frequency);
         const existing = categoryMap.get(sub.category) || {
           amount: 0,
           count: 0,
@@ -280,13 +265,11 @@ export class SubscriptionService {
         });
       });
 
-      const categoryBreakdown = Array.from(categoryMap.entries()).map(
-        ([category, data]) => ({
-          category,
-          amount: data.amount,
-          count: data.count,
-        })
-      );
+      const categoryBreakdown = Array.from(categoryMap.entries()).map(([category, data]) => ({
+        category,
+        amount: data.amount,
+        count: data.count,
+      }));
 
       // Calculate trends (simplified)
       const currentMonth = new Date().toISOString().slice(0, 7);
@@ -313,7 +296,7 @@ export class SubscriptionService {
         recommendations,
       };
     } catch (error) {
-      console.error("Error getting subscription insights:", error);
+      logger.error("Error getting subscription insights", error as Error);
       throw error;
     }
   }
@@ -334,9 +317,7 @@ export class SubscriptionService {
     try {
       const subscriptions = await this.getUserSubscriptions(userId);
       const now = new Date();
-      const futureDate = new Date(
-        now.getTime() + daysAhead * 24 * 60 * 60 * 1000
-      );
+      // const futureDate = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
 
       const upcomingRenewals = subscriptions
         .map((subscription) => {
@@ -351,16 +332,12 @@ export class SubscriptionService {
             estimatedAmount: subscription.average_amount,
           };
         })
-        .filter(
-          (renewal) =>
-            renewal.daysUntilRenewal >= 0 &&
-            renewal.daysUntilRenewal <= daysAhead
-        )
+        .filter((renewal) => renewal.daysUntilRenewal >= 0 && renewal.daysUntilRenewal <= daysAhead)
         .sort((a, b) => a.daysUntilRenewal - b.daysUntilRenewal);
 
       return upcomingRenewals;
     } catch (error) {
-      console.error("Error getting upcoming renewals:", error);
+      logger.error("Error getting upcoming renewals", error as Error);
       throw error;
     }
   }
@@ -368,10 +345,7 @@ export class SubscriptionService {
   /**
    * Cancel or mark subscription as inactive
    */
-  static async cancelSubscription(
-    subscriptionId: string,
-    userId: string
-  ): Promise<void> {
+  static async cancelSubscription(subscriptionId: string, userId: string): Promise<void> {
     await this.updateSubscriptionStatus(subscriptionId, userId, "cancelled");
   }
 
@@ -428,7 +402,7 @@ export class SubscriptionService {
 
       return data;
     } catch (error) {
-      console.error("Error adding manual subscription:", error);
+      logger.error("Error adding manual subscription", error as Error);
       throw error;
     }
   }
@@ -436,15 +410,11 @@ export class SubscriptionService {
   /**
    * Private: Group transactions by merchant
    */
-  private static groupTransactionsByMerchant(
-    transactions: any[]
-  ): Record<string, any[]> {
+  private static groupTransactionsByMerchant(transactions: any[]): Record<string, any[]> {
     const groups: Record<string, any[]> = {};
 
     transactions.forEach((transaction) => {
-      const merchantName = this.normalizeMerchantName(
-        transaction.merchant_name
-      );
+      const merchantName = this.normalizeMerchantName(transaction.merchant_name);
       if (!groups[merchantName]) {
         groups[merchantName] = [];
       }
@@ -480,9 +450,7 @@ export class SubscriptionService {
 
     // Sort transactions by date
     transactions.sort(
-      (a, b) =>
-        new Date(a.transaction_date).getTime() -
-        new Date(b.transaction_date).getTime()
+      (a, b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime()
     );
 
     // Analyze transaction intervals
@@ -490,9 +458,7 @@ export class SubscriptionService {
     for (let i = 1; i < transactions.length; i++) {
       const prev = new Date(transactions[i - 1].transaction_date);
       const current = new Date(transactions[i].transaction_date);
-      const daysDiff = Math.round(
-        (current.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000)
-      );
+      const daysDiff = Math.round((current.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000));
       intervals.push(daysDiff);
     }
 
@@ -510,17 +476,14 @@ export class SubscriptionService {
 
     // Analyze amounts
     const amounts = transactions.map((t) => Math.abs(t.amount));
-    const averageAmount =
-      amounts.reduce((sum, amt) => sum + amt, 0) / amounts.length;
+    const averageAmount = amounts.reduce((sum, amt) => sum + amt, 0) / amounts.length;
     const amountVariance = this.calculateAmountVariance(amounts);
 
     // Detect category
     const category = this.detectSubscriptionCategory(merchantName);
 
     // Calculate next expected date
-    const lastTransaction = new Date(
-      transactions[transactions.length - 1].transaction_date
-    );
+    const lastTransaction = new Date(transactions[transactions.length - 1].transaction_date);
     const nextExpected = this.calculateNextExpected(lastTransaction, frequency);
 
     // Generate confidence score
@@ -567,8 +530,7 @@ export class SubscriptionService {
   private static detectFrequencyPattern(
     intervals: number[]
   ): DetectedSubscription["frequency"] | null {
-    const avgInterval =
-      intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
+    const avgInterval = intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
 
     // Weekly (7 ± 2 days)
     if (avgInterval >= 5 && avgInterval <= 9) {
@@ -611,8 +573,7 @@ export class SubscriptionService {
       (interval) => Math.abs(interval - expectedInterval) / expectedInterval
     );
 
-    const avgDeviation =
-      deviations.reduce((sum, dev) => sum + dev, 0) / deviations.length;
+    const avgDeviation = deviations.reduce((sum, dev) => sum + dev, 0) / deviations.length;
 
     // Convert to 0-100 scale (lower deviation = higher strength)
     return Math.max(0, Math.min(100, 100 - avgDeviation * 100));
@@ -626,8 +587,7 @@ export class SubscriptionService {
 
     const mean = amounts.reduce((sum, amt) => sum + amt, 0) / amounts.length;
     const variance =
-      amounts.reduce((sum, amt) => sum + Math.pow(amt - mean, 2), 0) /
-      amounts.length;
+      amounts.reduce((sum, amt) => sum + Math.pow(amt - mean, 2), 0) / amounts.length;
     const stdDev = Math.sqrt(variance);
 
     // Return coefficient of variation as percentage
@@ -711,12 +671,8 @@ export class SubscriptionService {
   /**
    * Private: Extract billing cycle day from transactions
    */
-  private static extractBillingCycleDay(
-    transactions: any[]
-  ): number | undefined {
-    const days = transactions.map((t) =>
-      new Date(t.transaction_date).getDate()
-    );
+  private static extractBillingCycleDay(transactions: any[]): number | undefined {
+    const days = transactions.map((t) => new Date(t.transaction_date).getDate());
 
     // Find the most common day
     const dayCount = days.reduce(
@@ -727,9 +683,7 @@ export class SubscriptionService {
       {} as Record<number, number>
     );
 
-    const mostCommonDay = Object.entries(dayCount).sort(
-      ([, a], [, b]) => b - a
-    )[0];
+    const mostCommonDay = Object.entries(dayCount).sort(([, a], [, b]) => b - a)[0];
 
     return mostCommonDay ? parseInt(mostCommonDay[0]) : undefined;
   }
@@ -741,8 +695,7 @@ export class SubscriptionService {
     const anomalies: string[] = [];
 
     const amounts = transactions.map((t) => Math.abs(t.amount));
-    const avgAmount =
-      amounts.reduce((sum, amt) => sum + amt, 0) / amounts.length;
+    // const avgAmount = amounts.reduce((sum, amt) => sum + amt, 0) / amounts.length;
 
     // Check for significant amount changes
     for (let i = 1; i < amounts.length; i++) {
@@ -779,29 +732,23 @@ export class SubscriptionService {
         );
 
       const existingKeys = new Set(
-        existing?.map(
-          (e) => `${e.user_id}_${this.normalizeMerchantName(e.merchant_name)}`
-        ) || []
+        existing?.map((e) => `${e.user_id}_${this.normalizeMerchantName(e.merchant_name)}`) || []
       );
 
       const newSubscriptions = subscriptions.filter(
         (sub) =>
-          !existingKeys.has(
-            `${sub.user_id}_${this.normalizeMerchantName(sub.merchant_name)}`
-          )
+          !existingKeys.has(`${sub.user_id}_${this.normalizeMerchantName(sub.merchant_name)}`)
       );
 
       if (newSubscriptions.length > 0) {
-        const { error } = await supabase
-          .from("subscriptions")
-          .insert(newSubscriptions);
+        const { error } = await supabase.from("subscriptions").insert(newSubscriptions);
 
         if (error) {
-          console.error("Error saving subscriptions:", error);
+          logger.error("Error saving subscriptions", error as Error);
         }
       }
     } catch (error) {
-      console.error("Error saving detected subscriptions:", error);
+      logger.error("Error saving detected subscriptions", error as Error);
     }
   }
 
@@ -836,9 +783,7 @@ export class SubscriptionService {
     const recommendations: string[] = [];
 
     // High spending category recommendation
-    const topCategory = categoryBreakdown.sort(
-      (a, b) => b.amount - a.amount
-    )[0];
+    const topCategory = categoryBreakdown.sort((a, b) => b.amount - a.amount)[0];
     if (topCategory && topCategory.amount > 2000) {
       recommendations.push(
         `You spend ₹${topCategory.amount.toFixed(0)}/month on ${topCategory.category} subscriptions. Consider reviewing if all are necessary.`
@@ -883,7 +828,6 @@ export class SubscriptionService {
     return recommendations;
   }
 }
-
 
 // Export singleton instance
 export const subscriptionService = new SubscriptionService();

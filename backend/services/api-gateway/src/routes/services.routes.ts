@@ -32,7 +32,7 @@ import { Router, Response } from "express";
 import { authenticate, AuthRequest } from "@common/middleware/auth";
 import { supabase } from "shared/database/supabase";
 import { redis } from "shared/cache/redis";
-import { logger } from "../utils/logger";
+import { logger } from "shared/monitoring/logger";
 
 const router = Router();
 
@@ -101,10 +101,7 @@ router.post("/update-budget", authenticate, async (req: AuthRequest, res: Respon
       .eq("billing_cycle_year", currentYear);
 
     if (txError) {
-      logger.error("Failed to fetch transactions", {
-        error: txError,
-        userId,
-      });
+      logger.error("Failed to fetch transactions", txError as Error);
       return res.status(500).json({
         success: false,
         error: "Failed to calculate spending",
@@ -124,7 +121,7 @@ router.post("/update-budget", authenticate, async (req: AuthRequest, res: Respon
       .single();
 
     if (userError) {
-      logger.error("Failed to fetch user", { error: userError, userId });
+      logger.error("Failed to fetch user", userError as Error);
       return res.status(500).json({
         success: false,
         error: "Failed to fetch budget settings",
@@ -149,10 +146,7 @@ router.post("/update-budget", authenticate, async (req: AuthRequest, res: Respon
     );
 
     if (upsertError) {
-      logger.error("Failed to update budget tracking", {
-        error: upsertError,
-        userId,
-      });
+      logger.error("Failed to update budget tracking", upsertError as Error);
       return res.status(500).json({
         success: false,
         error: "Failed to save budget tracking",
@@ -187,7 +181,7 @@ router.post("/update-budget", authenticate, async (req: AuthRequest, res: Respon
       },
     });
   } catch (error) {
-    logger.error("Budget update error", { error });
+    logger.error("Budget update error", error as Error);
     return res.status(500).json({ success: false, error: "Budget update failed" });
   }
 });
@@ -261,7 +255,7 @@ router.post("/check-alerts", authenticate, async (req: AuthRequest, res: Respons
 
     if (budgetError && budgetError.code !== "PGRST116") {
       // PGRST116 = no rows returned
-      logger.error("Failed to fetch budget", { error: budgetError, userId });
+      logger.error("Failed to fetch budget", budgetError as Error);
       return res.status(500).json({
         success: false,
         error: "Failed to check budget",
@@ -359,7 +353,7 @@ router.post("/check-alerts", authenticate, async (req: AuthRequest, res: Respons
 
     return res.json({ success: true, alerts });
   } catch (error) {
-    logger.error("Alert check error", { error });
+    logger.error("Alert check error", error as Error);
     return res.status(500).json({ success: false, error: "Alert check failed" });
   }
 });
@@ -384,7 +378,7 @@ router.post("/check-reminders", authenticate, async (req: AuthRequest, res: Resp
       .eq("is_active", true);
 
     if (cardsError) {
-      logger.error("Failed to fetch cards", { error: cardsError, userId });
+      logger.error("Failed to fetch cards", cardsError as Error);
       return res.status(500).json({
         success: false,
         error: "Failed to check reminders",
@@ -431,7 +425,7 @@ router.post("/check-reminders", authenticate, async (req: AuthRequest, res: Resp
 
     return res.json({ success: true, reminders });
   } catch (error) {
-    logger.error("Reminder check error", { error });
+    logger.error("Reminder check error", error as Error);
     return res.status(500).json({ success: false, error: "Reminder check failed" });
   }
 });
@@ -475,7 +469,7 @@ router.post("/refresh-analytics", authenticate, async (req: AuthRequest, res: Re
       keysInvalidated: deletedCount,
     });
   } catch (error) {
-    logger.error("Analytics refresh error", { error });
+    logger.error("Analytics refresh error", error as Error);
     return res.status(500).json({ success: false, error: "Analytics refresh failed" });
   }
 });

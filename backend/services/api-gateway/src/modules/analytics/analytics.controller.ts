@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { AdvancedAnalyticsService } from "./analytics.service";
 import { HTTP_STATUS, ERROR_MESSAGES } from "../../constants";
-import { logger } from "../../utils/logger";
+import { logger } from "shared/monitoring/logger";
 
 /**
  * Analytics Controller

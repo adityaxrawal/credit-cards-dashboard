@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { AIInsightsService } from "./ai-insights.service";
 import { HTTP_STATUS, ERROR_MESSAGES } from "../../constants";
-import { logger } from "../../utils/logger";
+import { logger } from "shared/monitoring/logger";
 import { AuthRequest } from "../../common/middleware/auth";
 
 /**
@@ -22,7 +22,7 @@ export class AiInsightsController {
       res.status(HTTP_STATUS.CREATED).json(result);
     } catch (error: unknown) {
       const err = error as Error;
-      logger.error("AiInsights creation failed", { error });
+      logger.error("AiInsights creation failed", error as Error);
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR,
         message: err.message,
@@ -43,7 +43,7 @@ export class AiInsightsController {
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: unknown) {
       const err = error as Error;
-      logger.error("Get ai-insights failed", { error });
+      logger.error("Get ai-insights failed", error as Error);
       res.status(HTTP_STATUS.NOT_FOUND).json({
         error: ERROR_MESSAGES.GENERIC.NOT_FOUND,
         message: err.message,
@@ -63,7 +63,7 @@ export class AiInsightsController {
       const result = await AIInsightsService.generateInsights(userId);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: unknown) {
-      logger.error("Get all ai-insights failed", { error });
+      logger.error("Get all ai-insights failed", error as Error);
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR,
       });
@@ -82,7 +82,7 @@ export class AiInsightsController {
       const result = await AIInsightsService.generateInsights(userId);
       res.status(HTTP_STATUS.OK).json(result);
     } catch (error: unknown) {
-      logger.error("Update ai-insights failed", { error });
+      logger.error("Update ai-insights failed", error as Error);
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR,
       });
@@ -93,7 +93,7 @@ export class AiInsightsController {
     try {
       res.status(HTTP_STATUS.NO_CONTENT).send();
     } catch (error: unknown) {
-      logger.error("Delete ai-insights failed", { error });
+      logger.error("Delete ai-insights failed", error as Error);
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR,
       });

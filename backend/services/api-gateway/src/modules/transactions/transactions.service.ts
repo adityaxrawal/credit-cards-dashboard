@@ -1,3 +1,4 @@
+import { logger } from "shared/monitoring/logger";
 import { supabase } from "shared/database/supabase";
 
 /**
@@ -53,23 +54,10 @@ export class TransactionService {
     pagination: PaginationOptions = {}
   ) {
     try {
-      const {
-        cardId,
-        startDate,
-        endDate,
-        type,
-        category,
-        minAmount,
-        maxAmount,
-        searchQuery,
-      } = filters;
+      const { cardId, startDate, endDate, type, category, minAmount, maxAmount, searchQuery } =
+        filters;
 
-      const {
-        page = 1,
-        limit = 50,
-        sortBy = "transaction_date",
-        sortOrder = "desc",
-      } = pagination;
+      const { page = 1, limit = 50, sortBy = "transaction_date", sortOrder = "desc" } = pagination;
 
       const offset = (page - 1) * limit;
 
@@ -119,9 +107,7 @@ export class TransactionService {
       }
 
       if (searchQuery) {
-        query = query.or(
-          `merchant_name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`
-        );
+        query = query.or(`merchant_name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
       }
 
       // Apply sorting and pagination
@@ -145,7 +131,7 @@ export class TransactionService {
         },
       };
     } catch (error) {
-      console.error("Error fetching transactions:", error);
+      logger.error("Error fetching transactions", error as Error);
       throw error;
     }
   }
@@ -181,7 +167,7 @@ export class TransactionService {
 
       return transaction;
     } catch (error) {
-      console.error("Error fetching transaction:", error);
+      logger.error("Error fetching transaction", error as Error);
       throw error;
     }
   }
@@ -221,10 +207,7 @@ export class TransactionService {
       // Calculate billing cycle
       const transactionDate = new Date(transactionData.transaction_date);
       const billDate = card.bill_date;
-      const { month, year } = this.calculateBillingCycle(
-        transactionDate,
-        billDate
-      );
+      const { month, year } = this.calculateBillingCycle(transactionDate, billDate);
 
       // Create transaction
       const { data: transaction, error } = await supabase
@@ -250,7 +233,7 @@ export class TransactionService {
 
       return transaction;
     } catch (error) {
-      console.error("Error creating transaction:", error);
+      logger.error("Error creating transaction", error as Error);
       throw error;
     }
   }
@@ -290,10 +273,7 @@ export class TransactionService {
 
         if (card) {
           const transactionDate = new Date(updateData.transaction_date);
-          const { month, year } = this.calculateBillingCycle(
-            transactionDate,
-            card.bill_date
-          );
+          const { month, year } = this.calculateBillingCycle(transactionDate, card.bill_date);
           Object.assign(updateData, {
             billing_cycle_month: month,
             billing_cycle_year: year,
@@ -315,16 +295,13 @@ export class TransactionService {
       }
 
       // Update card outstanding if amount or type changed
-      if (
-        updateData.amount !== undefined ||
-        updateData.transaction_type !== undefined
-      ) {
+      if (updateData.amount !== undefined || updateData.transaction_type !== undefined) {
         await this.updateCardOutstanding(existing.card_id);
       }
 
       return transaction;
     } catch (error) {
-      console.error("Error updating transaction:", error);
+      logger.error("Error updating transaction", error as Error);
       throw error;
     }
   }
@@ -353,7 +330,7 @@ export class TransactionService {
 
       return { success: true, message: "Transaction deleted successfully" };
     } catch (error) {
-      console.error("Error deleting transaction:", error);
+      logger.error("Error deleting transaction", error as Error);
       throw error;
     }
   }
@@ -434,13 +411,12 @@ export class TransactionService {
         totalCredit,
         totalRefund,
         netSpend: totalDebit - totalCredit - totalRefund,
-        averageTransaction:
-          totalTransactions > 0 ? totalDebit / totalTransactions : 0,
+        averageTransaction: totalTransactions > 0 ? totalDebit / totalTransactions : 0,
         topCategories,
         categoryBreakdown,
       };
     } catch (error) {
-      console.error("Error calculating statistics:", error);
+      logger.error("Error calculating statistics", error as Error);
       throw error;
     }
   }
@@ -467,14 +443,12 @@ export class TransactionService {
         .limit(limit);
 
       if (error) {
-        throw new Error(
-          `Failed to fetch recent transactions: ${error.message}`
-        );
+        throw new Error(`Failed to fetch recent transactions: ${error.message}`);
       }
 
       return transactions || [];
     } catch (error) {
-      console.error("Error fetching recent transactions:", error);
+      logger.error("Error fetching recent transactions", error as Error);
       throw error;
     }
   }
@@ -495,10 +469,7 @@ export class TransactionService {
       throw new Error("Amount must be greater than 0");
     }
 
-    if (
-      !data.transaction_type ||
-      !["debit", "credit", "refund"].includes(data.transaction_type)
-    ) {
+    if (!data.transaction_type || !["debit", "credit", "refund"].includes(data.transaction_type)) {
       throw new Error("Invalid transaction type");
     }
 
@@ -549,10 +520,7 @@ export class TransactionService {
         transactions?.reduce((total: number, t: any) => {
           if (t.transaction_type === "debit") {
             return total + t.amount;
-          } else if (
-            t.transaction_type === "credit" ||
-            t.transaction_type === "refund"
-          ) {
+          } else if (t.transaction_type === "credit" || t.transaction_type === "refund") {
             return total - t.amount;
           }
           return total;
@@ -564,14 +532,13 @@ export class TransactionService {
         .update({ current_outstanding: Math.max(0, outstanding) })
         .eq("id", cardId);
     } catch (error) {
-      console.error("Error updating card outstanding:", error);
+      logger.error("Error updating card outstanding", error as Error);
       // Don't throw - this is a secondary operation
     }
   }
 }
 
 export default TransactionService;
-
 
 // Export singleton instance
 export const transactionService = new TransactionService();

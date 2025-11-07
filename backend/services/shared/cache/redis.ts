@@ -1,5 +1,6 @@
 import Redis from "ioredis";
 import dotenv from "dotenv";
+import { logger } from "../monitoring/logger";
 
 dotenv.config();
 
@@ -31,7 +32,7 @@ class UpstashRestRedis {
       const result = (await response.json()) as { result: any };
       return result.result;
     } catch (error) {
-      console.error("Upstash Redis error:", error);
+      logger.error(`Upstash Redis error: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }
   }
@@ -115,14 +116,11 @@ if (
   !process.env.REDIS_URL ||
   process.env.REDIS_URL.trim() === ""
 ) {
-  console.log("Using Mock Redis for testing/fallback");
+  logger.info("Using Mock Redis for testing/fallback");
   redis = new MockRedis();
-} else if (
-  process.env.UPSTASH_REDIS_REST_URL &&
-  process.env.UPSTASH_REDIS_REST_TOKEN
-) {
+} else if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
   // Prefer REST API - simpler, no connection overhead, no memory leaks
-  console.log("Using Upstash Redis REST API for cloud connection");
+  logger.info("Using Upstash Redis REST API for cloud connection");
   redis = new UpstashRestRedis(
     process.env.UPSTASH_REDIS_REST_URL,
     process.env.UPSTASH_REDIS_REST_TOKEN
@@ -130,7 +128,7 @@ if (
 } else if (process.env.USE_IOREDIS === "true" && process.env.REDIS_URL) {
   // Only use ioredis if explicitly requested
   try {
-    console.log("Using Upstash Redis with ioredis client (explicit opt-in)");
+    logger.info("Using Upstash Redis with ioredis client (explicit opt-in)");
     redis = new Redis(process.env.REDIS_URL, {
       maxRetriesPerRequest: 2,
       enableReadyCheck: false,
@@ -138,7 +136,7 @@ if (
       connectTimeout: 5000,
       retryStrategy(times: number) {
         if (times > 2) {
-          console.log("Redis connection failed, giving up");
+          logger.warn("Redis connection failed, giving up");
           return null;
         }
         return Math.min(times * 50, 500);
@@ -146,18 +144,18 @@ if (
     });
 
     redis.on("connect", () => {
-      console.log("Redis connected successfully via ioredis");
+      logger.info("Redis connected successfully via ioredis");
     });
 
     redis.on("error", (err) => {
-      console.log("Redis ioredis error:", err.message);
+      logger.warn(`Redis ioredis error: ${err.message}`);
     });
   } catch (error) {
-    console.log("Failed to initialize ioredis, using Mock Redis");
+    logger.warn("Failed to initialize ioredis, using Mock Redis");
     redis = new MockRedis();
   }
 } else {
-  console.log("No Redis configuration found, using Mock Redis");
+  logger.info("No Redis configuration found, using Mock Redis");
   redis = new MockRedis();
 }
 

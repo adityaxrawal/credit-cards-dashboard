@@ -38,44 +38,46 @@ class Logger {
       ),
       defaultMeta: this.defaultContext,
       transports: [
-        // Console transport
+        // Console transport (always on)
         new winston.transports.Console({
           format: winston.format.combine(
             winston.format.colorize(),
             winston.format.printf(({ level, message, timestamp, ...meta }) => {
-              const metaStr = Object.keys(meta).length
-                ? JSON.stringify(meta, null, 2)
-                : "";
+              const metaStr = Object.keys(meta).length ? JSON.stringify(meta, null, 2) : "";
               return `${timestamp} [${level}]: ${message} ${metaStr}`;
             })
           ),
         }),
-
-        // File transport for errors
-        new winston.transports.File({
-          filename: "logs/error.log",
-          level: "error",
-          maxsize: 5242880, // 5MB
-          maxFiles: 5,
-        }),
-
-        // File transport for all logs
-        new winston.transports.File({
-          filename: "logs/combined.log",
-          maxsize: 5242880, // 5MB
-          maxFiles: 10,
-        }),
       ],
     });
 
+    // Optional file logging controlled by ENABLE_FILE_LOGGING env flag
+    if (process.env.ENABLE_FILE_LOGGING === "true") {
+      this.logger.add(
+        new winston.transports.File({
+          filename: "logs/error.log",
+          level: "error",
+          maxsize: 5242880,
+          maxFiles: 5,
+        })
+      );
+      this.logger.add(
+        new winston.transports.File({
+          filename: "logs/combined.log",
+          maxsize: 5242880,
+          maxFiles: 10,
+        })
+      );
+    }
+
     // Add production transports
-    if (process.env.NODE_ENV === "production") {
-      // You can add cloud logging here (e.g., Google Cloud Logging, CloudWatch)
+    if (process.env.NODE_ENV === "production" && process.env.ENABLE_FILE_LOGGING === "true") {
+      // Optional production aggregated log
       this.logger.add(
         new winston.transports.File({
           filename: "logs/production.log",
           level: "info",
-          maxsize: 10485760, // 10MB
+          maxsize: 10485760,
           maxFiles: 20,
         })
       );
@@ -144,8 +146,7 @@ class Logger {
     duration: number,
     context?: Partial<LogContext>
   ): void {
-    const level =
-      statusCode >= 500 ? "error" : statusCode >= 400 ? "warn" : "info";
+    const level = statusCode >= 500 ? "error" : statusCode >= 400 ? "warn" : "info";
     const message = `${method} ${path} ${statusCode} - ${duration}ms`;
 
     this.logger.log(level, message, {
@@ -163,12 +164,7 @@ class Logger {
   /**
    * Log database query
    */
-  logQuery(
-    query: string,
-    duration: number,
-    success: boolean,
-    context?: Partial<LogContext>
-  ): void {
+  logQuery(query: string, duration: number, success: boolean, context?: Partial<LogContext>): void {
     this.logger.debug("Database query", {
       ...this.defaultContext,
       ...context,

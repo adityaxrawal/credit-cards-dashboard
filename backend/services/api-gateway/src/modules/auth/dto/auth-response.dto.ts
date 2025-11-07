@@ -1,5 +1,3 @@
-import { IUser, IAuthTokens } from "../interfaces/auth.interface";
-
 /**
  * Auth Response DTO
  */

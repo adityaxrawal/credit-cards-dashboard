@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from "express";
+import { AuthRequest } from "../../common/middleware/auth";
 import { authService } from "./auth.service";
 import { HTTP_STATUS, ERROR_MESSAGES } from "../../constants";
-import { logger } from "../../utils/logger";
+import { logger } from "shared/monitoring/logger";
 
 /**
  * Auth Controller
@@ -12,11 +13,7 @@ export class AuthController {
    * Handle Google OAuth callback
    * POST /api/auth/google
    */
-  static async googleOAuth(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  static async googleOAuth(req: Request, res: Response, _next: NextFunction): Promise<void> {
     try {
       const { code } = req.body;
 
@@ -31,11 +28,11 @@ export class AuthController {
       const result = await authService.googleOAuth(code);
 
       res.status(HTTP_STATUS.OK).json(result);
-    } catch (error: any) {
-      logger.error("Google OAuth failed", {  error  });
+    } catch (error) {
+      logger.error("Google OAuth failed", error as Error);
       res.status(HTTP_STATUS.UNAUTHORIZED).json({
         error: ERROR_MESSAGES.AUTH.UNAUTHORIZED,
-        message: error.message,
+        message: error instanceof Error ? error.message : "Authentication failed",
       });
     }
   }
@@ -44,11 +41,7 @@ export class AuthController {
    * Refresh access token
    * POST /api/auth/refresh
    */
-  static async refreshToken(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  static async refreshToken(req: Request, res: Response, _next: NextFunction): Promise<void> {
     try {
       const { refreshToken } = req.body;
 
@@ -63,11 +56,11 @@ export class AuthController {
       const result = await authService.refreshAccessToken(refreshToken);
 
       res.status(HTTP_STATUS.OK).json(result);
-    } catch (error: any) {
-      logger.error("Token refresh failed", {  error  });
+    } catch (error) {
+      logger.error("Token refresh failed", error as Error);
       res.status(HTTP_STATUS.UNAUTHORIZED).json({
         error: ERROR_MESSAGES.AUTH.TOKEN_EXPIRED,
-        message: error.message,
+        message: error instanceof Error ? error.message : "Token refresh failed",
       });
     }
   }
@@ -76,28 +69,17 @@ export class AuthController {
    * Logout user
    * POST /api/auth/logout
    */
-  static async logout(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  static async logout(req: AuthRequest, res: Response, _next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).user?.userId;
-
-      if (!userId) {
-        res.status(HTTP_STATUS.UNAUTHORIZED).json({
-          error: ERROR_MESSAGES.AUTH.UNAUTHORIZED,
-        });
-        return;
-      }
+      const userId = req.userId!;
 
       await authService.logout(userId);
 
       res.status(HTTP_STATUS.OK).json({
         message: "Logged out successfully",
       });
-    } catch (error: any) {
-      logger.error("Logout failed", {  error  });
+    } catch (error) {
+      logger.error("Logout failed", error as Error);
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR,
       });
@@ -108,26 +90,15 @@ export class AuthController {
    * Get user profile
    * GET /api/auth/profile
    */
-  static async getProfile(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  static async getProfile(req: AuthRequest, res: Response, _next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).user?.userId;
-
-      if (!userId) {
-        res.status(HTTP_STATUS.UNAUTHORIZED).json({
-          error: ERROR_MESSAGES.AUTH.UNAUTHORIZED,
-        });
-        return;
-      }
+      const userId = req.userId!;
 
       const user = await authService.getUserInfo(userId);
 
       res.status(HTTP_STATUS.OK).json(user);
-    } catch (error: any) {
-      logger.error("Get profile failed", {  error  });
+    } catch (error) {
+      logger.error("Get profile failed", error as Error);
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         error: ERROR_MESSAGES.GENERIC.INTERNAL_ERROR,
       });
