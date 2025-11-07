@@ -5,7 +5,7 @@ dotenv.config();
 // Register path aliases for runtime resolution
 import "tsconfig-paths/register";
 
-import express, { Application, Request, Response, NextFunction } from "express";
+import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
@@ -73,7 +73,9 @@ app.use((_req: Request, res: Response) => {
 app.use(errorHandler);
 
 // Start server
-let server: any;
+import { Server } from "http";
+
+let server: Server | undefined;
 if (process.env.NODE_ENV !== "test") {
   server = app.listen(PORT, () => {
     logger.info(`API Gateway running on port ${PORT}`);

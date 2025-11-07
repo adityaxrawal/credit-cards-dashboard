@@ -10,6 +10,5 @@ export interface IRewards {
   // Add specific fields based on module
 }
 
-export interface IRewardsResponse extends IRewards {
-  // Response specific fields
-}
+// Use type alias instead of empty interface
+export type IRewardsResponse = IRewards;

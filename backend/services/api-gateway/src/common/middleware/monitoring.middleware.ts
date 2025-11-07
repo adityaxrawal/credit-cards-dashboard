@@ -4,23 +4,17 @@
  */
 
 import { Request, Response, NextFunction } from "express";
-import * as Sentry from "@sentry/node";
 import { metricsCollector } from "shared/monitoring/metrics-collector";
 import { logger } from "shared/monitoring/logger";
 import { captureError } from "shared/monitoring";
+import { AuthRequest } from "./auth";
 
 /**
  * Request tracking middleware
  */
-export function requestTrackingMiddleware(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void {
+export function requestTrackingMiddleware(req: Request, res: Response, next: NextFunction): void {
   const startTime = Date.now();
-  const requestId =
-    (req.headers["x-request-id"] as string) ||
-    `req-${Date.now()}-${Math.random()}`;
+  const requestId = (req.headers["x-request-id"] as string) || `req-${Date.now()}-${Math.random()}`;
 
   // Add request ID to response headers
   res.setHeader("X-Request-Id", requestId);
@@ -39,7 +33,7 @@ export function requestTrackingMiddleware(
   // Override res.end to capture response time
   const originalEnd = res.end.bind(res);
   res.end = function (
-    chunk?: any,
+    chunk?: unknown,
     encoding?: BufferEncoding | (() => void),
     cb?: () => void
   ): Response {
@@ -53,12 +47,12 @@ export function requestTrackingMiddleware(
       statusCode,
       responseTime: duration,
       timestamp: Date.now(),
-      userId: (req as any).user?.userId,
+      userId: (req as AuthRequest).userId,
     });
 
     // Log request completion
     requestLogger.logRequest(req.method, req.path, statusCode, duration, {
-      userId: (req as any).user?.userId,
+      userId: (req as AuthRequest).userId,
     });
 
     // Call original end with proper typing
@@ -78,19 +72,20 @@ export function requestTrackingMiddleware(
  * Error tracking middleware
  */
 export function errorTrackingMiddleware(
-  err: Error,
+  err: Error & { statusCode?: number },
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void {
   const requestId = res.getHeader("X-Request-Id") as string;
+  const authReq = req as AuthRequest;
 
   // Log error
   logger.error("Request error", err, {
     requestId,
     method: req.method,
     path: req.path,
-    userId: (req as any).user?.userId,
+    userId: authReq.userId,
   });
 
   // Send to error tracking (GlitchTip/Sentry) with request context
@@ -107,16 +102,16 @@ export function errorTrackingMiddleware(
         body: req.body,
       },
     },
-    user: (req as any).user
+    user: authReq.userId
       ? {
-          id: (req as any).user.userId,
-          email: (req as any).user.email,
+          id: authReq.userId,
+          email: authReq.email,
         }
       : undefined,
   });
 
   // Send error response
-  const statusCode = (err as any).statusCode || 500;
+  const statusCode = err.statusCode || 500;
   res.status(statusCode).json({
     error: {
       message: err.message,
@@ -129,18 +124,14 @@ export function errorTrackingMiddleware(
 /**
  * Performance monitoring middleware
  */
-export function performanceMiddleware(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void {
+export function performanceMiddleware(req: Request, res: Response, next: NextFunction): void {
   const startTime = Date.now();
 
   // Capture original end
   const originalEnd2 = res.end.bind(res);
 
   res.end = function (
-    chunk?: any,
+    chunk?: unknown,
     encoding?: BufferEncoding | (() => void),
     cb?: () => void
   ): Response {
@@ -170,10 +161,11 @@ export function performanceMiddleware(
  */
 export async function rateLimitMetricsMiddleware(
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): Promise<void> {
-  const userId = (req as any).user?.userId;
+  const authReq = req as AuthRequest;
+  const userId = authReq.userId;
   const endpoint = req.path;
 
   if (userId) {
