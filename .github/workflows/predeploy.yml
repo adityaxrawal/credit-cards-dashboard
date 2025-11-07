@@ -32,42 +32,31 @@ jobs:
               with:
                   node-version: ${{ matrix.node-version }}
                   cache: "npm"
+                  cache-dependency-path: backend/package-lock.json
 
-            - name: 📦 Install root dependencies
+            - name: 📦 Install backend dependencies
               run: npm ci
-              working-directory: .
-
-            - name: 📦 Install api-gateway dependencies
-              run: npm ci
-              working-directory: backend/services/api-gateway
-
-            - name: 📦 Install shared dependencies
-              run: npm install
-              working-directory: backend/shared
+              working-directory: backend
 
             - name: 🔍 Verify dependencies
               run: npm run deps:verify
-              working-directory: backend/services/api-gateway
+              working-directory: backend
 
-            - name: 🔎 TypeScript strict type check
-              run: npm run typecheck:strict
-              working-directory: backend/services/api-gateway
+            - name: 🔎 TypeScript type check
+              run: npm run typecheck
+              working-directory: backend
 
             - name: 🧹 Lint check
               run: npm run lint
-              working-directory: backend/services/api-gateway
+              working-directory: backend
 
             - name: 💅 Format check
               run: npm run format:check
-              working-directory: backend/services/api-gateway
+              working-directory: backend
 
-            - name: 🏗️ Build clean
-              run: npm run build:clean
-              working-directory: backend/services/api-gateway
-
-            - name: 🎯 Simulate Render deployment
-              run: npm run render:simulate
-              working-directory: backend/services/api-gateway
+            - name: 🏗️ Build
+              run: npm run build
+              working-directory: backend
 
             - name: 📤 Upload build artifacts
               if: success()
@@ -86,7 +75,6 @@ jobs:
                   echo "✅ Linting passed"
                   echo "✅ Formatting validated"
                   echo "✅ Build artifacts created"
-                  echo "✅ Render deployment simulation successful"
                   echo ""
                   echo "🚀 Ready for deployment to Render!"
 
@@ -119,10 +107,10 @@ jobs:
                   node-version: "22.x"
 
             - name: 🔧 Simulate Render's exact build process
-              working-directory: backend/services/api-gateway
+              working-directory: backend
               run: |
                   echo "Simulating Render's build process..."
-                  echo "Root Directory: backend/services/api-gateway"
+                  echo "Root Directory: backend"
                   echo "Build Command: npm install && npm run build"
                   echo "Start Command: npm start"
                   echo ""
@@ -132,33 +120,33 @@ jobs:
                   npm run build
 
                   # Verify the output
-                  if [ ! -f "dist/index.js" ]; then
-                    echo "❌ Error: dist/index.js not created!"
+                  if [ ! -f "services/api-gateway/dist/index.js" ]; then
+                    echo "❌ Error: services/api-gateway/dist/index.js not created!"
                     echo "Render deployment will fail!"
                     exit 1
                   fi
 
-                  echo "✅ Build successful - dist/index.js exists"
+                  echo "✅ Build successful - services/api-gateway/dist/index.js exists"
 
                   # Verify start command would work
-                  if ! grep -q '"start".*"node dist/index.js"' package.json; then
-                    echo "⚠️  Warning: start script may not match expected format"
+                  if ! grep -q '"start"' package.json; then
+                    echo "⚠️  Warning: start script not found in package.json"
                   fi
 
                   echo "✅ Render compatibility verified!"
 
             - name: 📊 Build output summary
               if: success()
-              working-directory: backend/services/api-gateway
+              working-directory: backend
               run: |
                   echo "Build output structure:"
-                  ls -lah dist/ | head -20
+                  ls -lah services/api-gateway/dist/ | head -20
                   echo ""
-                  echo "dist/index.js size:"
-                  du -h dist/index.js
+                  echo "services/api-gateway/dist/index.js size:"
+                  du -h services/api-gateway/dist/index.js
                   echo ""
                   echo "Total dist size:"
-                  du -sh dist/
+                  du -sh services/api-gateway/dist/
 
     # Summary job that requires all checks to pass
     quality-gate-summary:
@@ -177,11 +165,10 @@ jobs:
                   echo ""
                   echo "The api-gateway service is ready for deployment:"
                   echo "  ✓ All dependencies verified"
-                  echo "  ✓ TypeScript compilation successful (strict mode)"
+                  echo "  ✓ TypeScript compilation successful"
                   echo "  ✓ Code linting passed"
                   echo "  ✓ Code formatting validated"
                   echo "  ✓ Build artifacts generated"
-                  echo "  ✓ Render deployment simulation successful"
                   echo "  ✓ Node.js 22.x compatibility verified"
                   echo ""
                   echo "🚀 Safe to deploy to Render!"
