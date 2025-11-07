@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiGet, apiPost, apiPut, apiDelete } from "./client";
 
 export interface Transaction {
   id: string;
@@ -101,24 +101,27 @@ export const transactionApi = {
     if (pagination?.sortBy) params.append("sortBy", pagination.sortBy);
     if (pagination?.sortOrder) params.append("sortOrder", pagination.sortOrder);
 
-    const response = await apiClient.get(`/transactions?${params.toString()}`);
-    return response.data.data;
+    return apiGet<{ data: TransactionListResponse }>(
+      `/transactions?${params.toString()}`
+    ).then((res) => res.data);
   },
 
   /**
    * Get a single transaction by ID
    */
   getTransaction: async (transactionId: string): Promise<Transaction> => {
-    const response = await apiClient.get(`/transactions/${transactionId}`);
-    return response.data.data;
+    return apiGet<{ data: Transaction }>(`/transactions/${transactionId}`).then(
+      (res) => res.data
+    );
   },
 
   /**
    * Get recent transactions
    */
   getRecentTransactions: async (limit: number = 10): Promise<Transaction[]> => {
-    const response = await apiClient.get(`/transactions/recent?limit=${limit}`);
-    return response.data.data;
+    return apiGet<{ data: Transaction[] }>(
+      `/transactions/recent?limit=${limit}`
+    ).then((res) => res.data);
   },
 
   /**
@@ -133,10 +136,9 @@ export const transactionApi = {
     if (filters?.startDate) params.append("startDate", filters.startDate);
     if (filters?.endDate) params.append("endDate", filters.endDate);
 
-    const response = await apiClient.get(
+    return apiGet<{ data: TransactionStatistics }>(
       `/transactions/statistics?${params.toString()}`
-    );
-    return response.data.data;
+    ).then((res) => res.data);
   },
 
   /**
@@ -145,8 +147,9 @@ export const transactionApi = {
   createTransaction: async (
     data: TransactionFormData
   ): Promise<Transaction> => {
-    const response = await apiClient.post("/transactions", data);
-    return response.data.data;
+    return apiPost<{ data: Transaction }>("/transactions", data).then(
+      (res) => res.data
+    );
   },
 
   /**
@@ -156,17 +159,16 @@ export const transactionApi = {
     transactionId: string,
     data: Partial<TransactionFormData>
   ): Promise<Transaction> => {
-    const response = await apiClient.put(
+    return apiPut<{ data: Transaction }>(
       `/transactions/${transactionId}`,
       data
-    );
-    return response.data.data;
+    ).then((res) => res.data);
   },
 
   /**
    * Delete a transaction
    */
   deleteTransaction: async (transactionId: string): Promise<void> => {
-    await apiClient.delete(`/transactions/${transactionId}`);
+    await apiDelete<void>(`/transactions/${transactionId}`);
   },
 };
