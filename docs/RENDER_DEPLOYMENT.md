@@ -38,11 +38,11 @@ If you prefer manual setup or need to troubleshoot:
 2. **Branch**: `prod`
 3. **Root Directory**: Leave empty (or `.`)
 4. **Runtime**: Node
-5. **Build Command**: 
+5. **Build Command**:
    ```bash
    cd backend && npm install --include=dev && npm run build
    ```
-6. **Start Command**: 
+6. **Start Command**:
    ```bash
    cd backend && npm start
    ```
@@ -54,6 +54,7 @@ If you prefer manual setup or need to troubleshoot:
 Copy all variables from `backend/.env.production.example` and set them in Render Dashboard with your actual values.
 
 **Critical Variables:**
+
 ```
 NODE_ENV=production
 PORT=10000
@@ -74,9 +75,11 @@ ENCRYPTION_KEY=your_32_char_key
 ## 🔍 Common Issues & Solutions
 
 ### Issue 1: "Cannot find type definition file" errors
+
 **Solution**: Use `npm install --include=dev` to ensure TypeScript and type definitions are installed during build.
 
 ### Issue 2: "Cannot find module" errors
+
 **Solution**: Ensure the build command includes `cd backend` before running npm commands.
 
 ### Issue 2: Port binding issues

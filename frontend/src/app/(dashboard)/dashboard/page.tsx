@@ -10,6 +10,8 @@ import {
 } from "@/lib/api/analytics";
 import { transactionApi, type Transaction } from "@/lib/api/transactions";
 import { GmailSyncButton } from "@/components/gmail/GmailSyncButton";
+import { RemindersWidget } from "@/components/dashboard/RemindersWidget";
+import { RefreshCw } from "lucide-react";
 import Link from "next/link";
 
 /**
@@ -25,6 +27,7 @@ export default function DashboardPage() {
   const [upcomingBills, setUpcomingBills] = useState<UpcomingBill[]>([]);
   const [loading, setLoading] = useState(true);
   const [autoSyncChecked, setAutoSyncChecked] = useState(false);
+  const [isAutoSyncing, setIsAutoSyncing] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -39,10 +42,13 @@ export default function DashboardPage() {
     window.addEventListener("refresh-dashboard", handleTransactionsUpdated);
 
     // Auto-refresh dashboard data every 5 minutes
-    const refreshInterval = setInterval(() => {
-      console.log("Auto-refreshing dashboard data (5-minute interval)");
-      loadDashboardData();
-    }, 5 * 60 * 1000); // 5 minutes
+    const refreshInterval = setInterval(
+      () => {
+        console.log("Auto-refreshing dashboard data (5-minute interval)");
+        loadDashboardData();
+      },
+      5 * 60 * 1000
+    ); // 5 minutes
 
     return () => {
       window.removeEventListener(
@@ -85,14 +91,12 @@ export default function DashboardPage() {
 
     try {
       setAutoSyncChecked(true);
-      const accessToken = localStorage.getItem("accessToken");
-      if (!accessToken) return;
 
-      // Fetch last sync time
+      // Fetch last sync time (httpOnly cookie sent automatically)
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/gmail/last-sync/${user.id}`,
         {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          credentials: "include", // Send httpOnly cookie
         }
       );
 
@@ -115,13 +119,15 @@ export default function DashboardPage() {
         console.log(
           "Auto-syncing Gmail (>30 min since last sync or first sync)"
         );
+        setIsAutoSyncing(true);
 
-        // Silent background sync
+        // Silent background sync (httpOnly cookie sent automatically)
         fetch(`${process.env.NEXT_PUBLIC_API_URL}/gmail/sync`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}` },
+          credentials: "include", // Send httpOnly cookie
         })
           .then(async (res) => {
+            setIsAutoSyncing(false);
             if (res.ok) {
               const result = await res.json();
               if (result.summary?.newTransactions > 0) {
@@ -133,7 +139,10 @@ export default function DashboardPage() {
               }
             }
           })
-          .catch((err) => console.error("Auto-sync failed:", err));
+          .catch((err) => {
+            setIsAutoSyncing(false);
+            console.error("Auto-sync failed:", err);
+          });
       }
     } catch (error) {
       console.error("Auto-sync check failed:", error);
@@ -187,7 +196,15 @@ export default function DashboardPage() {
 
             {/* Gmail Sync Button */}
             <div className="mt-4 pt-4 border-t border-gray-200">
-              <GmailSyncButton onSyncComplete={loadDashboardData} />
+              <div className="flex items-center gap-4">
+                <GmailSyncButton onSyncComplete={loadDashboardData} />
+                {isAutoSyncing && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Auto-syncing Gmail...</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>
@@ -286,6 +303,11 @@ export default function DashboardPage() {
               )}
             </div>
           )}
+
+          {/* Reminders Widget */}
+          <div className="mb-8">
+            <RemindersWidget />
+          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Recent Transactions */}
@@ -395,8 +417,8 @@ export default function DashboardPage() {
                             {bill.days_until_due === 0
                               ? "Due today"
                               : bill.days_until_due === 1
-                              ? "Due tomorrow"
-                              : `Due in ${bill.days_until_due} days`}
+                                ? "Due tomorrow"
+                                : `Due in ${bill.days_until_due} days`}
                           </p>
                         </div>
                         <p className="font-semibold text-red-600">

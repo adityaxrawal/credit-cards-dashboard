@@ -1,195 +1,241 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Bell } from "lucide-react";
-import { useAuth } from "@/lib/auth/AuthContext";
-import { apiRequest } from "@/lib/api-client";
-import { useToast } from "@/components/ui/Toast";
+import React, { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Bell, X, AlertCircle, CheckCircle } from "lucide-react";
+import Link from "next/link";
+import { formatDate, cn } from "@/lib/utils";
 
-interface Reminder {
-  card_id: string;
-  card_name: string;
-  bank_name: string;
-  due_date: number;
-  days_remaining: number;
+interface Alert {
+  id: string;
+  alert_type: string;
+  severity: "low" | "medium" | "high" | "critical";
   message: string;
-}
-
-interface RemindersResponse {
-  success: boolean;
-  reminders: Reminder[];
+  is_read: boolean;
+  created_at: string;
+  card_name?: string;
 }
 
 export function NotificationBell() {
-  const [count, setCount] = useState(0);
-  const [reminders, setReminders] = useState<Reminder[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
-  const toast = useToast();
 
-  const fetchReminders = useCallback(async () => {
-    if (!user) return;
+  // Fetch unread count
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ["notifications-unread-count"],
+    queryFn: async () => {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/alerts?unread_only=true&limit=1`,
+        {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+      const data = await response.json();
+      return data.data?.total || 0;
+    },
+    refetchInterval: 60000, // Refetch every minute
+  });
 
-    const accessToken =
-      typeof window !== "undefined"
-        ? localStorage.getItem("accessToken")
-        : null;
-    if (!accessToken) return;
+  // Fetch recent alerts when dropdown is open
+  const { data: alerts = [] } = useQuery({
+    queryKey: ["recent-alerts"],
+    queryFn: async () => {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/alerts?limit=10`,
+        {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+      const data = await response.json();
+      return (data.data?.alerts || []) as Alert[];
+    },
+    enabled: isOpen, // Only fetch when dropdown is open
+  });
 
-    setLoading(true);
+  const markAsRead = async (alertId: string) => {
     try {
-      const response = await apiRequest("/services/check-reminders", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch reminders");
-      }
-
-      const data: RemindersResponse = await response.json();
-      setReminders(data.reminders || []);
-      setCount(data.reminders?.length || 0);
+      await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/alerts/${alertId}/read`,
+        {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+      // Refetch counts
+      // queryClient.invalidateQueries(["notifications-unread-count"]);
     } catch (error) {
-      console.error("Error fetching reminders:", error);
-      toast.error("Failed to load reminders");
-    } finally {
-      setLoading(false);
+      console.error("Failed to mark alert as read:", error);
     }
-  }, [user, toast]);
+  };
 
-  useEffect(() => {
-    if (!user) return;
-
-    fetchReminders();
-
-    // Listen for updates from dashboard or sync
-    const handleRefresh = () => {
-      fetchReminders();
-    };
-
-    window.addEventListener("refresh-dashboard", handleRefresh);
-    return () => window.removeEventListener("refresh-dashboard", handleRefresh);
-  }, [user, fetchReminders]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest(".notification-bell-container")) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
+  const markAllAsRead = async () => {
+    try {
+      await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/alerts/mark-all-read`,
+        {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+      // Refetch
+      // queryClient.invalidateQueries(["notifications-unread-count"]);
+      // queryClient.invalidateQueries(["recent-alerts"]);
+    } catch (error) {
+      console.error("Failed to mark all as read:", error);
     }
+  };
 
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isOpen]);
+  const getSeverityIcon = (severity: string) => {
+    switch (severity) {
+      case "critical":
+      case "high":
+        return <AlertCircle className="w-4 h-4 text-error" />;
+      case "medium":
+        return <AlertCircle className="w-4 h-4 text-warning" />;
+      default:
+        return <CheckCircle className="w-4 h-4 text-primary-green" />;
+    }
+  };
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case "critical":
+      case "high":
+        return "bg-error/10 border-error/20";
+      case "medium":
+        return "bg-warning/10 border-warning/20";
+      default:
+        return "bg-primary-green/10 border-primary-green/20";
+    }
+  };
 
   return (
-    <div className="relative notification-bell-container">
+    <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        className="relative p-2 rounded-lg hover:bg-hover-bg transition-colors"
         aria-label="Notifications"
       >
-        <Bell className="h-6 w-6 text-gray-700 dark:text-gray-300" />
-        {count > 0 && (
-          <span className="absolute top-0 right-0 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-semibold">
-            {count > 9 ? "9+" : count}
+        <Bell className="w-5 h-5 text-primary-text" />
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 bg-error text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-medium">
+            {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>
 
-      {/* Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Notifications
-            </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              {count > 0
-                ? `${count} upcoming bill reminder${count > 1 ? "s" : ""}`
-                : "No new notifications"}
-            </p>
-          </div>
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setIsOpen(false)}
+          />
 
-          <div className="max-h-96 overflow-y-auto">
-            {loading ? (
-              <div className="p-6 text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="text-sm text-gray-500 mt-2">Loading...</p>
-              </div>
-            ) : reminders.length > 0 ? (
-              <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {reminders.map((reminder) => (
-                  <div
-                    key={reminder.card_id}
-                    className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          {/* Dropdown */}
+          <div className="absolute right-0 mt-2 w-96 max-w-[calc(100vw-2rem)] bg-card-bg border border-muted-text/20 rounded-lg shadow-lg z-50 max-h-[80vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-muted-text/20">
+              <h3 className="font-semibold text-primary-text">Notifications</h3>
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <button
+                    onClick={markAllAsRead}
+                    className="text-xs text-primary-green hover:underline"
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0">
-                        <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                          <Bell className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    Mark all read
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="p-1 hover:bg-hover-bg rounded"
+                >
+                  <X className="w-4 h-4 text-secondary-text" />
+                </button>
+              </div>
+            </div>
+
+            {/* Alerts List */}
+            <div className="overflow-y-auto flex-1">
+              {alerts.length === 0 ? (
+                <div className="text-center py-12">
+                  <Bell className="w-12 h-12 mx-auto mb-2 text-muted-text" />
+                  <p className="text-sm text-secondary-text">No notifications</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-muted-text/10">
+                  {alerts.map((alert) => (
+                    <div
+                      key={alert.id}
+                      className={cn(
+                        "p-4 hover:bg-hover-bg transition-colors cursor-pointer border-l-4",
+                        !alert.is_read && "bg-primary-green/5",
+                        getSeverityColor(alert.severity)
+                      )}
+                      onClick={() => {
+                        if (!alert.is_read) {
+                          markAsRead(alert.id);
+                        }
+                      }}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 mt-0.5">
+                          {getSeverityIcon(alert.severity)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <p
+                              className={cn(
+                                "text-sm font-medium",
+                                !alert.is_read
+                                  ? "text-primary-text"
+                                  : "text-secondary-text"
+                              )}
+                            >
+                              {alert.alert_type.replace(/_/g, " ").toUpperCase()}
+                            </p>
+                            {!alert.is_read && (
+                              <span className="w-2 h-2 bg-primary-green rounded-full flex-shrink-0 mt-1"></span>
+                            )}
+                          </div>
+                          <p className="text-sm text-secondary-text mb-1">
+                            {alert.message}
+                          </p>
+                          {alert.card_name && (
+                            <p className="text-xs text-muted-text">
+                              Card: {alert.card_name}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-text mt-1">
+                            {formatDate(alert.created_at, "relative")}
+                          </p>
                         </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">
-                          {reminder.card_name}
-                        </p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {reminder.bank_name}
-                        </p>
-                        <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                          Due on {reminder.due_date}th
-                        </p>
-                        <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 font-medium">
-                          {reminder.days_remaining === 0
-                            ? "Due today!"
-                            : `${reminder.days_remaining} day${
-                                reminder.days_remaining > 1 ? "s" : ""
-                              } remaining`}
-                        </p>
-                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-8 text-center">
-                <div className="mx-auto h-12 w-12 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mb-3">
-                  <Bell className="h-6 w-6 text-green-600 dark:text-green-400" />
+                  ))}
                 </div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  You&apos;re all caught up!
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  No upcoming bill reminders at this time
-                </p>
+              )}
+            </div>
+
+            {/* Footer */}
+            {alerts.length > 0 && (
+              <div className="p-3 border-t border-muted-text/20">
+                <Link
+                  href="/notifications"
+                  className="block text-center text-sm text-primary-green hover:underline"
+                  onClick={() => setIsOpen(false)}
+                >
+                  View all notifications
+                </Link>
               </div>
             )}
           </div>
-
-          {reminders.length > 0 && (
-            <div className="p-3 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={() => {
-                  setIsOpen(false);
-                  window.location.href = "/dashboard/cards";
-                }}
-                className="w-full text-center text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
-              >
-                View all cards
-              </button>
-            </div>
-          )}
-        </div>
+        </>
       )}
     </div>
   );

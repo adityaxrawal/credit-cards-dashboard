@@ -1,74 +1,279 @@
-import axios, { AxiosError } from "axios";
-import type { ApiError } from "@/types";
+/**
+ * API Client with httpOnly cookie authentication
+ * Secure, type-safe API calls with automatic retry on 401
+ */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-export const apiClient = axios.create({
-  baseURL: API_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
-  timeout: 30000,
-});
+/**
+ * Base API response interface
+ */
+export interface ApiResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
 
-// Request interceptor to add auth token
-apiClient.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("accessToken");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// Response interceptor to handle token refresh
-apiClient.interceptors.response.use(
-  (response) => response,
-  async (error: AxiosError<ApiError>) => {
-    const originalRequest = error.config;
-
-    // If error is 401 and we haven't retried yet
-    if (
-      error.response?.status === 401 &&
-      originalRequest &&
-      !(originalRequest as any)._retry
-    ) {
-      (originalRequest as any)._retry = true;
-
-      try {
-        const refreshToken = localStorage.getItem("refreshToken");
-        if (!refreshToken) {
-          throw new Error("No refresh token");
-        }
-
-        // Try to refresh token
-        const response = await axios.post(`${API_URL}/auth/refresh`, {
-          refreshToken,
-        });
-
-        const { accessToken, refreshToken: newRefreshToken } = response.data;
-
-        localStorage.setItem("accessToken", accessToken);
-        if (newRefreshToken) {
-          localStorage.setItem("refreshToken", newRefreshToken);
-        }
-
-        // Retry original request with new token
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-        return apiClient(originalRequest);
-      } catch (refreshError) {
-        // Refresh failed, logout user
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken");
-        window.location.href = "/auth/login";
-        return Promise.reject(refreshError);
-      }
-    }
-
-    return Promise.reject(error);
+/**
+ * API Error class
+ */
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public data?: unknown
+  ) {
+    super(message);
+    this.name = "ApiError";
   }
-);
+}
 
-export default apiClient;
+/**
+ * Request options
+ */
+interface RequestOptions extends RequestInit {
+  retry?: boolean;
+  csrfToken?: string;
+}
+
+/**
+ * Make an API request
+ * Uses httpOnly cookies for authentication (no tokens in JS)
+ */
+async function makeRequest<T>(
+  endpoint: string,
+  options: RequestOptions = {}
+): Promise<T> {
+  const { retry = true, csrfToken, ...fetchOptions } = options;
+
+  const url = `${API_URL}${endpoint}`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  // Merge any custom headers
+  if (fetchOptions.headers) {
+    const customHeaders = new Headers(fetchOptions.headers);
+    customHeaders.forEach((value, key) => {
+      headers[key] = value;
+    });
+  }
+
+  // Add CSRF token for state-changing requests
+  if (
+    csrfToken &&
+    (fetchOptions.method === "POST" ||
+      fetchOptions.method === "PUT" ||
+      fetchOptions.method === "DELETE")
+  ) {
+    headers["X-CSRF-Token"] = csrfToken;
+  }
+
+  try {
+    const response = await fetch(url, {
+      ...fetchOptions,
+      headers,
+      credentials: "include", // Include httpOnly cookies
+    });
+
+    // Handle 401 Unauthorized
+    if (response.status === 401) {
+      if (retry && typeof window !== "undefined") {
+        // Redirect to login on auth failure
+        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+      }
+      throw new ApiError(401, "Unauthorized", null);
+    }
+
+    // Handle other errors
+    if (!response.ok) {
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = { message: response.statusText };
+      }
+      throw new ApiError(
+        response.status,
+        errorData.error || errorData.message || "Request failed",
+        errorData
+      );
+    }
+
+    // Parse response
+    const data: ApiResponse<T> = await response.json();
+
+    if (!data.success) {
+      throw new ApiError(
+        response.status,
+        data.error || data.message || "Request failed",
+        data
+      );
+    }
+
+    return data.data as T;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    // Network or other errors
+    throw new ApiError(
+      0,
+      error instanceof Error ? error.message : "Network error",
+      null
+    );
+  }
+}
+
+/**
+ * GET request
+ */
+export async function apiGet<T>(
+  endpoint: string,
+  options?: RequestOptions
+): Promise<T> {
+  return makeRequest<T>(endpoint, {
+    ...options,
+    method: "GET",
+  });
+}
+
+/**
+ * POST request
+ */
+export async function apiPost<T>(
+  endpoint: string,
+  body?: unknown,
+  options?: RequestOptions
+): Promise<T> {
+  return makeRequest<T>(endpoint, {
+    ...options,
+    method: "POST",
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+/**
+ * PUT request
+ */
+export async function apiPut<T>(
+  endpoint: string,
+  body?: unknown,
+  options?: RequestOptions
+): Promise<T> {
+  return makeRequest<T>(endpoint, {
+    ...options,
+    method: "PUT",
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+/**
+ * DELETE request
+ */
+export async function apiDelete<T>(
+  endpoint: string,
+  options?: RequestOptions
+): Promise<T> {
+  return makeRequest<T>(endpoint, {
+    ...options,
+    method: "DELETE",
+  });
+}
+
+/**
+ * Type-safe API endpoints
+ */
+
+// Auth endpoints
+export interface AuthMeResponse {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    profilePicture?: string;
+    gmailConnected: boolean;
+    isAdmin?: boolean;
+    monthlyBudget?: number;
+  };
+}
+
+export interface GmailSyncResponse {
+  newTransactions: number;
+  duplicatesSkipped: number;
+  nextRecommendedSync: string;
+}
+
+export interface BudgetStatusResponse {
+  currentSpend: number;
+  budgetLimit: number;
+  utilization: number;
+  remainingBudget: number;
+  period: string;
+}
+
+export interface Card {
+  id: string;
+  userId: string;
+  lastFour: string;
+  bank: string;
+  network: string;
+  creditLimit?: number;
+  billingCycle?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Transaction {
+  id: string;
+  userId: string;
+  cardId?: string;
+  amount: number;
+  merchant: string;
+  category?: string;
+  transactionDate: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// API wrapper functions with typed responses
+export const api = {
+  // Auth
+  getMe: () => apiGet<AuthMeResponse>("/api/auth/me"),
+
+  // Gmail
+  syncGmail: () => apiPost<GmailSyncResponse>("/api/gmail/sync"),
+
+  // Services
+  updateBudget: () => apiPost<void>("/api/services/update-budget"),
+  checkAlerts: () => apiPost<void>("/api/services/check-alerts"),
+  refreshAnalytics: () => apiPost<void>("/api/services/refresh-analytics"),
+  getBudgetStatus: () =>
+    apiGet<BudgetStatusResponse>("/api/services/budget-status"),
+
+  // Cards
+  getCards: () => apiGet<Card[]>("/api/cards"),
+  getCard: (id: string) => apiGet<Card>(`/api/cards/${id}`),
+
+  // Transactions
+  getTransactions: (params?: {
+    start_date?: string;
+    end_date?: string;
+    limit?: number;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.start_date) query.append("start_date", params.start_date);
+    if (params?.end_date) query.append("end_date", params.end_date);
+    if (params?.limit) query.append("limit", params.limit.toString());
+    const endpoint = `/api/transactions${query.toString() ? "?" + query.toString() : ""}`;
+    return apiGet<Transaction[]>(endpoint);
+  },
+  getTransaction: (id: string) =>
+    apiGet<Transaction>(`/api/transactions/${id}`),
+};
+
+export default api;

@@ -81,8 +81,8 @@ app.get("/", (_req: Request, res: Response) => {
     environment: process.env.NODE_ENV || "development",
     endpoints: {
       health: "/api/monitoring/health",
-      docs: "/api/monitoring/status"
-    }
+      docs: "/api/monitoring/status",
+    },
   });
 });
 

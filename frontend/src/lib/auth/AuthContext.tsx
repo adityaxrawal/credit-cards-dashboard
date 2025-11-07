@@ -50,22 +50,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * Check if user is authenticated by verifying stored token
+   * Check if user is authenticated by verifying httpOnly cookie
    */
   async function checkAuth() {
-    const accessToken = localStorage.getItem("accessToken");
-    if (!accessToken) {
-      setLoading(false);
-      return;
-    }
-
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/auth/me`,
         {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
+          credentials: "include", // Send httpOnly cookie
         }
       );
 
@@ -73,15 +65,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const data = await response.json();
         setUser(data.data.user);
       } else if (response.status === 401) {
-        // Token expired, try to refresh
-        await refreshToken();
+        // Not authenticated
+        setUser(null);
       } else {
-        // Other errors, clear tokens
-        clearTokens();
+        // Other errors
+        setUser(null);
       }
     } catch (error) {
       console.error("Auth check failed:", error);
-      clearTokens();
+      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -97,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         `${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`,
         {
           method: "POST",
+          credentials: "include", // Receive httpOnly cookie
           headers: {
             "Content-Type": "application/json",
           },
@@ -111,11 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const data = await response.json();
 
-      // Store tokens
-      localStorage.setItem("accessToken", data.data.accessToken);
-      localStorage.setItem("refreshToken", data.data.refreshToken);
-
-      // Set user state
+      // Set user state (token is in httpOnly cookie set by backend)
       setUser(data.data.user);
 
       // Redirect to dashboard
@@ -130,75 +119,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * Logout user and clear authentication state
    */
   async function logout() {
-    const accessToken = localStorage.getItem("accessToken");
-
     try {
-      // Call logout endpoint
-      if (accessToken) {
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/logout`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-      }
+      // Call logout endpoint (httpOnly cookie sent automatically)
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/logout`, {
+        method: "POST",
+        credentials: "include", // Send httpOnly cookie
+      });
     } catch (error) {
       console.error("Logout failed:", error);
     } finally {
       // Clear local state regardless of API call result
-      clearTokens();
       setUser(null);
       router.push("/login");
     }
   }
 
   /**
-   * Refresh access token using refresh token
+   * Refresh token - not needed with httpOnly cookies
+   * Backend handles token refresh automatically
    */
   async function refreshToken() {
-    const refreshTokenValue = localStorage.getItem("refreshToken");
-    if (!refreshTokenValue) {
-      throw new Error("No refresh token available");
-    }
-
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/refresh`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ refreshToken: refreshTokenValue }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Token refresh failed");
-      }
-
-      const data = await response.json();
-
-      // Update access token
-      localStorage.setItem("accessToken", data.data.accessToken);
-
-      // Retry fetching user info
-      await checkAuth();
-    } catch (error) {
-      console.error("Token refresh error:", error);
-      clearTokens();
-      setUser(null);
-      router.push("/login");
-      throw error;
-    }
-  }
-
-  /**
-   * Clear all authentication tokens from localStorage
-   */
-  function clearTokens() {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
+    // With httpOnly cookies, token refresh is handled by backend
+    // Just re-check authentication status
+    await checkAuth();
   }
 
   const value: AuthContextType = {
