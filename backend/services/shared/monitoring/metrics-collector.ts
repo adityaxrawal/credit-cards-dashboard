@@ -164,7 +164,7 @@ export class MetricsCollector {
   /**
    * Record cache hit/miss
    */
-  async recordCacheMetric(hit: boolean, key: string): Promise<void> {
+  async recordCacheMetric(hit: boolean, _key: string): Promise<void> {
     if (this.redisClient) {
       const metricKey = hit ? "metrics:cache:hits" : "metrics:cache:misses";
       await this.redisClient.incr(metricKey);

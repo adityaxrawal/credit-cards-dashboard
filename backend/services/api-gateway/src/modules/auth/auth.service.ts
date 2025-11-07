@@ -2,10 +2,9 @@ import { google } from "googleapis";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { supabase } from "shared/database/supabase";
-import { logger } from "../../utils/logger";
+import { logger } from "shared/monitoring/logger";
 import redis from "shared/cache/redis";
 import { IAuthResponse, IUser } from "./interfaces/auth.interface";
-import { appConfig } from "../../config/app.config";
 import { ERROR_MESSAGES } from "../../constants";
 
 /**
@@ -83,7 +82,7 @@ export class AuthService {
         7 * 24 * 60 * 60
       );
 
-      logger.info("User authenticated successfully", {  userId: user.id  });
+      logger.info("User authenticated successfully", { userId: user.id });
 
       return {
         accessToken,
@@ -96,8 +95,8 @@ export class AuthService {
           monthlyBudget: user.monthly_budget,
         },
       };
-    } catch (error: any) {
-      logger.error("OAuth authentication failed", {  error  });
+    } catch (error) {
+      logger.error("OAuth authentication failed", error as Error);
       throw error;
     }
   }
@@ -127,14 +126,9 @@ export class AuthService {
   /**
    * Refresh access token using refresh token
    */
-  async refreshAccessToken(
-    refreshToken: string
-  ): Promise<{ accessToken: string }> {
+  async refreshAccessToken(refreshToken: string): Promise<{ accessToken: string }> {
     try {
-      const decoded = jwt.verify(
-        refreshToken,
-        process.env.JWT_REFRESH_SECRET!
-      ) as any;
+      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as jwt.JwtPayload;
 
       if (decoded.type !== "refresh") {
         throw new Error(ERROR_MESSAGES.AUTH.TOKEN_INVALID);
@@ -165,16 +159,11 @@ export class AuthService {
       sessionData.accessToken = newAccessToken;
       sessionData.lastRefreshed = new Date().toISOString();
 
-      await redis.set(
-        `session:${user.id}`,
-        JSON.stringify(sessionData),
-        "EX",
-        7 * 24 * 60 * 60
-      );
+      await redis.set(`session:${user.id}`, JSON.stringify(sessionData), "EX", 7 * 24 * 60 * 60);
 
       return { accessToken: newAccessToken };
-    } catch (error: any) {
-      logger.error("Token refresh failed", {  error  });
+    } catch (error) {
+      logger.error("Token refresh failed", error as Error);
       throw error;
     }
   }
@@ -185,9 +174,9 @@ export class AuthService {
   async logout(userId: string): Promise<void> {
     try {
       await redis.del(`session:${userId}`);
-      logger.info("User logged out", {  userId  });
+      logger.info("User logged out", { userId });
     } catch (error) {
-      logger.error("Logout failed", {  error, userId  });
+      logger.error("Logout failed", error as Error);
       throw new Error(ERROR_MESSAGES.GENERIC.INTERNAL_ERROR);
     }
   }
@@ -215,8 +204,8 @@ export class AuthService {
         monthlyBudget: user.monthly_budget,
         createdAt: user.created_at,
       };
-    } catch (error: any) {
-      logger.error("Failed to fetch user", {  error, userId  });
+    } catch (error) {
+      logger.error("Failed to fetch user", error as Error);
       throw error;
     }
   }
@@ -224,10 +213,7 @@ export class AuthService {
   /**
    * Store encrypted Gmail refresh token
    */
-  private async storeGmailToken(
-    userId: string,
-    refreshToken: string
-  ): Promise<void> {
+  private async storeGmailToken(userId: string, refreshToken: string): Promise<void> {
     try {
       const algorithm = "aes-256-gcm";
       const key = Buffer.from(process.env.ENCRYPTION_KEY!, "hex");
@@ -247,7 +233,7 @@ export class AuthService {
         is_valid: true,
       });
     } catch (error) {
-      logger.error("Failed to store Gmail token", {  error, userId  });
+      logger.error("Failed to store Gmail token", error as Error);
       // Non-critical - don't throw
     }
   }
@@ -255,24 +241,18 @@ export class AuthService {
   /**
    * Verify token
    */
-  async verifyToken(
-    token: string,
-    type: "access" | "refresh" = "access"
-  ): Promise<any> {
+  async verifyToken(token: string, type: "access" | "refresh" = "access"): Promise<jwt.JwtPayload> {
     try {
-      const secret =
-        type === "access"
-          ? process.env.JWT_SECRET!
-          : process.env.JWT_REFRESH_SECRET!;
+      const secret = type === "access" ? process.env.JWT_SECRET! : process.env.JWT_REFRESH_SECRET!;
 
-      const decoded = jwt.verify(token, secret) as any;
+      const decoded = jwt.verify(token, secret) as jwt.JwtPayload;
 
       if (decoded.type !== type) {
         throw new Error(ERROR_MESSAGES.AUTH.TOKEN_INVALID);
       }
 
       return decoded;
-    } catch (error: any) {
+    } catch (error) {
       throw new Error(ERROR_MESSAGES.AUTH.TOKEN_INVALID);
     }
   }

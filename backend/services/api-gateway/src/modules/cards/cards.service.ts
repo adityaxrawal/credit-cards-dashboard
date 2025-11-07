@@ -1,3 +1,4 @@
+import { logger } from "shared/monitoring/logger";
 import { supabase } from "shared/database/supabase";
 
 /**
@@ -45,7 +46,7 @@ export class CardService {
       const { data: cards, error } = await query;
 
       if (error) {
-        console.error("Get cards error:", error);
+        logger.error("Get cards error", error as Error);
         throw new Error("Failed to fetch cards");
       }
 
@@ -124,7 +125,7 @@ export class CardService {
         .single();
 
       if (error) {
-        console.error("Create card error:", error);
+        logger.error("Create card error", error as Error);
         throw new Error("Failed to create card");
       }
 
@@ -166,7 +167,7 @@ export class CardService {
         .single();
 
       if (error) {
-        console.error("Update card error:", error);
+        logger.error("Update card error", error as Error);
         throw new Error("Failed to update card");
       }
 
@@ -193,7 +194,7 @@ export class CardService {
         .eq("user_id", userId);
 
       if (error) {
-        console.error("Delete card error:", error);
+        logger.error("Delete card error", error as Error);
         throw new Error("Failed to delete card");
       }
 
@@ -238,9 +239,7 @@ export class CardService {
           ?.filter((t) => t.transaction_type === "CREDIT")
           .reduce((sum, t) => sum + t.amount, 0) || 0;
 
-      const utilizationPercent = card.credit_limit
-        ? (totalSpent / card.credit_limit) * 100
-        : 0;
+      const utilizationPercent = card.credit_limit ? (totalSpent / card.credit_limit) * 100 : 0;
 
       return {
         card_id: cardId,
@@ -276,25 +275,16 @@ export class CardService {
     }
 
     // Validate last 4 digits
-    if (
-      cardData.last_four_digits &&
-      !/^\d{4}$/.test(cardData.last_four_digits)
-    ) {
+    if (cardData.last_four_digits && !/^\d{4}$/.test(cardData.last_four_digits)) {
       throw new Error("Last 4 digits must be exactly 4 digits");
     }
 
     // Validate billing and due dates (1-31)
-    if (
-      cardData.billing_date &&
-      (cardData.billing_date < 1 || cardData.billing_date > 31)
-    ) {
+    if (cardData.billing_date && (cardData.billing_date < 1 || cardData.billing_date > 31)) {
       throw new Error("Billing date must be between 1 and 31");
     }
 
-    if (
-      cardData.due_date &&
-      (cardData.due_date < 1 || cardData.due_date > 31)
-    ) {
+    if (cardData.due_date && (cardData.due_date < 1 || cardData.due_date > 31)) {
       throw new Error("Due date must be between 1 and 31");
     }
 
@@ -304,7 +294,6 @@ export class CardService {
     }
   }
 }
-
 
 // Export singleton instance
 export const cardService = new CardService();

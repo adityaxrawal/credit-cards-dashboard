@@ -1,5 +1,5 @@
 import { gmail_v1 } from "googleapis";
-import { logger } from "../../utils/logger";
+import { logger } from "shared/monitoring/logger";
 
 /**
  * Normalized email message structure
@@ -51,7 +51,7 @@ export class EmailFetcher {
         logger.warn("Email not found", {  messageId  });
         return null;
       }
-      logger.error("Failed to fetch email", {  error, messageId  });
+      logger.error("Failed to fetch email", error as Error);
       throw error;
     }
   }
@@ -192,7 +192,7 @@ export class EmailFetcher {
       // Decode
       return Buffer.from(base64, "base64").toString("utf-8");
     } catch (error) {
-      logger.error("Failed to decode base64", {  error  });
+      logger.error("Failed to decode base64", error as Error);
       return "";
     }
   }
@@ -234,7 +234,7 @@ export class EmailFetcher {
 
       return messageIds.slice(0, maxResults);
     } catch (error) {
-      logger.error("Failed to list messages", {  error, query  });
+      logger.error("Failed to list messages", error as Error);
       throw error;
     }
   }
@@ -277,7 +277,7 @@ export class EmailFetcher {
         logger.warn("History ID expired or invalid", {  historyId  });
         return [];
       }
-      logger.error("Failed to get history", {  error, historyId  });
+      logger.error("Failed to get history", error as Error);
       throw error;
     }
   }

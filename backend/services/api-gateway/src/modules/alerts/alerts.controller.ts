@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { EnhancedAlertService } from "./alerts.service";
 import { HTTP_STATUS, ERROR_MESSAGES } from "../../constants";
-import { logger } from "../../utils/logger";
+import { logger } from "shared/monitoring/logger";
 
 /**
  * Alerts Controller
