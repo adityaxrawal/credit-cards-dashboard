@@ -136,8 +136,8 @@ class MetricsCollector {
             this.redisClient.get("metrics:cache:hits"),
             this.redisClient.get("metrics:cache:misses"),
         ]);
-        const hits = parseInt(cacheHits || "0", 10);
-        const misses = parseInt(cacheMisses || "0", 10);
+        const hits = parseInt(String(cacheHits || "0"), 10);
+        const misses = parseInt(String(cacheMisses || "0"), 10);
         const total = hits + misses;
         const hitRate = total > 0 ? (hits / total) * 100 : 0;
         return {

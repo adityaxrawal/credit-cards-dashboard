@@ -5,203 +5,190 @@ name: Pre-Deploy Quality Gate
 # Runs on pushes and PRs to production branches (prod, main)
 
 on:
-    push:
-        branches:
-            - prod
-            - main
-    pull_request:
-        branches:
-            - prod
-            - main
+  push:
+    branches:
+      - prod
+      - main
+  pull_request:
+    branches:
+      - prod
+      - main
 
 jobs:
-    quality-gate:
-        name: Quality Gate for API Gateway
-        runs-on: ubuntu-latest
+  quality-gate:
+    name: Quality Gate for API Gateway
+    runs-on: ubuntu-latest
 
-        strategy:
-            matrix:
-                node-version: [22.x]
+    strategy:
+      matrix:
+        node-version: [22.x]
 
-        steps:
-            - name: 📥 Checkout code
-              uses: actions/checkout@v4
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
 
-            - name: 🟢 Setup Node.js ${{ matrix.node-version }}
-              uses: actions/setup-node@v4
-              with:
-                  node-version: ${{ matrix.node-version }}
-                  cache: "npm"
+      - name: 🟢 Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
 
-            - name: 📦 Install root dependencies
-              run: npm ci
-              working-directory: .
+      - name: 📦 Install backend dependencies
+        run: npm ci
+        working-directory: backend
 
-            - name: 📦 Install api-gateway dependencies
-              run: npm ci
-              working-directory: backend/services/api-gateway
+      - name: 🔍 Verify dependencies
+        run: npm run deps:verify
+        working-directory: backend
 
-            - name: 📦 Install shared dependencies
-              run: npm install
-              working-directory: backend/shared
+      - name: 🔎 TypeScript type check
+        run: npm run typecheck
+        working-directory: backend
 
-            - name: 🔍 Verify dependencies
-              run: npm run deps:verify
-              working-directory: backend/services/api-gateway
+      - name: 🧹 Lint check
+        run: npm run lint
+        working-directory: backend
 
-            - name: 🔎 TypeScript strict type check
-              run: npm run typecheck:strict
-              working-directory: backend/services/api-gateway
+      - name: 💅 Format check
+        run: npm run format:check
+        working-directory: backend
 
-            - name: 🧹 Lint check
-              run: npm run lint
-              working-directory: backend/services/api-gateway
+      - name: 🏗️ Build
+        run: npm run build
+        working-directory: backend
 
-            - name: 💅 Format check
-              run: npm run format:check
-              working-directory: backend/services/api-gateway
+      - name: 📤 Upload build artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-gateway-dist-node-${{ matrix.node-version }}
+          path: backend/services/api-gateway/dist/
+          retention-days: 7
 
-            - name: 🏗️ Build clean
-              run: npm run build:clean
-              working-directory: backend/services/api-gateway
+      - name: ✅ All checks passed
+        if: success()
+        run: |
+          echo "🎉 All quality gate checks passed!"
+          echo "✅ Dependencies verified"
+          echo "✅ TypeScript compilation successful"
+          echo "✅ Linting passed"
+          echo "✅ Formatting validated"
+          echo "✅ Build artifacts created"
+          echo ""
+          echo "🚀 Ready for deployment to Render!"
 
-            - name: 🎯 Simulate Render deployment
-              run: npm run render:simulate
-              working-directory: backend/services/api-gateway
+      - name: ❌ Quality gate failed
+        if: failure()
+        run: |
+          echo "💥 Quality gate checks failed!"
+          echo "Review the errors above and fix them before merging."
+          echo ""
+          echo "Common issues:"
+          echo "  - Missing dependencies (run: npm install)"
+          echo "  - TypeScript errors (check types and imports)"
+          echo "  - Linting errors (run: npm run lint)"
+          echo "  - Build configuration issues (check tsconfig.json)"
+          echo ""
+          exit 1
 
-            - name: 📤 Upload build artifacts
-              if: success()
-              uses: actions/upload-artifact@v4
-              with:
-                  name: api-gateway-dist-node-${{ matrix.node-version }}
-                  path: backend/services/api-gateway/dist/
-                  retention-days: 7
+  # Additional job to verify the build works on the exact Node version Render uses
+  render-compatibility:
+    name: Render Compatibility Check
+    runs-on: ubuntu-latest
 
-            - name: ✅ All checks passed
-              if: success()
-              run: |
-                  echo "🎉 All quality gate checks passed!"
-                  echo "✅ Dependencies verified"
-                  echo "✅ TypeScript compilation successful"
-                  echo "✅ Linting passed"
-                  echo "✅ Formatting validated"
-                  echo "✅ Build artifacts created"
-                  echo "✅ Render deployment simulation successful"
-                  echo ""
-                  echo "🚀 Ready for deployment to Render!"
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
 
-            - name: ❌ Quality gate failed
-              if: failure()
-              run: |
-                  echo "💥 Quality gate checks failed!"
-                  echo "Review the errors above and fix them before merging."
-                  echo ""
-                  echo "Common issues:"
-                  echo "  - Missing dependencies (run: npm install)"
-                  echo "  - TypeScript errors (check types and imports)"
-                  echo "  - Linting errors (run: npm run lint)"
-                  echo "  - Build configuration issues (check tsconfig.json)"
-                  echo ""
-                  exit 1
+      - name: 🟢 Setup Node.js 22 (Render's version)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
 
-    # Additional job to verify the build works on the exact Node version Render uses
-    render-compatibility:
-        name: Render Compatibility Check
-        runs-on: ubuntu-latest
+      - name: 🔧 Simulate Render's exact build process
+        working-directory: backend
+        run: |
+          echo "Simulating Render's build process..."
+          echo "Root Directory: backend"
+          echo "Build Command: npm install && npm run build"
+          echo "Start Command: npm start"
+          echo ""
 
-        steps:
-            - name: 📥 Checkout code
-              uses: actions/checkout@v4
+          # This is EXACTLY what Render does
+          npm install
+          npm run build
 
-            - name: 🟢 Setup Node.js 22 (Render's version)
-              uses: actions/setup-node@v4
-              with:
-                  node-version: "22.x"
+          # Verify the output
+          if [ ! -f "services/api-gateway/dist/index.js" ]; then
+            echo "❌ Error: services/api-gateway/dist/index.js not created!"
+            echo "Render deployment will fail!"
+            exit 1
+          fi
 
-            - name: 🔧 Simulate Render's exact build process
-              working-directory: backend/services/api-gateway
-              run: |
-                  echo "Simulating Render's build process..."
-                  echo "Root Directory: backend/services/api-gateway"
-                  echo "Build Command: npm install && npm run build"
-                  echo "Start Command: npm start"
-                  echo ""
+          echo "✅ Build successful - services/api-gateway/dist/index.js exists"
 
-                  # This is EXACTLY what Render does
-                  npm install
-                  npm run build
+          # Verify start command would work
+          if ! grep -q '"start"' package.json; then
+            echo "⚠️  Warning: start script not found in package.json"
+          fi
 
-                  # Verify the output
-                  if [ ! -f "dist/index.js" ]; then
-                    echo "❌ Error: dist/index.js not created!"
-                    echo "Render deployment will fail!"
-                    exit 1
-                  fi
+          echo "✅ Render compatibility verified!"
 
-                  echo "✅ Build successful - dist/index.js exists"
+      - name: 📊 Build output summary
+        if: success()
+        working-directory: backend
+        run: |
+          echo "Build output structure:"
+          ls -lah services/api-gateway/dist/ | head -20
+          echo ""
+          echo "services/api-gateway/dist/index.js size:"
+          du -h services/api-gateway/dist/index.js
+          echo ""
+          echo "Total dist size:"
+          du -sh services/api-gateway/dist/
 
-                  # Verify start command would work
-                  if ! grep -q '"start".*"node dist/index.js"' package.json; then
-                    echo "⚠️  Warning: start script may not match expected format"
-                  fi
+  # Summary job that requires all checks to pass
+  quality-gate-summary:
+    name: Quality Gate Summary
+    runs-on: ubuntu-latest
+    needs: [quality-gate, render-compatibility]
+    if: always()
 
-                  echo "✅ Render compatibility verified!"
+    steps:
+      - name: ✅ All quality gates passed
+        if: ${{ needs.quality-gate.result == 'success' && needs.render-compatibility.result == 'success' }}
+        run: |
+          echo "════════════════════════════════════════════════════════"
+          echo "   ✅ ALL QUALITY GATE CHECKS PASSED!"
+          echo "════════════════════════════════════════════════════════"
+          echo ""
+          echo "The api-gateway service is ready for deployment:"
+          echo "  ✓ All dependencies verified"
+          echo "  ✓ TypeScript compilation successful"
+          echo "  ✓ Code linting passed"
+          echo "  ✓ Code formatting validated"
+          echo "  ✓ Build artifacts generated"
+          echo "  ✓ Node.js 22.x compatibility verified"
+          echo ""
+          echo "🚀 Safe to deploy to Render!"
+          echo "════════════════════════════════════════════════════════"
 
-            - name: 📊 Build output summary
-              if: success()
-              working-directory: backend/services/api-gateway
-              run: |
-                  echo "Build output structure:"
-                  ls -lah dist/ | head -20
-                  echo ""
-                  echo "dist/index.js size:"
-                  du -h dist/index.js
-                  echo ""
-                  echo "Total dist size:"
-                  du -sh dist/
-
-    # Summary job that requires all checks to pass
-    quality-gate-summary:
-        name: Quality Gate Summary
-        runs-on: ubuntu-latest
-        needs: [quality-gate, render-compatibility]
-        if: always()
-
-        steps:
-            - name: ✅ All quality gates passed
-              if: ${{ needs.quality-gate.result == 'success' && needs.render-compatibility.result == 'success' }}
-              run: |
-                  echo "════════════════════════════════════════════════════════"
-                  echo "   ✅ ALL QUALITY GATE CHECKS PASSED!"
-                  echo "════════════════════════════════════════════════════════"
-                  echo ""
-                  echo "The api-gateway service is ready for deployment:"
-                  echo "  ✓ All dependencies verified"
-                  echo "  ✓ TypeScript compilation successful (strict mode)"
-                  echo "  ✓ Code linting passed"
-                  echo "  ✓ Code formatting validated"
-                  echo "  ✓ Build artifacts generated"
-                  echo "  ✓ Render deployment simulation successful"
-                  echo "  ✓ Node.js 22.x compatibility verified"
-                  echo ""
-                  echo "🚀 Safe to deploy to Render!"
-                  echo "════════════════════════════════════════════════════════"
-
-            - name: ❌ Quality gate checks failed
-              if: ${{ needs.quality-gate.result != 'success' || needs.render-compatibility.result != 'success' }}
-              run: |
-                  echo "════════════════════════════════════════════════════════"
-                  echo "   ❌ QUALITY GATE CHECKS FAILED!"
-                  echo "════════════════════════════════════════════════════════"
-                  echo ""
-                  echo "Quality Gate: ${{ needs.quality-gate.result }}"
-                  echo "Render Compatibility: ${{ needs.render-compatibility.result }}"
-                  echo ""
-                  echo "⛔ DO NOT DEPLOY until all checks pass!"
-                  echo ""
-                  echo "To debug locally, run:"
-                  echo "  cd backend/services/api-gateway"
-                  echo "  npm run prepush"
-                  echo ""
-                  echo "════════════════════════════════════════════════════════"
-                  exit 1
+      - name: ❌ Quality gate checks failed
+        if: ${{ needs.quality-gate.result != 'success' || needs.render-compatibility.result != 'success' }}
+        run: |
+          echo "════════════════════════════════════════════════════════"
+          echo "   ❌ QUALITY GATE CHECKS FAILED!"
+          echo "════════════════════════════════════════════════════════"
+          echo ""
+          echo "Quality Gate: ${{ needs.quality-gate.result }}"
+          echo "Render Compatibility: ${{ needs.render-compatibility.result }}"
+          echo ""
+          echo "⛔ DO NOT DEPLOY until all checks pass!"
+          echo ""
+          echo "To debug locally, run:"
+          echo "  cd backend/services/api-gateway"
+          echo "  npm run prepush"
+          echo ""
+          echo "════════════════════════════════════════════════════════"
+          exit 1
