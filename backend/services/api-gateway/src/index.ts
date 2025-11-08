@@ -9,6 +9,7 @@ import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
+import cookieParser from "cookie-parser";
 import { logger } from "shared/monitoring/logger";
 import { initializeErrorTracking, Sentry } from "shared/monitoring/sentry-config";
 import rateLimit from "express-rate-limit";
@@ -32,6 +33,7 @@ import { subscriptionsRoutes } from "@modules/subscriptions";
 import { reportsRoutes } from "@modules/reports";
 import { rewardsRoutes } from "@modules/rewards";
 import servicesRoutes from "./routes/services.routes"; // Health check routes
+import monitoringRoutes from "./routes/monitoring"; // Monitoring and health routes
 
 // Validate environment early
 const env = validateEnv();
@@ -59,6 +61,7 @@ app.use(
   })
 );
 app.use(compression());
+app.use(cookieParser()); // Parse cookies from requests
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
@@ -105,6 +108,7 @@ app.use("/api/subscriptions", subscriptionsRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/rewards", rewardsRoutes);
 app.use("/api/services", servicesRoutes);
+app.use("/api/monitoring", monitoringRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

@@ -18,6 +18,11 @@ export interface IAuthTokens {
   refreshToken: string;
 }
 
+export interface ITokenRefreshResponse {
+  accessToken: string;
+  user: IUser;
+}
+
 export interface IAuthResponse {
   accessToken: string;
   refreshToken: string;

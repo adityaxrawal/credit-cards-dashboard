@@ -8,15 +8,16 @@ import React, {
   ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
+import { startTokenRefresh, stopTokenRefresh } from "./token-refresh";
 
 /**
  * User interface matching backend response
  */
-interface User {
+export interface User {
   id: string;
   email: string;
   name: string;
-  profilePicture: string;
+  profilePicture?: string;
   monthlyBudget?: number;
 }
 
@@ -30,6 +31,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
   isAuthenticated: boolean;
+  error: string | null;
+  clearError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,6 +44,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   // Check authentication status on mount
@@ -48,6 +52,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Start token refresh when user is authenticated
+  useEffect(() => {
+    if (user) {
+      startTokenRefresh(
+        () => {
+          // On successful refresh, just continue
+          console.log("Token refreshed successfully");
+        },
+        (error) => {
+          // On refresh error, clear user and redirect to login
+          console.error("Token refresh failed, logging out:", error);
+          setUser(null);
+          setError("Session expired. Please login again.");
+          router.push("/login");
+        }
+      );
+    } else {
+      stopTokenRefresh();
+    }
+
+    return () => {
+      stopTokenRefresh();
+    };
+  }, [user, router]);
 
   /**
    * Check if user is authenticated by verifying httpOnly cookie
@@ -97,15 +126,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Authentication failed");
-      }
-
       const data = await response.json();
 
-      // Set user state (token is in httpOnly cookie set by backend)
+      if (!response.ok) {
+        const errorMessage =
+          data.message || data.error || "Authentication failed";
+        console.error("Login failed:", {
+          status: response.status,
+          error: data.error,
+          message: data.message,
+        });
+        throw new Error(errorMessage);
+      }
+
+      if (!data.success || !data.data?.user) {
+        throw new Error("Invalid response from server");
+      }
+
+      // Set user state (tokens are in httpOnly cookies set by backend)
       setUser(data.data.user);
+
+      console.log("Login successful, redirecting to dashboard");
 
       // Redirect to dashboard
       router.push("/dashboard");
@@ -144,6 +185,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await checkAuth();
   }
 
+  /**
+   * Clear error message
+   */
+  function clearError() {
+    setError(null);
+  }
+
   const value: AuthContextType = {
     user,
     loading,
@@ -151,6 +199,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     refreshToken,
     isAuthenticated: !!user,
+    error,
+    clearError,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

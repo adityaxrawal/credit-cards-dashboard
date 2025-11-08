@@ -94,7 +94,7 @@ export default function DashboardPage() {
 
       // Fetch last sync time (httpOnly cookie sent automatically)
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/gmail/last-sync/${user.id}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/gmail/last-sync/${user.id}`,
         {
           credentials: "include", // Send httpOnly cookie
         }
@@ -122,7 +122,7 @@ export default function DashboardPage() {
         setIsAutoSyncing(true);
 
         // Silent background sync (httpOnly cookie sent automatically)
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/gmail/sync`, {
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/gmail/sync`, {
           method: "POST",
           credentials: "include", // Send httpOnly cookie
         })

@@ -3,16 +3,22 @@ import { cookies } from "next/headers";
 import { Suspense } from "react";
 import LoginForm from "./LoginForm";
 
+/**
+ * Login Page Content
+ * Server-side component that checks for existing authentication
+ */
 async function LoginPageContent() {
   const cookieStore = await cookies();
-  const token = cookieStore.get("token")?.value;
 
-  if (token) {
+  // Backend uses 'accessToken' cookie (httpOnly)
+  const accessToken = cookieStore.get("accessToken")?.value;
+
+  if (accessToken) {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
       const response = await fetch(`${apiUrl}/api/auth/me`, {
         headers: {
-          Cookie: `token=${token}`,
+          Cookie: `accessToken=${accessToken}`,
         },
         cache: "no-store",
       });
@@ -20,11 +26,13 @@ async function LoginPageContent() {
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data?.user) {
+          // User is already authenticated, redirect to dashboard
           redirect("/dashboard");
         }
       }
     } catch (error) {
       console.error("Auth verification failed:", error);
+      // Continue to show login form
     }
   }
 

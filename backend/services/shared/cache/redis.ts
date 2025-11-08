@@ -111,54 +111,55 @@ class MockRedis {
 
 let redis: Redis | UpstashRestRedis | MockRedis;
 
-// Initialize Redis connection with cloud services for local development
-// Use REST API by default to avoid connection issues and memory leaks
-if (
-  process.env.NODE_ENV === "test" ||
-  !process.env.REDIS_URL ||
-  process.env.REDIS_URL.trim() === ""
-) {
-  logger.info("Using Mock Redis for testing/fallback");
+// Initialize Redis connection - Always use real Upstash Redis (cloud or local)
+// Mock Redis only for testing environment
+if (process.env.NODE_ENV === "test") {
+  logger.info("Using Mock Redis for testing environment only");
   redis = new MockRedis();
 } else if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-  // Prefer REST API - simpler, no connection overhead, no memory leaks
-  logger.info("Using Upstash Redis REST API for cloud connection");
+  // Use Upstash REST API - simpler, no connection overhead, production-ready
+  logger.info("✅ Connecting to Upstash Redis via REST API");
   redis = new UpstashRestRedis(
     process.env.UPSTASH_REDIS_REST_URL,
     process.env.UPSTASH_REDIS_REST_TOKEN
   );
+  logger.info("✅ Upstash Redis REST client initialized successfully");
 } else if (process.env.USE_IOREDIS === "true" && process.env.REDIS_URL) {
-  // Only use ioredis if explicitly requested
-  try {
-    logger.info("Using Upstash Redis with ioredis client (explicit opt-in)");
-    redis = new Redis(process.env.REDIS_URL, {
-      maxRetriesPerRequest: 2,
-      enableReadyCheck: false,
-      lazyConnect: true,
-      connectTimeout: 5000,
-      retryStrategy(times: number) {
-        if (times > 2) {
-          logger.warn("Redis connection failed, giving up");
-          return null;
-        }
-        return Math.min(times * 50, 500);
-      },
-    });
+  // Alternative: Use ioredis client if explicitly requested
+  logger.info("Connecting to Upstash Redis via ioredis client");
+  redis = new Redis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: 3,
+    enableReadyCheck: false,
+    lazyConnect: false,
+    connectTimeout: 10000,
+    retryStrategy(times: number) {
+      if (times > 3) {
+        logger.error("Redis connection failed after 3 attempts");
+        throw new Error("Unable to connect to Redis after multiple attempts");
+      }
+      const delay = Math.min(times * 100, 1000);
+      logger.info(`Retrying Redis connection (attempt ${times}) in ${delay}ms`);
+      return delay;
+    },
+  });
 
-    redis.on("connect", () => {
-      logger.info("Redis connected successfully via ioredis");
-    });
+  redis.on("connect", () => {
+    logger.info("✅ Redis connected successfully via ioredis");
+  });
 
-    redis.on("error", (err) => {
-      logger.warn(`Redis ioredis error: ${err.message}`);
-    });
-  } catch (error) {
-    logger.warn("Failed to initialize ioredis, using Mock Redis");
-    redis = new MockRedis();
-  }
+  redis.on("error", (err) => {
+    logger.error(`❌ Redis ioredis error: ${err.message}`);
+  });
+
+  redis.on("ready", () => {
+    logger.info("✅ Redis client ready and operational");
+  });
 } else {
-  logger.info("No Redis configuration found, using Mock Redis");
-  redis = new MockRedis();
+  // Throw error if no Redis configuration found (for non-test environments)
+  const errorMsg =
+    "❌ CRITICAL: Redis configuration missing! Please set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN environment variables.";
+  logger.error(errorMsg);
+  throw new Error(errorMsg);
 }
 
 // Export both named and default export for compatibility

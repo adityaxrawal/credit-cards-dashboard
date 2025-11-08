@@ -58,7 +58,7 @@ export default function RewardsDashboard() {
       const token = localStorage.getItem("accessToken");
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/rewards/summary`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/rewards/summary`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
