@@ -76,7 +76,7 @@ export default function ReportsPage() {
 
       // Fetch spending summary
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/analytics/spending-summary?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/analytics/spending-summary?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -100,7 +100,7 @@ export default function ReportsPage() {
       const token = localStorage.getItem("accessToken");
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/reports/generate`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/reports/generate`,
         {
           method: "POST",
           headers: {
@@ -124,7 +124,7 @@ export default function ReportsPage() {
         const data = await response.json();
         // Trigger download
         window.open(
-          `${process.env.NEXT_PUBLIC_API_URL}/reports/${data.data.id}/download`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/reports/${data.data.id}/download`,
           "_blank"
         );
       }

@@ -4,6 +4,8 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuthenticatedUser } from "@/lib/auth/user-context";
+import { useAuth } from "@/lib/auth/AuthContext";
+import { useState } from "react";
 
 /**
  * Dashboard Layout Client Component
@@ -15,7 +17,9 @@ export default function DashboardLayoutClient({
   children: React.ReactNode;
 }) {
   const user = useAuthenticatedUser();
+  const { logout } = useAuth();
   const pathname = usePathname();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: "📊" },
@@ -26,6 +30,19 @@ export default function DashboardLayoutClient({
     { name: "Bills", href: "/bills", icon: "📅" },
     { name: "Settings", href: "/settings", icon: "⚙️" },
   ];
+
+  /**
+   * Handle user logout
+   */
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await logout();
+    } catch (error) {
+      console.error("Logout failed:", error);
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-primary-bg">
@@ -66,7 +83,7 @@ export default function DashboardLayoutClient({
 
           {/* User Info */}
           <div className="px-4 py-4 border-t border-border">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 mb-3">
               {user.profilePicture ? (
                 <Image
                   src={user.profilePicture}
@@ -91,6 +108,56 @@ export default function DashboardLayoutClient({
                 </p>
               </div>
             </div>
+
+            {/* Logout Button */}
+            <button
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoggingOut ? (
+                <>
+                  <svg
+                    className="animate-spin h-4 w-4"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  <span>Logging out...</span>
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                    />
+                  </svg>
+                  <span>Logout</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>

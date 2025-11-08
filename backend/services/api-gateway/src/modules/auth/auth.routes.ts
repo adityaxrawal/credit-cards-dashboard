@@ -32,10 +32,24 @@ router.post("/refresh", validateBody(RefreshTokenRequestSchema), AuthController.
 router.post("/logout", authenticate, validateBody(LogoutRequestSchema), AuthController.logout);
 
 /**
+ * @route   GET /api/auth/me
+ * @desc    Get current user (alias for profile)
+ * @access  Protected
+ */
+router.get("/me", authenticate, AuthController.getProfile);
+
+/**
  * @route   GET /api/auth/profile
  * @desc    Get user profile
  * @access  Protected
  */
 router.get("/profile", authenticate, AuthController.getProfile);
+
+/**
+ * @route   GET /api/auth/debug-config
+ * @desc    Debug endpoint to verify OAuth configuration
+ * @access  Public (development only)
+ */
+router.get("/debug-config", AuthController.debugConfig);
 
 export default router;

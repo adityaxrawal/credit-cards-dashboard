@@ -102,7 +102,7 @@ export const transactionApi = {
     if (pagination?.sortOrder) params.append("sortOrder", pagination.sortOrder);
 
     return apiGet<{ data: TransactionListResponse }>(
-      `/transactions?${params.toString()}`
+      `/api/transactions?${params.toString()}`
     ).then((res) => res.data);
   },
 
@@ -110,9 +110,9 @@ export const transactionApi = {
    * Get a single transaction by ID
    */
   getTransaction: async (transactionId: string): Promise<Transaction> => {
-    return apiGet<{ data: Transaction }>(`/transactions/${transactionId}`).then(
-      (res) => res.data
-    );
+    return apiGet<{ data: Transaction }>(
+      `/api/transactions/${transactionId}`
+    ).then((res) => res.data);
   },
 
   /**
@@ -120,7 +120,7 @@ export const transactionApi = {
    */
   getRecentTransactions: async (limit: number = 10): Promise<Transaction[]> => {
     return apiGet<{ data: Transaction[] }>(
-      `/transactions/recent?limit=${limit}`
+      `/api/transactions/recent?limit=${limit}`
     ).then((res) => res.data);
   },
 
@@ -137,7 +137,7 @@ export const transactionApi = {
     if (filters?.endDate) params.append("endDate", filters.endDate);
 
     return apiGet<{ data: TransactionStatistics }>(
-      `/transactions/statistics?${params.toString()}`
+      `/api/transactions/statistics?${params.toString()}`
     ).then((res) => res.data);
   },
 
@@ -147,7 +147,7 @@ export const transactionApi = {
   createTransaction: async (
     data: TransactionFormData
   ): Promise<Transaction> => {
-    return apiPost<{ data: Transaction }>("/transactions", data).then(
+    return apiPost<{ data: Transaction }>("/api/transactions", data).then(
       (res) => res.data
     );
   },
@@ -160,7 +160,7 @@ export const transactionApi = {
     data: Partial<TransactionFormData>
   ): Promise<Transaction> => {
     return apiPut<{ data: Transaction }>(
-      `/transactions/${transactionId}`,
+      `/api/transactions/${transactionId}`,
       data
     ).then((res) => res.data);
   },
@@ -169,6 +169,6 @@ export const transactionApi = {
    * Delete a transaction
    */
   deleteTransaction: async (transactionId: string): Promise<void> => {
-    await apiDelete<void>(`/transactions/${transactionId}`);
+    await apiDelete<void>(`/api/transactions/${transactionId}`);
   },
 };

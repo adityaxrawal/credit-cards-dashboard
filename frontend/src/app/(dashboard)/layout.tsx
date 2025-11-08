@@ -6,12 +6,15 @@ import DashboardLayoutClient from "./DashboardLayoutClient";
 
 /**
  * Fetch user data from API (server-side)
+ * Uses httpOnly accessToken cookie from backend
  */
 async function fetchUser(): Promise<User | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get("token")?.value;
 
-  if (!token) {
+  // Backend uses 'accessToken' cookie (httpOnly)
+  const accessToken = cookieStore.get("accessToken")?.value;
+
+  if (!accessToken) {
     return null;
   }
 
@@ -19,7 +22,7 @@ async function fetchUser(): Promise<User | null> {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
     const response = await fetch(`${apiUrl}/api/auth/me`, {
       headers: {
-        Cookie: `token=${token}`,
+        Cookie: `accessToken=${accessToken}`,
       },
       cache: "no-store",
     });

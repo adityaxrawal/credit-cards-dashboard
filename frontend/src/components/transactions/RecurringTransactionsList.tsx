@@ -59,7 +59,7 @@ export default function RecurringTransactionsList() {
       const statusParam = filter !== "all" ? `?status=${filter}` : "";
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/recurring-transactions${statusParam}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/recurring-transactions${statusParam}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -88,7 +88,7 @@ export default function RecurringTransactionsList() {
       setActionLoading(id);
       const token = localStorage.getItem("accessToken");
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/recurring-transactions/${id}/pause`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/recurring-transactions/${id}/pause`,
         {
           method: "POST",
           headers: {
@@ -116,7 +116,7 @@ export default function RecurringTransactionsList() {
       setActionLoading(id);
       const token = localStorage.getItem("accessToken");
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/recurring-transactions/${id}/resume`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/recurring-transactions/${id}/resume`,
         {
           method: "POST",
           headers: {
@@ -151,7 +151,7 @@ export default function RecurringTransactionsList() {
     try {
       const token = localStorage.getItem("accessToken");
       await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/recurring-transactions/${id}/cancel`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/recurring-transactions/${id}/cancel`,
         {
           method: "POST",
           headers: {
