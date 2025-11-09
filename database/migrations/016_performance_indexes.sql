@@ -94,14 +94,15 @@ WHERE processing_status = 'failed';
 -- ==========================================
 
 -- Index for analytics cache lookups
+-- Note: Removed WHERE expires_at > NOW() as NOW() is not IMMUTABLE
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_analytics_cache_lookup 
-ON analytics_cache(user_id, metric_key, period_start DESC, period_end DESC) 
-WHERE expires_at > NOW();
+ON analytics_cache(user_id, metric_key, period_start DESC, period_end DESC, expires_at);
 
 -- Index for expired cache cleanup
+-- Note: Removed WHERE clause with NOW() as NOW() is not IMMUTABLE
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_analytics_cache_expired 
 ON analytics_cache(expires_at) 
-WHERE expires_at IS NOT NULL AND expires_at < NOW();
+WHERE expires_at IS NOT NULL;
 
 -- ==========================================
 -- MATERIALIZED VIEWS FOR PERFORMANCE

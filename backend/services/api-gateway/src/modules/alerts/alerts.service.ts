@@ -1,4 +1,5 @@
 import { supabase } from "shared/database/supabase";
+import { logger } from "shared/monitoring/logger";
 
 /**
  * Enhanced Alert Service with event-driven architecture and multi-channel support
@@ -291,7 +292,7 @@ export class EnhancedAlertService {
       interaction_details: details || {},
     });
 
-    if (error) console.error("Error recording interaction:", error);
+    if (error) logger.error("Error recording interaction:", error);
 
     // Update alert if dismissed
     if (interactionType === "dismissed") {
@@ -466,7 +467,7 @@ export class EnhancedAlertService {
       })
       .eq("id", digestId);
 
-    if (error) console.error("Error marking digest as sent:", error);
+    if (error) logger.error("Error marking digest as sent:", error);
   }
 
   /**
@@ -580,16 +581,16 @@ export class EnhancedAlertService {
     // Placeholder implementations - would integrate with actual services
     switch (channel) {
       case "email":
-        console.log(`Sending email notification to user ${userId}:`, alert);
-        // await sendEmail(userId, alert);
+        logger.info(`Sending email notification to user ${userId}:`, { alert });
+        // await sendEmail(userId, { alert });
         break;
       case "sms":
-        console.log(`Sending SMS notification to user ${userId}:`, alert);
-        // await sendSMS(userId, alert);
+        logger.info(`Sending SMS notification to user ${userId}:`, { alert });
+        // await sendSMS(userId, { alert });
         break;
       case "push":
-        console.log(`Sending push notification to user ${userId}:`, alert);
-        // await sendPushNotification(userId, alert);
+        logger.info(`Sending push notification to user ${userId}:`, { alert });
+        // await sendPushNotification(userId, { alert });
         break;
       case "in_app":
         // Already created in database

@@ -207,25 +207,6 @@ CREATE INDEX idx_bill_payments_user ON bill_payments(user_id);
 CREATE INDEX idx_bill_payments_status ON bill_payments(payment_status);
 CREATE INDEX idx_bill_payments_due_date ON bill_payments(due_date);
 
--- Uploaded statements (for OCR processing)
-CREATE TABLE uploaded_statements (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    card_id UUID REFERENCES credit_cards(id) ON DELETE CASCADE,
-    file_name VARCHAR(255) NOT NULL,
-    file_url TEXT NOT NULL,
-    file_size INTEGER,
-    statement_date DATE,
-    processing_status VARCHAR(50) DEFAULT 'pending' CHECK (processing_status IN ('pending', 'processing', 'processed', 'failed')),
-    processed_at TIMESTAMP,
-    extracted_transactions_count INTEGER DEFAULT 0,
-    error_message TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_uploaded_statements_user ON uploaded_statements(user_id);
-CREATE INDEX idx_uploaded_statements_status ON uploaded_statements(processing_status);
-
 -- Recurring transactions detection
 CREATE TABLE recurring_transactions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -274,7 +255,6 @@ ALTER TABLE analytics_cache ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gmail_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reward_points ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bill_payments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE uploaded_statements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recurring_transactions ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies (users can only access their own data)
@@ -313,9 +293,6 @@ CREATE POLICY "Users can manage own reward points" ON reward_points FOR ALL USIN
 CREATE POLICY "Users can read own bill payments" ON bill_payments FOR SELECT USING (auth.uid()::text = user_id::text);
 CREATE POLICY "Users can manage own bill payments" ON bill_payments FOR ALL USING (auth.uid()::text = user_id::text);
 
-CREATE POLICY "Users can read own uploaded statements" ON uploaded_statements FOR SELECT USING (auth.uid()::text = user_id::text);
-CREATE POLICY "Users can manage own uploaded statements" ON uploaded_statements FOR ALL USING (auth.uid()::text = user_id::text);
-
 CREATE POLICY "Users can read own recurring transactions" ON recurring_transactions FOR SELECT USING (auth.uid()::text = user_id::text);
 CREATE POLICY "Users can manage own recurring transactions" ON recurring_transactions FOR ALL USING (auth.uid()::text = user_id::text);
 
@@ -330,5 +307,4 @@ COMMENT ON TABLE analytics_cache IS 'Cached analytics computations for performan
 COMMENT ON TABLE gmail_tokens IS 'Encrypted Gmail refresh tokens for API access';
 COMMENT ON TABLE reward_points IS 'Credit card reward points tracking';
 COMMENT ON TABLE bill_payments IS 'Bill payment history and status';
-COMMENT ON TABLE uploaded_statements IS 'Credit card statements uploaded for OCR processing';
 COMMENT ON TABLE recurring_transactions IS 'Detected recurring subscription/payment patterns';

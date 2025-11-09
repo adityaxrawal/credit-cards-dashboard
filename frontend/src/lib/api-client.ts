@@ -81,13 +81,33 @@ class ApiClient {
       (response: AxiosResponse<ApiResponse<unknown>>) => {
         return response;
       },
-      (error) => {
+      async (error) => {
+        // Dynamically import toast to avoid SSR issues
+        const { toastService } = await import("@/lib/utils/toast");
+
         if (error.response?.status === 401) {
           // Redirect to login on unauthorized
           if (typeof window !== "undefined") {
-            window.location.href = "/login";
+            toastService.error("Session expired. Please login again.");
+            setTimeout(() => {
+              window.location.href = "/login";
+            }, 1000);
           }
+        } else if (
+          error.code === "ECONNABORTED" ||
+          error.message?.includes("timeout")
+        ) {
+          toastService.error(
+            "Request timeout. The server might be starting up, please try again."
+          );
+        } else if (!error.response) {
+          toastService.error("Network error. Please check your connection.");
+        } else {
+          // Don't show toast for every error - let components handle it
+          // This prevents duplicate toasts
+          // toastService.handleApiError(error);
         }
+
         return Promise.reject(error);
       }
     );

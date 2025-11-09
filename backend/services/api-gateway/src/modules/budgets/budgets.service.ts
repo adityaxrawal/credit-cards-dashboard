@@ -1,4 +1,5 @@
 import { supabase } from "shared/database/supabase";
+import { logger } from "shared/monitoring/logger";
 
 /**
  * Period type for budgets
@@ -532,7 +533,7 @@ export class EnhancedBudgetService {
       }
     );
 
-    if (insertError) console.error("Error storing forecasts:", insertError);
+    if (insertError) logger.error("Error storing forecasts", insertError);
 
     return forecasts;
   }
@@ -701,7 +702,7 @@ export class EnhancedBudgetService {
       metadata: metadata || {},
     });
 
-    if (error) console.error("Error logging budget action:", error);
+    if (error) logger.error("Error logging budget action", error);
   }
 
   private static aggregateDailySpending(transactions: any[]): Record<string, number> {

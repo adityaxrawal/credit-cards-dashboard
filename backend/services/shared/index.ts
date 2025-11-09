@@ -9,6 +9,9 @@ export { redis } from "./cache/redis";
 // Monitoring
 export { logger } from "./monitoring/logger";
 
+// Errors
+export { AppError, ErrorCode, ErrorStatusCode, handleError, asyncHandler } from "./errors/AppError";
+
 // Auth utilities
 export * from "./lib/auth/tokenHandler";
 
