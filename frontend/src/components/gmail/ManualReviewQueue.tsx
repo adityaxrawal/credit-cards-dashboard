@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Check, X, Edit2, AlertTriangle } from "lucide-react";
+import { apiClient } from "@/lib/api-client";
 
 interface ReviewItem {
   id: string;
@@ -34,11 +35,8 @@ export default function ManualReviewQueue() {
 
   const fetchPendingReviews = async () => {
     try {
-      const response = await fetch("/api/review/pending");
-      if (response.ok) {
-        const data = await response.json();
-        setItems(data.items);
-      }
+      const data = await apiClient.get("/api/review/pending");
+      setItems((data as any).items || []);
     } catch (error) {
       console.error("Failed to fetch reviews:", error);
     } finally {
@@ -51,17 +49,10 @@ export default function ManualReviewQueue() {
     editedTransaction?: ReviewItem["extracted_data"]
   ) => {
     try {
-      const response = await fetch(`/api/review/${id}/approve`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ editedTransaction }),
-      });
-
-      if (response.ok) {
-        setItems(items.filter((item) => item.id !== id));
-        setEditingId(null);
-        setEditedData(null);
-      }
+      await apiClient.put(`/api/review/${id}/approve`, { editedTransaction });
+      setItems(items.filter((item) => item.id !== id));
+      setEditingId(null);
+      setEditedData(null);
     } catch (error) {
       console.error("Failed to approve:", error);
     }
@@ -69,15 +60,8 @@ export default function ManualReviewQueue() {
 
   const handleReject = async (id: string, reason: string) => {
     try {
-      const response = await fetch(`/api/review/${id}/reject`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
-      });
-
-      if (response.ok) {
-        setItems(items.filter((item) => item.id !== id));
-      }
+      await apiClient.put(`/api/review/${id}/reject`, { reason });
+      setItems(items.filter((item) => item.id !== id));
     } catch (error) {
       console.error("Failed to reject:", error);
     }

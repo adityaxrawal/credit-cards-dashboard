@@ -11,6 +11,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { format } from "date-fns";
+import { apiClient } from "@/lib/api-client";
 
 interface RecurringTransaction {
   id: string;
@@ -55,22 +56,12 @@ export default function RecurringTransactionsList() {
   const fetchRecurringTransactions = useCallback(async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("accessToken");
       const statusParam = filter !== "all" ? `?status=${filter}` : "";
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/recurring-transactions${statusParam}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const data = await apiClient.get(
+        `/api/recurring-transactions${statusParam}`
       );
-
-      if (response.ok) {
-        const data = await response.json();
-        setTransactions(data.data || []);
-      }
+      setTransactions(data.data || []);
     } catch (error) {
       console.error("Error fetching recurring transactions:", error);
     } finally {
@@ -86,23 +77,9 @@ export default function RecurringTransactionsList() {
   const handlePause = async (id: string) => {
     try {
       setActionLoading(id);
-      const token = localStorage.getItem("accessToken");
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/recurring-transactions/${id}/pause`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        showNotification("success", "Transaction paused successfully");
-        fetchRecurringTransactions();
-      } else {
-        showNotification("error", "Failed to pause transaction");
-      }
+      await apiClient.post(`/api/recurring-transactions/${id}/pause`, {});
+      showNotification("success", "Transaction paused successfully");
+      fetchRecurringTransactions();
     } catch (error) {
       console.error("Error pausing transaction:", error);
       showNotification("error", "An error occurred");
@@ -114,23 +91,9 @@ export default function RecurringTransactionsList() {
   const handleResume = async (id: string) => {
     try {
       setActionLoading(id);
-      const token = localStorage.getItem("accessToken");
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/recurring-transactions/${id}/resume`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        showNotification("success", "Transaction resumed successfully");
-        fetchRecurringTransactions();
-      } else {
-        showNotification("error", "Failed to resume transaction");
-      }
+      await apiClient.post(`/api/recurring-transactions/${id}/resume`, {});
+      showNotification("success", "Transaction resumed successfully");
+      fetchRecurringTransactions();
     } catch (error) {
       console.error("Error resuming transaction:", error);
       showNotification("error", "An error occurred");
@@ -149,16 +112,7 @@ export default function RecurringTransactionsList() {
     }
 
     try {
-      const token = localStorage.getItem("accessToken");
-      await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/recurring-transactions/${id}/cancel`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      await apiClient.post(`/api/recurring-transactions/${id}/cancel`, {});
       fetchRecurringTransactions();
     } catch (error) {
       console.error("Error cancelling transaction:", error);

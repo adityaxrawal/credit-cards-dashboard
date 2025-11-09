@@ -13,6 +13,7 @@ import { GmailSyncButton } from "@/components/gmail/GmailSyncButton";
 import { RemindersWidget } from "@/components/dashboard/RemindersWidget";
 import { RefreshCw } from "lucide-react";
 import Link from "next/link";
+import { apiClient } from "@/lib/api-client";
 
 /**
  * Dashboard Page
@@ -123,20 +124,8 @@ export default function DashboardPage() {
     try {
       setAutoSyncChecked(true);
 
-      // Fetch last sync time (httpOnly cookie sent automatically)
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/gmail/last-sync/${user.id}`,
-        {
-          credentials: "include", // Send httpOnly cookie
-        }
-      );
-
-      if (!response.ok) {
-        console.error("Failed to fetch last sync time");
-        return;
-      }
-
-      const data = await response.json();
+      // Fetch last sync time
+      const data = await apiClient.get(`/api/gmail/last-sync/${user.id}`);
 
       if (!data.success || !data.gmailConnected) {
         return;
@@ -152,22 +141,17 @@ export default function DashboardPage() {
         );
         setIsAutoSyncing(true);
 
-        // Silent background sync (httpOnly cookie sent automatically)
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/gmail/sync`, {
-          method: "POST",
-          credentials: "include", // Send httpOnly cookie
-        })
-          .then(async (res) => {
+        // Silent background sync
+        apiClient
+          .post("/api/gmail/sync", {})
+          .then(async (result: any) => {
             setIsAutoSyncing(false);
-            if (res.ok) {
-              const result = await res.json();
-              if (result.summary?.newTransactions > 0) {
-                console.log(
-                  `Auto-sync completed: ${result.summary.newTransactions} new transactions`
-                );
-                // Refresh dashboard data
-                window.dispatchEvent(new CustomEvent("transactions-updated"));
-              }
+            if (result.summary?.newTransactions > 0) {
+              console.log(
+                `Auto-sync completed: ${result.summary.newTransactions} new transactions`
+              );
+              // Refresh dashboard data
+              window.dispatchEvent(new CustomEvent("transactions-updated"));
             }
           })
           .catch((err) => {

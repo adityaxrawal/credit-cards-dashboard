@@ -1,16 +1,12 @@
 import { supabase } from "shared/database/supabase";
+import { AppError } from "shared/errors/AppError";
 
 /**
  * AI-powered financial insights and recommendations
  */
 export interface FinancialInsight {
   id: string;
-  type:
-    | "spending_pattern"
-    | "optimization"
-    | "prediction"
-    | "warning"
-    | "opportunity";
+  type: "spending_pattern" | "optimization" | "prediction" | "warning" | "opportunity";
   title: string;
   description: string;
   confidence: number; // 0-100
@@ -131,10 +127,7 @@ export class AIInsightsService {
         .from("transactions")
         .select("*")
         .eq("user_id", userId)
-        .gte(
-          "transaction_date",
-          new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
-        )
+        .gte("transaction_date", new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString())
         .order("transaction_date", { ascending: false });
 
       if (error || !transactions?.length) {
@@ -143,16 +136,9 @@ export class AIInsightsService {
 
       // Generate different types of insights
       const spendingPatterns = await this.analyzeSpendingPatterns(transactions);
-      const cardOptimizations = await this.analyzeCardOptimization(
-        userId,
-        transactions
-      );
-      const budgetInsights = await this.analyzeBudgetTrends(
-        userId,
-        transactions
-      );
-      const predictionInsights =
-        await this.generatePredictiveInsights(transactions);
+      const cardOptimizations = await this.analyzeCardOptimization(userId, transactions);
+      const budgetInsights = await this.analyzeBudgetTrends(userId, transactions);
+      const predictionInsights = await this.generatePredictiveInsights(transactions);
 
       // Convert analyses to insights
       insights.push(...this.convertPatternsToInsights(spendingPatterns));
@@ -176,9 +162,7 @@ export class AIInsightsService {
   /**
    * Analyze spending patterns using statistical methods
    */
-  private static async analyzeSpendingPatterns(
-    transactions: any[]
-  ): Promise<SpendingPattern[]> {
+  private static async analyzeSpendingPatterns(transactions: any[]): Promise<SpendingPattern[]> {
     const patterns: SpendingPattern[] = [];
 
     // Group transactions by category and month
@@ -224,10 +208,7 @@ export class AIInsightsService {
     const optimizations: CardOptimization[] = [];
 
     // Get user's cards with reward information
-    const { data: cards } = await supabase
-      .from("credit_cards")
-      .select("*")
-      .eq("user_id", userId);
+    const { data: cards } = await supabase.from("credit_cards").select("*").eq("user_id", userId);
 
     if (!cards?.length) return [];
 
@@ -235,27 +216,14 @@ export class AIInsightsService {
     const categorySpending = this.groupTransactionsByCategory(transactions);
 
     for (const [category, spending] of Object.entries(categorySpending)) {
-      const totalSpent = Object.values(spending).reduce(
-        (sum, amount) => sum + amount,
-        0
-      );
+      const totalSpent = Object.values(spending).reduce((sum, amount) => sum + amount, 0);
 
       // Find current card usage for this category
-      const categoryTransactions = transactions.filter(
-        (t) => t.category === category
-      );
-      const cardUsage = this.analyzeCardUsageByCategory(
-        categoryTransactions,
-        cards
-      );
+      const categoryTransactions = transactions.filter((t) => t.category === category);
+      const cardUsage = this.analyzeCardUsageByCategory(categoryTransactions, cards);
 
       // Find optimization opportunities
-      const optimization = this.findCardOptimization(
-        category,
-        totalSpent,
-        cardUsage,
-        cards
-      );
+      const optimization = this.findCardOptimization(category, totalSpent, cardUsage, cards);
 
       if (optimization && optimization.improvement.additionalReward > 100) {
         // Minimum ₹100 improvement
@@ -269,10 +237,7 @@ export class AIInsightsService {
   /**
    * Analyze budget trends and patterns
    */
-  private static async analyzeBudgetTrends(
-    userId: string,
-    transactions: any[]
-  ): Promise<any> {
+  private static async analyzeBudgetTrends(userId: string, transactions: any[]): Promise<any> {
     const { data: budgets } = await supabase
       .from("budget_tracking")
       .select("*")
@@ -284,8 +249,7 @@ export class AIInsightsService {
 
     // Analyze budget adherence over time
     const adherencePattern = budgets.map((budget) => {
-      const adherence =
-        (budget.budget_limit - budget.total_spent) / budget.budget_limit;
+      const adherence = (budget.budget_limit - budget.total_spent) / budget.budget_limit;
       return {
         month: budget.month,
         year: budget.year,
@@ -296,11 +260,9 @@ export class AIInsightsService {
 
     return {
       averageAdherence:
-        adherencePattern.reduce((sum, p) => sum + p.adherence, 0) /
-        adherencePattern.length,
+        adherencePattern.reduce((sum, p) => sum + p.adherence, 0) / adherencePattern.length,
       overspendFrequency:
-        adherencePattern.filter((p) => p.overspent).length /
-        adherencePattern.length,
+        adherencePattern.filter((p) => p.overspent).length / adherencePattern.length,
       trend: this.calculateBudgetTrend(adherencePattern),
       riskMonths: adherencePattern
         .filter((p) => p.adherence < 10)
@@ -311,14 +273,14 @@ export class AIInsightsService {
   /**
    * Generate predictive insights for future spending
    */
-  private static async generatePredictiveInsights(
-    transactions: any[]
-  ): Promise<SpendingForecast> {
+  private static async generatePredictiveInsights(transactions: any[]): Promise<SpendingForecast> {
     const monthlySpending = this.groupTransactionsByMonth(transactions);
     const months = Object.keys(monthlySpending).sort();
 
     if (months.length < 3) {
-      throw new Error("Insufficient data for prediction");
+      throw AppError.validation(
+        "Insufficient data for prediction - need at least 3 months of history"
+      );
     }
 
     // Use simple linear regression for prediction
@@ -337,9 +299,7 @@ export class AIInsightsService {
 
     transactions.forEach((transaction) => {
       const category = transaction.category || "Other";
-      const monthKey = new Date(transaction.transaction_date)
-        .toISOString()
-        .slice(0, 7); // YYYY-MM
+      const monthKey = new Date(transaction.transaction_date).toISOString().slice(0, 7); // YYYY-MM
 
       if (!grouped[category]) grouped[category] = {};
       if (!grouped[category][monthKey]) grouped[category][monthKey] = 0;
@@ -353,15 +313,11 @@ export class AIInsightsService {
   /**
    * Helper: Group transactions by month
    */
-  private static groupTransactionsByMonth(
-    transactions: any[]
-  ): Record<string, number> {
+  private static groupTransactionsByMonth(transactions: any[]): Record<string, number> {
     const grouped: Record<string, number> = {};
 
     transactions.forEach((transaction) => {
-      const monthKey = new Date(transaction.transaction_date)
-        .toISOString()
-        .slice(0, 7);
+      const monthKey = new Date(transaction.transaction_date).toISOString().slice(0, 7);
       if (!grouped[monthKey]) grouped[monthKey] = 0;
       grouped[monthKey] += Math.abs(transaction.amount);
     });
@@ -411,30 +367,21 @@ export class AIInsightsService {
       avgByMonth[month].push(amount);
     });
 
-    const monthlyAverages = Object.entries(avgByMonth).map(
-      ([month, amounts]) => ({
-        month: parseInt(month),
-        average: amounts.reduce((sum, amt) => sum + amt, 0) / amounts.length,
-      })
-    );
+    const monthlyAverages = Object.entries(avgByMonth).map(([month, amounts]) => ({
+      month: parseInt(month),
+      average: amounts.reduce((sum, amt) => sum + amt, 0) / amounts.length,
+    }));
 
     const overallAverage =
-      monthlyAverages.reduce((sum, m) => sum + m.average, 0) /
-      monthlyAverages.length;
+      monthlyAverages.reduce((sum, m) => sum + m.average, 0) / monthlyAverages.length;
 
     const peakThreshold = overallAverage * 1.2;
     const lowThreshold = overallAverage * 0.8;
 
     return {
-      detected: monthlyAverages.some(
-        (m) => m.average > peakThreshold || m.average < lowThreshold
-      ),
-      peak_months: monthlyAverages
-        .filter((m) => m.average > peakThreshold)
-        .map((m) => m.month),
-      low_months: monthlyAverages
-        .filter((m) => m.average < lowThreshold)
-        .map((m) => m.month),
+      detected: monthlyAverages.some((m) => m.average > peakThreshold || m.average < lowThreshold),
+      peak_months: monthlyAverages.filter((m) => m.average > peakThreshold).map((m) => m.month),
+      low_months: monthlyAverages.filter((m) => m.average < lowThreshold).map((m) => m.month),
     };
   }
 
@@ -446,8 +393,7 @@ export class AIInsightsService {
 
     const mean = amounts.reduce((sum, amt) => sum + amt, 0) / amounts.length;
     const variance =
-      amounts.reduce((sum, amt) => sum + Math.pow(amt - mean, 2), 0) /
-      amounts.length;
+      amounts.reduce((sum, amt) => sum + Math.pow(amt - mean, 2), 0) / amounts.length;
     const stdDev = Math.sqrt(variance);
     const coefficientOfVariation = stdDev / mean;
 
@@ -458,14 +404,10 @@ export class AIInsightsService {
   /**
    * Helper: Classify spending pattern
    */
-  private static classifyPattern(
-    trend: any,
-    seasonality: any
-  ): SpendingPattern["pattern"] {
+  private static classifyPattern(trend: any, seasonality: any): SpendingPattern["pattern"] {
     if (seasonality.detected) return "seasonal";
     if (trend.direction === "up" && trend.percentage > 20) return "increasing";
-    if (trend.direction === "down" && trend.percentage > 20)
-      return "decreasing";
+    if (trend.direction === "down" && trend.percentage > 20) return "decreasing";
     if (trend.direction === "flat") return "stable";
     return "irregular";
   }
@@ -513,16 +455,13 @@ export class AIInsightsService {
       (card) =>
         card.category_rewards &&
         card.category_rewards[category] &&
-        card.category_rewards[category] >
-          (currentCard.category_rewards?.[category] || 1)
+        card.category_rewards[category] > (currentCard.category_rewards?.[category] || 1)
     );
 
     if (!bestCard || bestCard.id === currentCard.id) return null;
 
-    const currentReward =
-      (totalSpent * (currentCard.category_rewards?.[category] || 1)) / 100;
-    const potentialReward =
-      (totalSpent * (bestCard.category_rewards[category] || 1)) / 100;
+    const currentReward = (totalSpent * (currentCard.category_rewards?.[category] || 1)) / 100;
+    const potentialReward = (totalSpent * (bestCard.category_rewards[category] || 1)) / 100;
     const improvement = potentialReward - currentReward;
 
     return {
@@ -554,8 +493,7 @@ export class AIInsightsService {
   private static calculateBudgetTrend(adherencePattern: any[]): string {
     const recentAdherence = adherencePattern.slice(0, 3);
     const avgRecent =
-      recentAdherence.reduce((sum, p) => sum + p.adherence, 0) /
-      recentAdherence.length;
+      recentAdherence.reduce((sum, p) => sum + p.adherence, 0) / recentAdherence.length;
 
     if (avgRecent > 90) return "excellent";
     if (avgRecent > 70) return "good";
@@ -600,9 +538,7 @@ export class AIInsightsService {
   /**
    * Convert spending patterns to insights
    */
-  private static convertPatternsToInsights(
-    patterns: SpendingPattern[]
-  ): FinancialInsight[] {
+  private static convertPatternsToInsights(patterns: SpendingPattern[]): FinancialInsight[] {
     return patterns.map((pattern, index) => ({
       id: `pattern_${index}`,
       type: "spending_pattern" as const,
@@ -610,14 +546,9 @@ export class AIInsightsService {
       description: this.generatePatternDescription(pattern),
       confidence: pattern.confidence,
       impact:
-        pattern.trend.percentage > 50
-          ? "high"
-          : pattern.trend.percentage > 20
-            ? "medium"
-            : "low",
+        pattern.trend.percentage > 50 ? "high" : pattern.trend.percentage > 20 ? "medium" : "low",
       category: pattern.category,
-      actionable:
-        pattern.pattern === "increasing" || pattern.pattern === "seasonal",
+      actionable: pattern.pattern === "increasing" || pattern.pattern === "seasonal",
       action:
         pattern.pattern === "increasing"
           ? {
@@ -668,9 +599,7 @@ export class AIInsightsService {
   /**
    * Convert budget analysis to insights
    */
-  private static convertBudgetToInsights(
-    budgetAnalysis: any
-  ): FinancialInsight[] {
+  private static convertBudgetToInsights(budgetAnalysis: any): FinancialInsight[] {
     if (!budgetAnalysis) return [];
 
     const insights: FinancialInsight[] = [];
@@ -720,9 +649,7 @@ export class AIInsightsService {
   /**
    * Convert predictions to insights
    */
-  private static convertPredictionsToInsights(
-    predictions: SpendingForecast
-  ): FinancialInsight[] {
+  private static convertPredictionsToInsights(predictions: SpendingForecast): FinancialInsight[] {
     return [
       {
         id: "spending_prediction",
@@ -734,8 +661,7 @@ export class AIInsightsService {
         actionable: true,
         action: {
           title: "Plan Budget",
-          description:
-            "Review this prediction against your planned budget for next month.",
+          description: "Review this prediction against your planned budget for next month.",
         },
         metadata: {
           dataPoints: 12,
@@ -767,10 +693,7 @@ export class AIInsightsService {
   /**
    * Get insights for specific category
    */
-  static async getCategoryInsights(
-    userId: string,
-    category: string
-  ): Promise<FinancialInsight[]> {
+  static async getCategoryInsights(userId: string, category: string): Promise<FinancialInsight[]> {
     const allInsights = await this.generateInsights(userId);
     return allInsights.filter((insight) => insight.category === category);
   }
@@ -778,9 +701,7 @@ export class AIInsightsService {
   /**
    * Get actionable insights only
    */
-  static async getActionableInsights(
-    userId: string
-  ): Promise<FinancialInsight[]> {
+  static async getActionableInsights(userId: string): Promise<FinancialInsight[]> {
     const allInsights = await this.generateInsights(userId);
     return allInsights.filter((insight) => insight.actionable);
   }
@@ -788,9 +709,7 @@ export class AIInsightsService {
   /**
    * Get high-impact insights
    */
-  static async getHighImpactInsights(
-    userId: string
-  ): Promise<FinancialInsight[]> {
+  static async getHighImpactInsights(userId: string): Promise<FinancialInsight[]> {
     const allInsights = await this.generateInsights(userId);
     return allInsights.filter((insight) => insight.impact === "high");
   }
@@ -809,16 +728,11 @@ export class AIInsightsService {
   ): Promise<FinancialInsight[]> {
     try {
       // Get user data with optional filtering
-      let query = supabase
-        .from("transactions")
-        .select("*")
-        .eq("user_id", userId);
+      let query = supabase.from("transactions").select("*").eq("user_id", userId);
 
       // Apply date range filter if provided
       if (options.dateRange) {
-        query = query
-          .gte("date", options.dateRange.start)
-          .lte("date", options.dateRange.end);
+        query = query.gte("date", options.dateRange.start).lte("date", options.dateRange.end);
       }
 
       // Apply category filter if provided
@@ -829,7 +743,7 @@ export class AIInsightsService {
       const { data: transactions, error } = await query;
 
       if (error) {
-        throw new Error(`Database error: ${error.message}`);
+        throw AppError.internal(`Database error: ${error.message}`);
       }
 
       if (!transactions || transactions.length === 0) {
@@ -839,32 +753,18 @@ export class AIInsightsService {
       // Generate insights based on analysis type
       const insights: FinancialInsight[] = [];
 
-      if (
-        options.analysisType === "all" ||
-        options.analysisType === "spending"
-      ) {
-        const spendingInsights =
-          await this.generateSpendingInsights(transactions);
+      if (options.analysisType === "all" || options.analysisType === "spending") {
+        const spendingInsights = await this.generateSpendingInsights(transactions);
         insights.push(...spendingInsights);
       }
 
-      if (
-        options.analysisType === "all" ||
-        options.analysisType === "budgeting"
-      ) {
-        const budgetInsights = await this.generateBudgetInsights(
-          userId,
-          transactions
-        );
+      if (options.analysisType === "all" || options.analysisType === "budgeting") {
+        const budgetInsights = await this.generateBudgetInsights(userId, transactions);
         insights.push(...budgetInsights);
       }
 
-      if (
-        options.analysisType === "all" ||
-        options.analysisType === "recommendations"
-      ) {
-        const recommendationInsights =
-          await this.generateRecommendationInsights(transactions);
+      if (options.analysisType === "all" || options.analysisType === "recommendations") {
+        const recommendationInsights = await this.generateRecommendationInsights(transactions);
         insights.push(...recommendationInsights);
       }
 
@@ -902,15 +802,13 @@ export class AIInsightsService {
 
       // Apply date range if provided
       if (options.dateRange) {
-        query = query
-          .gte("date", options.dateRange.start)
-          .lte("date", options.dateRange.end);
+        query = query.gte("date", options.dateRange.start).lte("date", options.dateRange.end);
       }
 
       const { data: transactions, error } = await query.limit(1000);
 
       if (error) {
-        throw new Error(`Database error: ${error.message}`);
+        throw AppError.internal(`Database error: ${error.message}`);
       }
 
       if (!transactions || transactions.length === 0) {
@@ -938,9 +836,7 @@ export class AIInsightsService {
       // Filter by severity if specified
       let filteredAnomalies = anomalies;
       if (options.severity && options.severity !== "all") {
-        filteredAnomalies = anomalies.filter(
-          (a) => a.severity === options.severity
-        );
+        filteredAnomalies = anomalies.filter((a) => a.severity === options.severity);
       }
 
       // Sort by risk score and apply limit
@@ -956,16 +852,11 @@ export class AIInsightsService {
   /**
    * Detect amount-based anomalies
    */
-  private static detectAmountAnomalies(
-    transactions: any[]
-  ): TransactionAnomaly[] {
+  private static detectAmountAnomalies(transactions: any[]): TransactionAnomaly[] {
     const anomalies: TransactionAnomaly[] = [];
 
     // Group by category and calculate statistics
-    const categoryStats = new Map<
-      string,
-      { amounts: number[]; avg: number; std: number }
-    >();
+    const categoryStats = new Map<string, { amounts: number[]; avg: number; std: number }>();
 
     transactions.forEach((tx) => {
       if (!categoryStats.has(tx.category)) {
@@ -976,13 +867,10 @@ export class AIInsightsService {
 
     // Calculate averages and standard deviations
     categoryStats.forEach((stats, category) => {
-      stats.avg =
-        stats.amounts.reduce((sum, amt) => sum + amt, 0) / stats.amounts.length;
+      stats.avg = stats.amounts.reduce((sum, amt) => sum + amt, 0) / stats.amounts.length;
       const variance =
-        stats.amounts.reduce(
-          (sum, amt) => sum + Math.pow(amt - stats.avg, 2),
-          0
-        ) / stats.amounts.length;
+        stats.amounts.reduce((sum, amt) => sum + Math.pow(amt - stats.avg, 2), 0) /
+        stats.amounts.length;
       stats.std = Math.sqrt(variance);
     });
 
@@ -1031,9 +919,7 @@ export class AIInsightsService {
   /**
    * Detect time-based anomalies
    */
-  private static detectTimeAnomalies(
-    transactions: any[]
-  ): TransactionAnomaly[] {
+  private static detectTimeAnomalies(transactions: any[]): TransactionAnomaly[] {
     const anomalies: TransactionAnomaly[] = [];
 
     // Group transactions by hour to find unusual timing
@@ -1074,29 +960,20 @@ export class AIInsightsService {
   /**
    * Detect location-based anomalies
    */
-  private static detectLocationAnomalies(
-    transactions: any[]
-  ): TransactionAnomaly[] {
+  private static detectLocationAnomalies(transactions: any[]): TransactionAnomaly[] {
     const anomalies: TransactionAnomaly[] = [];
 
     // Group by merchant to detect unusual locations
     const merchantCounts = new Map<string, number>();
     transactions.forEach((tx) => {
       if (tx.merchant) {
-        merchantCounts.set(
-          tx.merchant,
-          (merchantCounts.get(tx.merchant) || 0) + 1
-        );
+        merchantCounts.set(tx.merchant, (merchantCounts.get(tx.merchant) || 0) + 1);
       }
     });
 
     // Flag one-time merchants with large amounts as potentially suspicious
     transactions.forEach((tx) => {
-      if (
-        tx.merchant &&
-        merchantCounts.get(tx.merchant) === 1 &&
-        Math.abs(tx.amount) > 500
-      ) {
+      if (tx.merchant && merchantCounts.get(tx.merchant) === 1 && Math.abs(tx.amount) > 500) {
         anomalies.push({
           id: `location_${tx.id}`,
           transactionId: tx.id,
@@ -1120,9 +997,7 @@ export class AIInsightsService {
   /**
    * Detect frequency-based anomalies
    */
-  private static detectFrequencyAnomalies(
-    transactions: any[]
-  ): TransactionAnomaly[] {
+  private static detectFrequencyAnomalies(transactions: any[]): TransactionAnomaly[] {
     const anomalies: TransactionAnomaly[] = [];
 
     // Group by merchant and date to detect rapid successive transactions
@@ -1149,9 +1024,7 @@ export class AIInsightsService {
           if (minutesDiff < 30) {
             // Less than 30 minutes apart
             const relatedTx = transactions.find(
-              (tx) =>
-                tx.merchant === merchant &&
-                new Date(tx.date).getTime() === dates[i].getTime()
+              (tx) => tx.merchant === merchant && new Date(tx.date).getTime() === dates[i].getTime()
             );
 
             if (relatedTx) {
@@ -1181,9 +1054,7 @@ export class AIInsightsService {
   /**
    * Generate spending-focused insights
    */
-  private static async generateSpendingInsights(
-    transactions: any[]
-  ): Promise<FinancialInsight[]> {
+  private static async generateSpendingInsights(transactions: any[]): Promise<FinancialInsight[]> {
     // Implementation would analyze spending patterns
     // This is a simplified version - you can expand based on existing logic
     return [];
@@ -1212,7 +1083,6 @@ export class AIInsightsService {
     return [];
   }
 }
-
 
 // Export singleton instance
 export const aIInsightsService = new AIInsightsService();

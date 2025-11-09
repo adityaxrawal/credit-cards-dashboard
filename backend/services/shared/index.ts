@@ -12,6 +12,15 @@ export { logger } from "./monitoring/logger";
 // Errors
 export { AppError, ErrorCode, ErrorStatusCode, handleError, asyncHandler } from "./errors/AppError";
 
+// Middleware
+export {
+  validateRequest,
+  validateBody,
+  validateParams,
+  validateQuery,
+  validateMultiple,
+} from "./middleware/validation";
+
 // Auth utilities
 export * from "./lib/auth/tokenHandler";
 

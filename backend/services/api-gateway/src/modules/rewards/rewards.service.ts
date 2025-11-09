@@ -1,5 +1,6 @@
 import { supabase } from "shared/database/supabase";
 import { logger } from "shared/monitoring/logger";
+import { AppError } from "shared/errors/AppError";
 
 // Helper function to subtract months from a date
 function subMonths(date: Date, months: number): Date {
@@ -239,10 +240,10 @@ export class RewardsService {
         .eq("user_id", userId)
         .eq("status", "active");
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
 
       if (!cards?.length) {
-        throw new Error("No active cards found");
+        throw AppError.notFound("Active cards");
       }
 
       // Calculate reward for each card
@@ -343,7 +344,7 @@ export class RewardsService {
         .select("*, reward_programs(*)")
         .eq("user_id", userId);
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
 
       // Get current reward balances
       const balances = await this.getRewardBalances(userId);
@@ -407,7 +408,7 @@ export class RewardsService {
       const cardBalance = balances[cardId];
 
       if (!cardBalance || cardBalance.amount < amount) {
-        throw new Error("Insufficient reward balance");
+        throw AppError.validation("Insufficient reward balance");
       }
 
       // Get card details for redemption value calculation
@@ -418,7 +419,7 @@ export class RewardsService {
         .eq("user_id", userId)
         .single();
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
 
       // Calculate redemption value
       const rewardProgram = card.reward_programs[0];
@@ -476,7 +477,7 @@ export class RewardsService {
         .eq("user_id", userId)
         .eq("status", "active");
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
 
       const balances: { [cardId: string]: { amount: number; type: string } } = {};
 

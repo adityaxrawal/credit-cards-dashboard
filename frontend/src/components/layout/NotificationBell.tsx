@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Bell, X, AlertCircle, CheckCircle } from "lucide-react";
 import Link from "next/link";
 import { formatDate, cn } from "@/lib/utils";
+import { apiClient } from "@/lib/api-client";
 
 interface Alert {
   id: string;
@@ -23,15 +24,7 @@ export function NotificationBell() {
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ["notifications-unread-count"],
     queryFn: async () => {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/alerts?unread_only=true&limit=1`,
-        {
-          method: "GET",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-      const data = await response.json();
+      const data = await apiClient.get("/api/alerts?unread_only=true&limit=1");
       return data.data?.total || 0;
     },
     refetchInterval: 60000, // Refetch every minute
@@ -41,15 +34,7 @@ export function NotificationBell() {
   const { data: alerts = [] } = useQuery({
     queryKey: ["recent-alerts"],
     queryFn: async () => {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/alerts?limit=10`,
-        {
-          method: "GET",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-      const data = await response.json();
+      const data = await apiClient.get("/api/alerts?limit=10");
       return (data.data?.alerts || []) as Alert[];
     },
     enabled: isOpen, // Only fetch when dropdown is open
@@ -57,14 +42,7 @@ export function NotificationBell() {
 
   const markAsRead = async (alertId: string) => {
     try {
-      await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/alerts/${alertId}/read`,
-        {
-          method: "PUT",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      await apiClient.put(`/api/alerts/${alertId}/read`, {});
       // Refetch counts
       // queryClient.invalidateQueries(["notifications-unread-count"]);
     } catch (error) {
@@ -74,14 +52,7 @@ export function NotificationBell() {
 
   const markAllAsRead = async () => {
     try {
-      await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/alerts/mark-all-read`,
-        {
-          method: "PUT",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      await apiClient.put("/api/alerts/mark-all-read", {});
       // Refetch
       // queryClient.invalidateQueries(["notifications-unread-count"]);
       // queryClient.invalidateQueries(["recent-alerts"]);
@@ -165,7 +136,9 @@ export function NotificationBell() {
               {alerts.length === 0 ? (
                 <div className="text-center py-12">
                   <Bell className="w-12 h-12 mx-auto mb-2 text-muted-text" />
-                  <p className="text-sm text-secondary-text">No notifications</p>
+                  <p className="text-sm text-secondary-text">
+                    No notifications
+                  </p>
                 </div>
               ) : (
                 <div className="divide-y divide-muted-text/10">
@@ -197,7 +170,9 @@ export function NotificationBell() {
                                   : "text-secondary-text"
                               )}
                             >
-                              {alert.alert_type.replace(/_/g, " ").toUpperCase()}
+                              {alert.alert_type
+                                .replace(/_/g, " ")
+                                .toUpperCase()}
                             </p>
                             {!alert.is_read && (
                               <span className="w-2 h-2 bg-primary-green rounded-full flex-shrink-0 mt-1"></span>

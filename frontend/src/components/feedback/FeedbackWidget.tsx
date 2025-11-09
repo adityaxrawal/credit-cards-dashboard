@@ -7,6 +7,7 @@
 
 import React, { useState } from "react";
 import { X, MessageCircle, Send } from "lucide-react";
+import { apiClient } from "@/lib/api-client";
 
 interface BrowserInfo {
   userAgent: string;
@@ -52,18 +53,7 @@ export default function FeedbackWidget() {
         },
       };
 
-      const response = await fetch("/api/feedback", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to submit feedback");
-      }
+      await apiClient.post("/api/feedback", payload);
 
       setSubmitted(true);
       setTimeout(() => {

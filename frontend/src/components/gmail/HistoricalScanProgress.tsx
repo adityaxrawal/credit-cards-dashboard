@@ -9,6 +9,7 @@ import {
   Clock,
   Loader,
 } from "lucide-react";
+import { apiClient } from "@/lib/api-client";
 
 interface ScanProgress {
   jobId: string;
@@ -36,11 +37,8 @@ export default function HistoricalScanProgress({ jobId }: { jobId: string }) {
 
   const fetchProgress = async () => {
     try {
-      const response = await fetch(`/api/scanner/progress/${jobId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setProgress(data);
-      }
+      const data = await apiClient.get(`/api/scanner/progress/${jobId}`);
+      setProgress(data as any);
     } catch (error) {
       console.error("Failed to fetch progress:", error);
     } finally {
@@ -65,7 +63,7 @@ export default function HistoricalScanProgress({ jobId }: { jobId: string }) {
 
   const handlePause = async () => {
     try {
-      await fetch(`/api/scanner/${jobId}/pause`, { method: "POST" });
+      await apiClient.post(`/api/scanner/${jobId}/pause`, {});
       fetchProgress();
     } catch (error) {
       console.error("Failed to pause:", error);
@@ -74,7 +72,7 @@ export default function HistoricalScanProgress({ jobId }: { jobId: string }) {
 
   const handleResume = async () => {
     try {
-      await fetch(`/api/scanner/${jobId}/resume`, { method: "POST" });
+      await apiClient.post(`/api/scanner/${jobId}/resume`, {});
       fetchProgress();
     } catch (error) {
       console.error("Failed to resume:", error);

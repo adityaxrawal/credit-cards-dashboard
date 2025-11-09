@@ -232,7 +232,7 @@ export class ReportingService {
         .order("generated_at", { ascending: false });
 
       if (error) {
-        throw new Error(`Failed to fetch reports: ${error.message}`);
+        throw AppError.database(`Failed to fetch reports: ${error.message}`);
       }
 
       return reports || [];
@@ -254,7 +254,7 @@ export class ReportingService {
         .eq("user_id", userId);
 
       if (error) {
-        throw new Error(`Failed to delete report: ${error.message}`);
+        throw AppError.internal(`Failed to delete report: ${error.message}`);
       }
 
       // Delete the actual file from storage if filePath exists
@@ -293,7 +293,7 @@ export class ReportingService {
 
       if (error) {
         if (error.code === "PGRST116") return null; // Not found
-        throw new Error(`Failed to fetch report: ${error.message}`);
+        throw AppError.database(`Failed to fetch report: ${error.message}`);
       }
 
       return report;
@@ -367,7 +367,7 @@ export class ReportingService {
       .single();
 
     if (error) {
-      throw new Error(`Failed to create report record: ${error.message}`);
+      throw AppError.internal(`Failed to create report record: ${error.message}`);
     }
 
     return data;
@@ -388,7 +388,7 @@ export class ReportingService {
       .single();
 
     if (error) {
-      throw new Error(`Failed to update report record: ${error.message}`);
+      throw AppError.database(`Failed to update report record: ${error.message}`);
     }
 
     return data;
@@ -420,7 +420,7 @@ export class ReportingService {
       case "merchant_analysis":
         return await this.generateMerchantAnalysis(config);
       default:
-        throw new Error(`Unsupported report type: ${config.type}`);
+        throw AppError.internal(`Unsupported report type: ${config.type}`);
     }
   }
 
@@ -442,7 +442,7 @@ export class ReportingService {
     }
 
     const { data: transactions, error } = await query;
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
 
     if (!transactions?.length) {
       return {
@@ -536,7 +536,7 @@ export class ReportingService {
       .lte("transaction_date", config.dateRange.endDate)
       .lt("amount", 0); // Only debits for spending analysis
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
 
     if (!transactions?.length) {
       return {
@@ -616,7 +616,7 @@ export class ReportingService {
           .lte("transaction_date", config.dateRange.endDate)
           .lt("amount", 0); // Only debits
 
-        if (error) throw error;
+        if (error) throw AppError.database("Database operation failed", { error });
 
         const totalSpent = transactions?.reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
         const utilizationRate = card.credit_limit ? (totalSpent / card.credit_limit) * 100 : 0;
@@ -662,7 +662,7 @@ export class ReportingService {
       .eq("user_id", config.userId)
       .neq("status", "cancelled");
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
 
     if (!subscriptions?.length) {
       return {
@@ -840,7 +840,7 @@ export class ReportingService {
       .lte("transaction_date", config.dateRange.endDate)
       .order("transaction_date", { ascending: false });
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
     return { transactions: transactions || [] };
   }
 
@@ -860,7 +860,7 @@ export class ReportingService {
         .lte("transaction_date", config.dateRange.endDate)
         .order("transaction_date", { ascending: true });
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
 
       if (!transactions || transactions.length === 0) {
         return {
@@ -954,7 +954,7 @@ export class ReportingService {
         .gte("transaction_date", yearStart)
         .lte("transaction_date", yearEnd);
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
 
       if (!transactions || transactions.length === 0) {
         return {
@@ -1057,7 +1057,7 @@ export class ReportingService {
         .lte("transaction_date", config.dateRange.endDate)
         .order("transaction_date", { ascending: true });
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
 
       if (!transactions || transactions.length === 0) {
         return {
@@ -1168,7 +1168,7 @@ export class ReportingService {
         .lte("transaction_date", config.dateRange.endDate)
         .lt("amount", 0); // Only spending transactions
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
 
       if (!transactions || transactions.length === 0) {
         return {
@@ -1200,7 +1200,7 @@ export class ReportingService {
           transactionCount: 0,
           averageTransaction: 0,
           category: t.category || "Other",
-          transactions: [],
+          transactions: [] as any[],
         };
 
         existing.totalSpent += Math.abs(t.amount);
@@ -1294,7 +1294,7 @@ export class ReportingService {
       return { filePath, fileSize };
     } catch (error) {
       logger.error("Error generating PDF report", error as Error);
-      throw new Error(
+      throw AppError.internal(
         `PDF generation failed: ${error instanceof Error ? error.message : "Unknown error"}`
       );
     }
@@ -1403,7 +1403,7 @@ export class ReportingService {
       return { filePath, fileSize };
     } catch (error) {
       logger.error("Error generating CSV report", error as Error);
-      throw new Error(
+      throw AppError.internal(
         `CSV generation failed: ${error instanceof Error ? error.message : "Unknown error"}`
       );
     }
@@ -1628,7 +1628,7 @@ export class ReportingService {
       return { filePath, fileSize };
     } catch (error) {
       logger.error("Error generating Excel report", error as Error);
-      throw new Error(
+      throw AppError.internal(
         `Excel generation failed: ${error instanceof Error ? error.message : "Unknown error"}`
       );
     }
@@ -1946,7 +1946,7 @@ export class ReportingService {
       .eq("id", id)
       .single();
 
-    if (error) throw new Error(`Failed to fetch report: ${error.message}`);
+    if (error) throw AppError.database(`Failed to fetch report: ${error.message}`);
     return data;
   }
 
@@ -1958,7 +1958,7 @@ export class ReportingService {
       .limit(50)
       .order("generated_at", { ascending: false });
 
-    if (error) throw new Error(`Failed to fetch reports: ${error.message}`);
+    if (error) throw AppError.internal(`Failed to fetch reports: ${error.message}`);
     return data || [];
   }
 
@@ -1973,7 +1973,7 @@ export class ReportingService {
   static async delete(id: string): Promise<void> {
     const { error } = await supabase.from("generated_reports").delete().eq("id", id);
 
-    if (error) throw new Error(`Failed to delete report: ${error.message}`);
+    if (error) throw AppError.database(`Failed to delete report: ${error.message}`);
   }
 }
 

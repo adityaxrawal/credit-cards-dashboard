@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { apiClient } from "@/lib/api-client";
 
 interface HealthStatus {
   status: "healthy" | "degraded" | "unhealthy";
@@ -59,24 +60,13 @@ export default function SystemHealthDashboard() {
 
   async function fetchHealthData() {
     try {
-      const [healthRes, metricsRes] = await Promise.all([
-        fetch("/api/monitoring/health"),
-        fetch("/api/monitoring/metrics", {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-          },
-        }),
+      const [healthData, metricsData] = await Promise.all([
+        apiClient.get("/api/monitoring/health"),
+        apiClient.get("/api/monitoring/metrics"),
       ]);
 
-      if (healthRes.ok) {
-        const healthData = await healthRes.json();
-        setHealth(healthData);
-      }
-
-      if (metricsRes.ok) {
-        const metricsData = await metricsRes.json();
-        setMetrics(metricsData.data);
-      }
+      setHealth(healthData as any);
+      setMetrics((metricsData as any).data);
     } catch (error) {
       console.error("Failed to fetch health data:", error);
     } finally {

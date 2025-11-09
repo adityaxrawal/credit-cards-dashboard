@@ -1,3 +1,5 @@
+import { apiClient } from "@/lib/api-client";
+
 export interface UserSettings {
   monthly_budget?: number;
   alert_threshold?: number;
@@ -24,51 +26,26 @@ export const settingsApi = {
    * Get user settings
    */
   getSettings: async (): Promise<UserSettings> => {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/users/settings`,
-      {
-        method: "GET",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-    const data = await response.json();
-    return data.data || {};
+    const data = await apiClient.get("/users/settings");
+    return (data.data || {}) as UserSettings;
   },
 
   /**
    * Update user settings
    */
   updateSettings: async (
-    data: Partial<UserSettings>
+    settingsData: Partial<UserSettings>
   ): Promise<UserSettings> => {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/users/settings`,
-      {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      }
-    );
-    const result = await response.json();
-    return result.data;
+    const result = await apiClient.put("/users/settings", settingsData);
+    return result.data as UserSettings;
   },
 
   /**
    * Reset settings to defaults
    */
   resetSettings: async (): Promise<UserSettings> => {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/users/settings/reset`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-    const data = await response.json();
-    return data.data;
+    const data = await apiClient.post("/users/settings/reset", {});
+    return data.data as UserSettings;
   },
 
   /**
@@ -78,16 +55,7 @@ export const settingsApi = {
     key: keyof UserSettings,
     value: string | number | boolean | object
   ): Promise<UserSettings> => {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/users/settings`,
-      {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [key]: value }),
-      }
-    );
-    const data = await response.json();
-    return data.data;
+    const data = await apiClient.patch("/users/settings", { [key]: value });
+    return data.data as UserSettings;
   },
 };

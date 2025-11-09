@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import { supabase } from "shared/database/supabase";
 import { logger } from "shared/monitoring/logger";
+import { AppError } from "shared/errors/AppError";
 
 /**
  * Token Manager - Securely manages Gmail OAuth tokens
@@ -22,7 +23,7 @@ export class TokenManager {
     // Encryption key must be 32 bytes for aes-256
     const key = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET;
     if (!key) {
-      throw new Error("ENCRYPTION_KEY or JWT_SECRET must be set");
+      throw AppError.internal("ENCRYPTION_KEY or JWT_SECRET must be set");
     }
     // Create 32-byte key from env variable
     this.ENCRYPTION_KEY = Buffer.from(key.padEnd(32, "0").slice(0, 32));
@@ -54,7 +55,7 @@ export class TokenManager {
   private decrypt(encryptedText: string): string {
     const parts = encryptedText.split(":");
     if (parts.length !== 3) {
-      throw new Error("Invalid encrypted token format");
+      throw AppError.validation("Invalid encrypted token format");
     }
 
     const iv = Buffer.from(parts[0], "hex");
@@ -100,10 +101,10 @@ export class TokenManager {
 
       if (error) {
         logger.error("Failed to store Gmail tokens", error as Error);
-        throw new Error("Failed to store tokens");
+        throw AppError.database("Failed to store tokens", { error });
       }
 
-      logger.info("Gmail tokens stored successfully", {  userId  });
+      logger.info("Gmail tokens stored successfully", { userId });
     } catch (error) {
       logger.error("Error storing tokens", error as Error);
       throw error;
@@ -137,9 +138,7 @@ export class TokenManager {
       return {
         accessToken: user.gmail_access_token || null,
         refreshToken,
-        expiryDate: user.gmail_token_expiry
-          ? new Date(user.gmail_token_expiry).getTime()
-          : 0,
+        expiryDate: user.gmail_token_expiry ? new Date(user.gmail_token_expiry).getTime() : 0,
       };
     } catch (error) {
       logger.error("Error retrieving tokens", error as Error);
@@ -170,7 +169,7 @@ export class TokenManager {
     try {
       const tokens = await this.getTokens(userId);
       if (!tokens) {
-        throw new Error("No tokens found for user");
+        throw AppError.externalService("Gmail", "No tokens found for user");
       }
 
       // Set refresh token
@@ -182,7 +181,7 @@ export class TokenManager {
       const { credentials } = await this.oauth2Client.refreshAccessToken();
 
       if (!credentials.access_token || !credentials.expiry_date) {
-        throw new Error("Failed to refresh token");
+        throw AppError.internal("Failed to refresh token - missing credentials");
       }
 
       // Update database with new access token
@@ -195,7 +194,7 @@ export class TokenManager {
         })
         .eq("id", userId);
 
-      logger.info("Access token refreshed successfully", {  userId  });
+      logger.info("Access token refreshed successfully", { userId });
 
       return {
         accessToken: credentials.access_token,
@@ -215,7 +214,7 @@ export class TokenManager {
   async getValidAccessToken(userId: string): Promise<string> {
     const tokens = await this.getTokens(userId);
     if (!tokens) {
-      throw new Error("No tokens found for user");
+      throw AppError.externalService("Gmail", "No tokens found for user");
     }
 
     // Check if token needs refresh
@@ -243,7 +242,7 @@ export class TokenManager {
         await this.oauth2Client.revokeToken(tokens.refreshToken);
       } catch (error) {
         // Log but don't fail - token might already be invalid
-        logger.warn("Failed to revoke token with Google", {  error, userId  });
+        logger.warn("Failed to revoke token with Google", { error, userId });
       }
 
       // Clear from database
@@ -259,7 +258,7 @@ export class TokenManager {
         })
         .eq("id", userId);
 
-      logger.info("Gmail tokens revoked successfully", {  userId  });
+      logger.info("Gmail tokens revoked successfully", { userId });
     } catch (error) {
       logger.error("Error revoking tokens", error as Error);
       throw error;
@@ -282,5 +281,4 @@ export class TokenManager {
 }
 
 // Export singleton instance
-export const createTokenManager = (oauth2Client: OAuth2Client) =>
-  new TokenManager(oauth2Client);
+export const createTokenManager = (oauth2Client: OAuth2Client) => new TokenManager(oauth2Client);
