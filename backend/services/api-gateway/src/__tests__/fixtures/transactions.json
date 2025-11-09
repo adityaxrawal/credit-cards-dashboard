@@ -1,0 +1,54 @@
+[
+  {
+    "id": "txn-001",
+    "user_id": "user-test-123",
+    "card_id": "card-test-001",
+    "amount": 2500.0,
+    "merchant_name": "Amazon",
+    "category": "shopping",
+    "transaction_date": "2024-01-15T10:30:00Z",
+    "description": "Online purchase",
+    "email_message_id": "msg-001",
+    "is_debit": true,
+    "created_at": "2024-01-15T10:31:00Z"
+  },
+  {
+    "id": "txn-002",
+    "user_id": "user-test-123",
+    "card_id": "card-test-001",
+    "amount": 1234.0,
+    "merchant_name": "Swiggy",
+    "category": "food",
+    "transaction_date": "2024-01-16T14:25:00Z",
+    "description": "Food delivery",
+    "email_message_id": "msg-002",
+    "is_debit": true,
+    "created_at": "2024-01-16T14:26:00Z"
+  },
+  {
+    "id": "txn-003",
+    "user_id": "user-test-123",
+    "card_id": "card-test-002",
+    "amount": 5000.0,
+    "merchant_name": "Shell Petrol",
+    "category": "fuel",
+    "transaction_date": "2024-01-17T08:15:00Z",
+    "description": "Fuel purchase",
+    "email_message_id": "msg-003",
+    "is_debit": true,
+    "created_at": "2024-01-17T08:16:00Z"
+  },
+  {
+    "id": "txn-004",
+    "user_id": "user-test-123",
+    "card_id": "card-test-001",
+    "amount": 10000.0,
+    "merchant_name": "Payment Received",
+    "category": "payment",
+    "transaction_date": "2024-01-18T00:00:00Z",
+    "description": "Credit card payment",
+    "email_message_id": "msg-004",
+    "is_debit": false,
+    "created_at": "2024-01-18T00:01:00Z"
+  }
+]

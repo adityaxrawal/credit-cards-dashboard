@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import redis from "../../cache/redis";
 import { logger } from "../../monitoring/logger";
+import { sessionKey } from "../../cache/key-utils";
 
 /**
  * Token Handler - Centralized JWT token management
@@ -89,7 +90,7 @@ export async function validateToken(
  * @throws TokenError if session not found
  */
 export async function validateSession(userId: string): Promise<any> {
-  const session = await redis.get(`session:${userId}`);
+  const session = await redis.get(sessionKey(userId));
 
   if (!session) {
     throw new TokenError(
@@ -113,6 +114,8 @@ export async function validateSession(userId: string): Promise<any> {
  * @returns JWT access token string
  */
 export function generateAccessToken(user: { id: string; email: string; role?: string }): string {
+  const expiresIn: string = process.env.JWT_ACCESS_TOKEN_EXPIRES_IN || "15m";
+
   return jwt.sign(
     {
       userId: user.id,
@@ -121,7 +124,7 @@ export function generateAccessToken(user: { id: string; email: string; role?: st
       type: "access",
     },
     process.env.JWT_SECRET!,
-    { expiresIn: "15m" }
+    { expiresIn } as jwt.SignOptions
   );
 }
 
@@ -131,6 +134,8 @@ export function generateAccessToken(user: { id: string; email: string; role?: st
  * @returns JWT refresh token string
  */
 export function generateRefreshToken(user: { id: string; email: string }): string {
+  const expiresIn: string = process.env.JWT_REFRESH_TOKEN_EXPIRES_IN || "7d";
+
   return jwt.sign(
     {
       userId: user.id,
@@ -138,7 +143,7 @@ export function generateRefreshToken(user: { id: string; email: string }): strin
       type: "refresh",
     },
     process.env.JWT_REFRESH_SECRET!,
-    { expiresIn: "7d" }
+    { expiresIn } as jwt.SignOptions
   );
 }
 
@@ -147,23 +152,27 @@ export function generateRefreshToken(user: { id: string; email: string }): strin
  * @param userId - User ID
  * @param accessToken - Access token
  * @param refreshToken - Refresh token
- * @param expirySeconds - Session expiry in seconds (default 7 days)
+ * @param expirySeconds - Session expiry in seconds (default from env or 7 days)
  */
 export async function storeSession(
   userId: string,
   accessToken: string,
   refreshToken: string,
-  expirySeconds: number = 7 * 24 * 60 * 60
+  expirySeconds?: number
 ): Promise<void> {
+  const defaultExpiry = process.env.SESSION_EXPIRY_SECONDS
+    ? parseInt(process.env.SESSION_EXPIRY_SECONDS, 10)
+    : 7 * 24 * 60 * 60; // 7 days default
+  const expiry = expirySeconds || defaultExpiry;
   await redis.set(
-    `session:${userId}`,
+    sessionKey(userId),
     JSON.stringify({
       accessToken,
       refreshToken,
       createdAt: new Date().toISOString(),
     }),
     "EX",
-    expirySeconds
+    expiry
   );
 
   logger.info("Session stored", { userId });
@@ -176,16 +185,19 @@ export async function storeSession(
  */
 export async function updateSessionToken(userId: string, accessToken: string): Promise<void> {
   const session = await validateSession(userId);
+  const sessionExpiry = process.env.SESSION_EXPIRY_SECONDS
+    ? parseInt(process.env.SESSION_EXPIRY_SECONDS, 10)
+    : 7 * 24 * 60 * 60;
 
   await redis.set(
-    `session:${userId}`,
+    sessionKey(userId),
     JSON.stringify({
       ...session,
       accessToken,
       lastRefreshed: new Date().toISOString(),
     }),
     "EX",
-    7 * 24 * 60 * 60
+    sessionExpiry
   );
 
   logger.info("Session token updated", { userId });
@@ -196,7 +208,7 @@ export async function updateSessionToken(userId: string, accessToken: string): P
  * @param userId - User ID
  */
 export async function deleteSession(userId: string): Promise<void> {
-  await redis.del(`session:${userId}`);
+  await redis.del(sessionKey(userId));
   logger.info("Session deleted", { userId });
 }
 

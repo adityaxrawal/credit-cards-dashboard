@@ -2,6 +2,11 @@ import { Request, Response, NextFunction } from "express";
 import redis from "shared/cache/redis";
 import { logger } from "shared/monitoring/logger";
 import { AuthRequest } from "./auth";
+import {
+  incrementCacheHit,
+  incrementCacheMiss,
+  recordCacheError,
+} from "shared/cache/cache-metrics";
 
 /**
  * Cache middleware options
@@ -53,6 +58,8 @@ export function cache(options: CacheOptions) {
       return;
     }
 
+    const userId = "userId" in req ? (req as AuthRequest).userId || "anonymous" : "anonymous";
+
     try {
       const cacheKey = generateCacheKey(req, options);
 
@@ -60,11 +67,13 @@ export function cache(options: CacheOptions) {
       const cached = await redis.get(cacheKey);
       if (cached) {
         logger.debug(`Cache hit for key: ${cacheKey}`);
+        incrementCacheHit(options.keyPrefix, userId, req.path || "unknown");
         res.status(200).json(JSON.parse(cached));
         return;
       }
 
       logger.debug(`Cache miss for key: ${cacheKey}`);
+      incrementCacheMiss(options.keyPrefix, userId, req.path || "unknown");
 
       // Store original json method
       const originalJson = res.json.bind(res);
@@ -80,6 +89,12 @@ export function cache(options: CacheOptions) {
             })
             .catch((cacheError) => {
               logger.error("Cache set failed", cacheError as Error);
+              recordCacheError(
+                options.keyPrefix,
+                userId,
+                req.path || "unknown",
+                cacheError as Error
+              );
             });
         }
 
@@ -89,6 +104,7 @@ export function cache(options: CacheOptions) {
       next();
     } catch (error) {
       logger.error("Cache middleware error", error as Error);
+      recordCacheError(options.keyPrefix, userId, req.path || "unknown", error as Error);
       // Continue without caching on error
       next();
     }
