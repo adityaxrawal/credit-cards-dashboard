@@ -4,6 +4,7 @@ import { transactionExtractor } from "./transaction-extractor";
 import { supabase } from "shared/database/supabase";
 import { logger } from "shared/monitoring/logger";
 import rateLimit from "express-rate-limit";
+import { AppError } from "shared/errors/AppError";
 import {
   GmailSyncError,
   GmailSyncResult,
@@ -36,7 +37,7 @@ class GmailService {
       logger.info("Gmail tokens stored successfully", { userId });
     } catch (error) {
       logger.error("Error handling Gmail callback", error as Error);
-      throw new Error("Failed to complete Gmail authorization");
+      throw AppError.internal("Failed to complete Gmail authorization", { originalError: error });
     }
   }
 

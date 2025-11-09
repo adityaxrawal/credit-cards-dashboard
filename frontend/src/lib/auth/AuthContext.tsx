@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { useRouter } from "next/navigation";
 import { startTokenRefresh, stopTokenRefresh } from "./token-refresh";
+import { apiClient } from "@/lib/api-client";
 
 /**
  * User interface matching backend response
@@ -83,26 +84,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   async function checkAuth() {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/me`,
-        {
-          credentials: "include", // Send httpOnly cookie
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.data.user);
-      } else if (response.status === 401) {
+      const data = await apiClient.get("/api/auth/me");
+      setUser(data.data.user);
+    } catch (error: any) {
+      if (error?.response?.status === 401) {
         // Not authenticated
         setUser(null);
       } else {
-        // Other errors
+        console.error("Auth check failed:", error);
         setUser(null);
       }
-    } catch (error) {
-      console.error("Auth check failed:", error);
-      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -114,30 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   async function login(code: string) {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`,
-        {
-          method: "POST",
-          credentials: "include", // Receive httpOnly cookie
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ code }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        const errorMessage =
-          data.message || data.error || "Authentication failed";
-        console.error("Login failed:", {
-          status: response.status,
-          error: data.error,
-          message: data.message,
-        });
-        throw new Error(errorMessage);
-      }
+      const data = await apiClient.post("/api/auth/google", { code });
 
       if (!data.success || !data.data?.user) {
         throw new Error("Invalid response from server");
@@ -162,10 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function logout() {
     try {
       // Call logout endpoint (httpOnly cookie sent automatically)
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/logout`, {
-        method: "POST",
-        credentials: "include", // Send httpOnly cookie
-      });
+      await apiClient.post("/api/auth/logout", {});
     } catch (error) {
       console.error("Logout failed:", error);
     } finally {

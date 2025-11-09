@@ -18,6 +18,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { format, subMonths } from "date-fns";
+import { apiClient } from "@/lib/api-client";
 
 const COLORS = [
   "#3b82f6",
@@ -72,22 +73,13 @@ export default function ReportsPage() {
   const fetchReportData = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("accessToken");
 
       // Fetch spending summary
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/analytics/spending-summary?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const data = await apiClient.get(
+        `/api/analytics/spending-summary?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        setReportData(data.data);
-      }
+      setReportData(data.data);
     } catch (error) {
       console.error("Error fetching report data:", error);
     } finally {
@@ -97,37 +89,23 @@ export default function ReportsPage() {
 
   const handleExport = async () => {
     try {
-      const token = localStorage.getItem("accessToken");
+      const data = await apiClient.post("/api/reports/generate", {
+        type: "spending_summary",
+        format: exportFormat,
+        dateRange,
+        options: {
+          includeTrends: true,
+          includeComparisons: true,
+          includeCharts: true,
+        },
+      });
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/reports/generate`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            type: "spending_summary",
-            format: exportFormat,
-            dateRange,
-            options: {
-              includeTrends: true,
-              includeComparisons: true,
-              includeCharts: true,
-            },
-          }),
-        }
+      // Trigger download
+      const reportId = (data as any).data?.id || data.id;
+      window.open(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/reports/${reportId}/download`,
+        "_blank"
       );
-
-      if (response.ok) {
-        const data = await response.json();
-        // Trigger download
-        window.open(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/reports/${data.data.id}/download`,
-          "_blank"
-        );
-      }
     } catch (error) {
       console.error("Error exporting report:", error);
       alert("Failed to export report");

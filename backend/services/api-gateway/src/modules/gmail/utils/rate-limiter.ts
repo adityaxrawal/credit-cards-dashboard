@@ -1,4 +1,5 @@
 import { logger } from "../utils/logger";
+import { AppError } from "shared/errors/AppError";
 
 /**
  * Rate Limiter with Token Bucket Algorithm
@@ -115,7 +116,7 @@ export class CircuitBreaker {
   async execute<T>(fn: () => Promise<T>): Promise<T> {
     if (this.state === CircuitState.OPEN) {
       if (Date.now() < this.nextAttemptTime) {
-        throw new Error("Circuit breaker is OPEN");
+        throw AppError.internal("Circuit breaker is OPEN - service temporarily unavailable");
       }
       // Try half-open
       this.state = CircuitState.HALF_OPEN;
@@ -172,10 +173,10 @@ export class CircuitBreaker {
     if (this.failureCount >= this.failureThreshold) {
       this.state = CircuitState.OPEN;
       this.nextAttemptTime = Date.now() + this.resetTimeout;
-      logger.warn("Circuit breaker OPEN due to threshold exceeded", { 
-          failureCount: this.failureCount,
-          threshold: this.failureThreshold,
-         });
+      logger.warn("Circuit breaker OPEN due to threshold exceeded", {
+        failureCount: this.failureCount,
+        threshold: this.failureThreshold,
+      });
     }
   }
 
@@ -242,7 +243,11 @@ export async function retryWithBackoff<T>(
         const jitter = Math.random() * 1000;
         const totalDelay = delay + jitter;
 
-        logger.warn("Retrying after failure", {  attempt: attempt + 1, maxRetries, delay: totalDelay  });
+        logger.warn("Retrying after failure", {
+          attempt: attempt + 1,
+          maxRetries,
+          delay: totalDelay,
+        });
 
         await new Promise((resolve) => setTimeout(resolve, totalDelay));
       }

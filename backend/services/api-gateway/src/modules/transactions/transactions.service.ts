@@ -1,5 +1,6 @@
 import { logger } from "shared/monitoring/logger";
 import { supabase } from "shared/database/supabase";
+import { AppError } from "shared/errors/AppError";
 
 /**
  * Transaction interface matching database schema
@@ -118,7 +119,7 @@ export class TransactionService {
       const { data: transactions, error, count } = await query;
 
       if (error) {
-        throw new Error(`Failed to fetch transactions: ${error.message}`);
+        throw AppError.database(`Failed to fetch transactions: ${error.message}`);
       }
 
       return {
@@ -160,9 +161,9 @@ export class TransactionService {
 
       if (error) {
         if (error.code === "PGRST116") {
-          throw new Error("Transaction not found");
+          throw AppError.notFound("Transaction");
         }
-        throw new Error(`Failed to fetch transaction: ${error.message}`);
+        throw AppError.internal(`Failed to fetch transaction: ${error.message}`);
       }
 
       return transaction;
@@ -201,7 +202,7 @@ export class TransactionService {
         .single();
 
       if (cardError || !card) {
-        throw new Error("Card not found or does not belong to user");
+        throw AppError.notFound("Card");
       }
 
       // Calculate billing cycle
@@ -223,7 +224,7 @@ export class TransactionService {
         .single();
 
       if (error) {
-        throw new Error(`Failed to create transaction: ${error.message}`);
+        throw AppError.database(`Failed to create transaction: ${error.message}`);
       }
 
       // Update card outstanding amount
@@ -260,7 +261,7 @@ export class TransactionService {
 
       // Validate update data
       if (updateData.amount !== undefined && updateData.amount <= 0) {
-        throw new Error("Amount must be greater than 0");
+        throw AppError.validation("Amount must be greater than 0");
       }
 
       // Recalculate billing cycle if date changed
@@ -291,7 +292,7 @@ export class TransactionService {
         .single();
 
       if (error) {
-        throw new Error(`Failed to update transaction: ${error.message}`);
+        throw AppError.database(`Failed to update transaction: ${error.message}`);
       }
 
       // Update card outstanding if amount or type changed
@@ -322,7 +323,7 @@ export class TransactionService {
         .eq("user_id", userId);
 
       if (error) {
-        throw new Error(`Failed to delete transaction: ${error.message}`);
+        throw AppError.internal(`Failed to delete transaction: ${error.message}`);
       }
 
       // Update card outstanding
@@ -370,7 +371,7 @@ export class TransactionService {
       const { data: transactions, error } = await query;
 
       if (error) {
-        throw new Error(`Failed to fetch statistics: ${error.message}`);
+        throw AppError.database(`Failed to fetch statistics: ${error.message}`);
       }
 
       // Calculate statistics
@@ -443,7 +444,7 @@ export class TransactionService {
         .limit(limit);
 
       if (error) {
-        throw new Error(`Failed to fetch recent transactions: ${error.message}`);
+        throw AppError.internal(`Failed to fetch recent transactions: ${error.message}`);
       }
 
       return transactions || [];
@@ -458,25 +459,25 @@ export class TransactionService {
    */
   private validateTransactionData(data: any) {
     if (!data.card_id) {
-      throw new Error("Card ID is required");
+      throw AppError.validation("Card ID is required");
     }
 
     if (!data.transaction_date) {
-      throw new Error("Transaction date is required");
+      throw AppError.validation("Transaction date is required");
     }
 
     if (data.amount === undefined || data.amount <= 0) {
-      throw new Error("Amount must be greater than 0");
+      throw AppError.validation("Amount must be greater than 0");
     }
 
     if (!data.transaction_type || !["debit", "credit", "refund"].includes(data.transaction_type)) {
-      throw new Error("Invalid transaction type");
+      throw AppError.validation("Invalid transaction type");
     }
 
     // Validate date format
     const date = new Date(data.transaction_date);
     if (isNaN(date.getTime())) {
-      throw new Error("Invalid transaction date format");
+      throw AppError.validation("Invalid transaction date format");
     }
 
     return true;
@@ -537,8 +538,6 @@ export class TransactionService {
     }
   }
 }
-
-export default TransactionService;
 
 // Export singleton instance
 export const transactionService = new TransactionService();

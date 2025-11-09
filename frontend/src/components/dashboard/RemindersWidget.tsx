@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Bell, Calendar, AlertCircle } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import Link from "next/link";
+import { apiClient } from "@/lib/api-client";
 
 interface Reminder {
   id: string;
@@ -21,15 +22,7 @@ export function RemindersWidget() {
   const { data: reminders, isLoading } = useQuery({
     queryKey: ["upcoming-reminders"],
     queryFn: async () => {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/bills/upcoming?days=14`,
-        {
-          method: "GET",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-      const data = await response.json();
+      const data = await apiClient.get("/api/bills/upcoming?days=14");
       return (data.data?.reminders || []) as Reminder[];
     },
     refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
@@ -114,8 +107,8 @@ export function RemindersWidget() {
                       {reminder.reminder_type === "bill_date"
                         ? "Bill Date"
                         : reminder.reminder_type === "due_date"
-                          ? "Due Date"
-                          : "Payment Due"}
+                        ? "Due Date"
+                        : "Payment Due"}
                       {" - "}
                       {formatDate(reminder.reminder_date, "short")}
                     </p>
@@ -135,8 +128,8 @@ export function RemindersWidget() {
                     {reminder.days_until_due === 0
                       ? "Today"
                       : reminder.days_until_due === 1
-                        ? "Tomorrow"
-                        : `${reminder.days_until_due} days`}
+                      ? "Tomorrow"
+                      : `${reminder.days_until_due} days`}
                   </span>
                   {reminder.amount_due && (
                     <p className="text-xs text-secondary-text mt-1">

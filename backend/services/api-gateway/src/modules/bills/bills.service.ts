@@ -1,6 +1,7 @@
 import { supabase } from "shared/database/supabase";
 import { logger } from "shared/monitoring/logger";
 import { EnhancedAlertService } from "../alerts/alerts.service";
+import { AppError } from "shared/errors/AppError";
 
 /**
  * Bill information interface
@@ -148,9 +149,7 @@ export class BillReminderService {
 
       return { generated, updated, errors };
     } catch (error) {
-      throw new Error(
-        `Failed to generate bills: ${error instanceof Error ? error.message : String(error)}`
-      );
+      throw AppError.internal("An error occurred", { originalError: error });
     }
   }
 
@@ -171,7 +170,7 @@ export class BillReminderService {
         .single();
 
       if (!card) {
-        throw new Error("Card not found");
+        throw AppError.notFound("Card");
       }
 
       const billingCycleDay = card.billing_cycle_day || 1;
@@ -241,7 +240,7 @@ export class BillReminderService {
         .single();
 
       if (error) {
-        throw new Error(`Failed to create bill: ${error.message}`);
+        throw AppError.database(`Failed to create bill: ${error.message}`);
       }
 
       // Generate automatic reminders
@@ -290,7 +289,7 @@ export class BillReminderService {
       const { data: bills, error, count } = await query;
 
       if (error) {
-        throw new Error(`Failed to fetch bills: ${error.message}`);
+        throw AppError.internal(`Failed to fetch bills: ${error.message}`);
       }
 
       const formattedBills = (bills || []).map((bill: any) => ({
@@ -340,7 +339,7 @@ export class BillReminderService {
         .single();
 
       if (!bill) {
-        throw new Error("Bill not found");
+        throw AppError.notFound("Bill");
       }
 
       const paymentDate = paymentDetails.paymentDate || new Date();
@@ -525,7 +524,7 @@ export class BillReminderService {
         .single();
 
       if (error) {
-        throw new Error(`Failed to update settings: ${error.message}`);
+        throw AppError.database(`Failed to update settings: ${error.message}`);
       }
 
       return {
@@ -555,7 +554,7 @@ export class BillReminderService {
         .single();
 
       if (!bill) {
-        throw new Error("Bill not found");
+        throw AppError.notFound("Bill");
       }
 
       const settings = await this.getReminderSettings(bill.user_id);
@@ -666,7 +665,7 @@ export class BillReminderService {
       const { data: payments, error, count } = await query;
 
       if (error) {
-        throw new Error(`Failed to fetch payment history: ${error.message}`);
+        throw AppError.internal(`Failed to fetch payment history: ${error.message}`);
       }
 
       const formattedPayments = (payments || []).map((payment: any) => ({
@@ -718,7 +717,7 @@ export class BillReminderService {
       .select()
       .single();
 
-    if (error) throw new Error(`Failed to create bill reminder: ${error.message}`);
+    if (error) throw AppError.database(`Failed to create bill reminder: ${error.message}`);
     return data;
   }
 
@@ -754,7 +753,7 @@ export class BillReminderService {
 
     const { data, error } = await query.order("due_date", { ascending: true });
 
-    if (error) throw new Error(`Failed to fetch bill reminders: ${error.message}`);
+    if (error) throw AppError.internal(`Failed to fetch bill reminders: ${error.message}`);
     return data || [];
   }
 

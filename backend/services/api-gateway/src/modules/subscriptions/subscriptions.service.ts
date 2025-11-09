@@ -1,5 +1,6 @@
 import { logger } from "shared/monitoring/logger";
 import { supabase } from "shared/database/supabase";
+import { AppError } from "shared/errors/AppError";
 
 /**
  * Detected subscription information
@@ -180,7 +181,7 @@ export class SubscriptionService {
         .order("last_transaction", { ascending: false });
 
       if (error) {
-        throw new Error(`Failed to fetch subscriptions: ${error.message}`);
+        throw AppError.database(`Failed to fetch subscriptions: ${error.message}`);
       }
 
       return subscriptions || [];
@@ -209,7 +210,7 @@ export class SubscriptionService {
         .eq("user_id", userId);
 
       if (error) {
-        throw new Error(`Failed to update subscription: ${error.message}`);
+        throw AppError.internal(`Failed to update subscription: ${error.message}`);
       }
     } catch (error) {
       logger.error("Error updating subscription status", error as Error);
@@ -397,7 +398,7 @@ export class SubscriptionService {
         .single();
 
       if (error) {
-        throw new Error(`Failed to add subscription: ${error.message}`);
+        throw AppError.internal(`Failed to add subscription: ${error.message}`);
       }
 
       return data;
