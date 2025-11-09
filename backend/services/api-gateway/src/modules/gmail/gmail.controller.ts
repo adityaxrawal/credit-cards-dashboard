@@ -9,6 +9,7 @@ import {
   logSyncOperation,
   logSyncError,
 } from "shared/lib/gmail/syncService";
+import { startSpan, captureException } from "shared/monitoring/sentry";
 
 /**
  * Gmail Controller
@@ -98,43 +99,52 @@ export class GmailController {
     const startTime = Date.now();
     logSyncOperation("sync_started", userId, { timestamp: new Date().toISOString() });
 
-    try {
-      const result = await gmailService.syncUserInbox(userId);
-      const processingTime = `${((Date.now() - startTime) / 1000).toFixed(2)}s`;
+    return startSpan("gmail.sync", "gmail", async () => {
+      try {
+        const result = await gmailService.syncUserInbox(userId);
+        const processingTime = `${((Date.now() - startTime) / 1000).toFixed(2)}s`;
 
-      logSyncOperation("sync_completed", userId, {
-        result,
-        processingTime,
-      });
-
-      res.json({
-        success: true,
-        summary: {
-          emailsScanned: result.processed,
-          transactionEmailsFound: result.inserted + result.skipped,
-          newTransactions: result.inserted,
-          duplicatesSkipped: result.skipped,
-          errors: result.errors,
+        logSyncOperation("sync_completed", userId, {
+          result,
           processingTime,
-        },
-        errorDetails: result.errorDetails,
-      });
-    } catch (error) {
-      // Categorize and structure the error
-      const gmailError = error instanceof GmailSyncError ? error : categorizeGmailError(error);
+        });
 
-      logSyncError("sync_failed", userId, gmailError, {
-        processingTime: `${((Date.now() - startTime) / 1000).toFixed(2)}s`,
-      });
+        res.json({
+          success: true,
+          summary: {
+            emailsScanned: result.processed,
+            transactionEmailsFound: result.inserted + result.skipped,
+            newTransactions: result.inserted,
+            duplicatesSkipped: result.skipped,
+            errors: result.errors,
+            processingTime,
+          },
+          errorDetails: result.errorDetails,
+        });
+      } catch (error) {
+        // Categorize and structure the error
+        const gmailError = error instanceof GmailSyncError ? error : categorizeGmailError(error);
 
-      res.status(gmailError.statusCode).json({
-        success: false,
-        error: gmailError.code,
-        message: gmailError.message,
-        retryable: gmailError.retryable,
-        details: gmailError.details,
-      });
-    }
+        // Capture to Sentry
+        captureException(gmailError, {
+          userId,
+          errorCode: gmailError.code,
+          retryable: gmailError.retryable,
+        });
+
+        logSyncError("sync_failed", userId, gmailError, {
+          processingTime: `${((Date.now() - startTime) / 1000).toFixed(2)}s`,
+        });
+
+        res.status(gmailError.statusCode).json({
+          success: false,
+          error: gmailError.code,
+          message: gmailError.message,
+          retryable: gmailError.retryable,
+          details: gmailError.details,
+        });
+      }
+    });
   }
 
   /**

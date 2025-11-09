@@ -1,0 +1,47 @@
+[
+  {
+    "id": "card-test-001",
+    "user_id": "user-test-123",
+    "card_name": "HDFC Regalia",
+    "bank_name": "HDFC Bank",
+    "last_four_digits": "1234",
+    "card_type": "credit",
+    "credit_limit": 50000,
+    "current_outstanding": 12500.5,
+    "billing_cycle_day": 5,
+    "payment_due_day": 20,
+    "is_active": true,
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-15T00:00:00Z"
+  },
+  {
+    "id": "card-test-002",
+    "user_id": "user-test-123",
+    "card_name": "SBI SimplyCLICK",
+    "bank_name": "State Bank of India",
+    "last_four_digits": "5678",
+    "card_type": "credit",
+    "credit_limit": 100000,
+    "current_outstanding": 25000,
+    "billing_cycle_day": 10,
+    "payment_due_day": 25,
+    "is_active": true,
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-15T00:00:00Z"
+  },
+  {
+    "id": "card-test-003",
+    "user_id": "user-test-123",
+    "card_name": "ICICI Platinum",
+    "bank_name": "ICICI Bank",
+    "last_four_digits": "9012",
+    "card_type": "credit",
+    "credit_limit": 75000,
+    "current_outstanding": 0,
+    "billing_cycle_day": 15,
+    "payment_due_day": 30,
+    "is_active": false,
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-15T00:00:00Z"
+  }
+]
