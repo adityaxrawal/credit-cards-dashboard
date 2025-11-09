@@ -42,13 +42,43 @@ export default function DashboardPage() {
     window.addEventListener("refresh-dashboard", handleTransactionsUpdated);
 
     // Auto-refresh dashboard data every 5 minutes
-    const refreshInterval = setInterval(
-      () => {
-        console.log("Auto-refreshing dashboard data (5-minute interval)");
+    // Pause when tab is inactive to save bandwidth
+    let refreshInterval: NodeJS.Timeout | null = null;
+
+    const startAutoRefresh = () => {
+      if (refreshInterval) return; // Already running
+      console.log("Starting auto-refresh (5-minute interval)");
+      refreshInterval = setInterval(() => {
+        console.log("Auto-refreshing dashboard data");
         loadDashboardData();
-      },
-      5 * 60 * 1000
-    ); // 5 minutes
+      }, 5 * 60 * 1000); // 5 minutes
+    };
+
+    const stopAutoRefresh = () => {
+      if (refreshInterval) {
+        console.log("Pausing auto-refresh (tab inactive)");
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+      }
+    };
+
+    // Handle visibility change
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopAutoRefresh();
+      } else {
+        console.log("Tab became active, resuming auto-refresh");
+        loadDashboardData(); // Refresh immediately on tab activation
+        startAutoRefresh();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Start auto-refresh if tab is visible
+    if (!document.hidden) {
+      startAutoRefresh();
+    }
 
     return () => {
       window.removeEventListener(
@@ -59,7 +89,8 @@ export default function DashboardPage() {
         "refresh-dashboard",
         handleTransactionsUpdated
       );
-      clearInterval(refreshInterval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      stopAutoRefresh();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -417,8 +448,8 @@ export default function DashboardPage() {
                             {bill.days_until_due === 0
                               ? "Due today"
                               : bill.days_until_due === 1
-                                ? "Due tomorrow"
-                                : `Due in ${bill.days_until_due} days`}
+                              ? "Due tomorrow"
+                              : `Due in ${bill.days_until_due} days`}
                           </p>
                         </div>
                         <p className="font-semibold text-red-600">

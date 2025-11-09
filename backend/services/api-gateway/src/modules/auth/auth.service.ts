@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { supabase } from "shared/database/supabase";
 import { logger } from "shared/monitoring/logger";
+import { AppError } from "shared/errors/AppError";
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -13,7 +14,6 @@ import {
   deleteSession,
 } from "shared/lib/auth/tokenHandler";
 import { IAuthResponse, IUser, ITokenRefreshResponse } from "./interfaces/auth.interface";
-import { ERROR_MESSAGES } from "../../constants";
 
 /**
  * AuthService handles all authentication-related operations
@@ -63,20 +63,23 @@ export class AuthService {
 
         // Provide user-friendly error messages
         if (error.message?.includes("invalid_grant")) {
-          throw new Error(
+          throw AppError.unauthorized(
             "Authorization code is expired or invalid. Please try logging in again. " +
-              "OAuth codes expire after 10 minutes."
+              "OAuth codes expire after 10 minutes.",
+            { originalError: error.message }
           );
         } else if (error.message?.includes("redirect_uri_mismatch")) {
-          throw new Error(
+          throw AppError.validation(
             `Redirect URI mismatch. The redirect URI used in the authorization request ` +
               `must match exactly with '${process.env.GOOGLE_REDIRECT_URI}'. ` +
-              `Please check your Google Cloud Console OAuth configuration.`
+              `Please check your Google Cloud Console OAuth configuration.`,
+            { redirectUri: process.env.GOOGLE_REDIRECT_URI }
           );
         } else {
-          throw new Error(
-            `Google OAuth failed: ${error.message || "Unknown error"}. ` +
-              `Please try logging in again.`
+          throw AppError.externalService(
+            "Google OAuth",
+            error.message || "Unknown error occurred during authentication",
+            { originalError: error.message }
           );
         }
       }
@@ -86,7 +89,7 @@ export class AuthService {
       const { data: userInfo } = await oauth2.userinfo.get();
 
       if (!userInfo.email) {
-        throw new Error(ERROR_MESSAGES.AUTH.INVALID_CREDENTIALS);
+        throw AppError.validation("Email not provided by Google OAuth");
       }
 
       // Upsert user in database
@@ -108,7 +111,7 @@ export class AuthService {
 
       if (error) {
         logger.error("Database error during OAuth", error);
-        throw new Error(ERROR_MESSAGES.GENERIC.DATABASE_ERROR);
+        throw AppError.database("Failed to create or update user during OAuth", { error });
       }
 
       // Store Gmail refresh token if present
@@ -168,7 +171,7 @@ export class AuthService {
         .single();
 
       if (error || !user || !user.is_active) {
-        throw new Error(ERROR_MESSAGES.AUTH.USER_NOT_FOUND);
+        throw AppError.notFound("User", { userId: decoded.userId, active: user?.is_active });
       }
 
       // Generate new access token using centralized handler
@@ -201,7 +204,7 @@ export class AuthService {
       await deleteSession(userId);
     } catch (error) {
       logger.error("Logout failed", error as Error);
-      throw new Error(ERROR_MESSAGES.GENERIC.INTERNAL_ERROR);
+      throw AppError.internal("Failed to logout user", { userId, error });
     }
   }
 
@@ -217,7 +220,7 @@ export class AuthService {
         .single();
 
       if (error || !user) {
-        throw new Error(ERROR_MESSAGES.AUTH.USER_NOT_FOUND);
+        throw AppError.notFound("User", { userId });
       }
 
       return {
@@ -287,8 +290,8 @@ export class AuthService {
   async verifyToken(token: string, type: "access" | "refresh" = "access"): Promise<jwt.JwtPayload> {
     try {
       return (await validateToken(token, type)) as jwt.JwtPayload;
-    } catch {
-      throw new Error(ERROR_MESSAGES.AUTH.TOKEN_INVALID);
+    } catch (error) {
+      throw AppError.unauthorized("Invalid or expired token", { type, error });
     }
   }
 }

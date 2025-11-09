@@ -1,31 +1,22 @@
 import { useApi, useApiMutation, ApiResponse } from "./useApi";
 import { CreditCard } from "@/types";
+import apiClient from "@/lib/api-client";
 
-// API functions - these would typically be in a separate API service
+// API functions using centralized apiClient
 const api = {
   cards: {
     getAll: async (): Promise<ApiResponse<CreditCard[]>> => {
-      const response = await fetch("/api/cards");
-      const data = await response.json();
-      return data;
+      return await apiClient.get<CreditCard[]>("/api/cards");
     },
 
     getById: async (id: string): Promise<ApiResponse<CreditCard>> => {
-      const response = await fetch(`/api/cards/${id}`);
-      const data = await response.json();
-      return data;
+      return await apiClient.get<CreditCard>(`/api/cards/${id}`);
     },
 
     create: async (
       card: Partial<CreditCard>
     ): Promise<ApiResponse<CreditCard>> => {
-      const response = await fetch("/api/cards", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(card),
-      });
-      const data = await response.json();
-      return data;
+      return await apiClient.post<CreditCard>("/api/cards", card);
     },
 
     update: async ({
@@ -34,21 +25,11 @@ const api = {
     }: { id: string } & Partial<CreditCard>): Promise<
       ApiResponse<CreditCard>
     > => {
-      const response = await fetch(`/api/cards/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(card),
-      });
-      const data = await response.json();
-      return data;
+      return await apiClient.put<CreditCard>(`/api/cards/${id}`, card);
     },
 
     delete: async (id: string): Promise<ApiResponse<void>> => {
-      const response = await fetch(`/api/cards/${id}`, {
-        method: "DELETE",
-      });
-      const data = await response.json();
-      return data;
+      return await apiClient.delete<void>(`/api/cards/${id}`);
     },
   },
 };
