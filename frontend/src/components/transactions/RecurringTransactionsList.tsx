@@ -58,7 +58,7 @@ export default function RecurringTransactionsList() {
       setLoading(true);
       const statusParam = filter !== "all" ? `?status=${filter}` : "";
 
-      const data = await apiClient.get(
+      const data = await apiClient.get<RecurringTransaction[]>(
         `/api/recurring-transactions${statusParam}`
       );
       setTransactions(data.data || []);

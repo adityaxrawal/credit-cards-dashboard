@@ -90,8 +90,8 @@ export default function GmailIntegrationCard() {
   async function fetchGmailStatus() {
     try {
       setLoading(true);
-      const data = await apiClient.get("/api/gmail/status");
-      setStatus(data);
+      const data = await apiClient.get<GmailStatus>("/api/gmail/status");
+      setStatus(data.data ?? null);
     } catch (err) {
       console.error("Failed to fetch Gmail status:", err);
     } finally {
@@ -105,8 +105,14 @@ export default function GmailIntegrationCard() {
       setError(null);
 
       // Get authorization URL from backend
-      const data = await apiClient.get("/api/gmail/auth-url");
-      const authUrl = data.authUrl || (data as any).data?.authUrl;
+      const data = await apiClient.get<{ authUrl: string }>(
+        "/api/gmail/auth-url"
+      );
+      const authUrl = data.data?.authUrl;
+
+      if (!authUrl) {
+        throw new Error("No authorization URL received");
+      }
 
       // Redirect to Google OAuth
       window.location.href = authUrl;
