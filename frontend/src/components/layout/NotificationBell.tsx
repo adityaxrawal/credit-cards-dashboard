@@ -24,7 +24,9 @@ export function NotificationBell() {
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ["notifications-unread-count"],
     queryFn: async () => {
-      const data = await apiClient.get("/api/alerts?unread_only=true&limit=1");
+      const data = await apiClient.get<{ total: number }>(
+        "/api/alerts?unread_only=true&limit=1"
+      );
       return data.data?.total || 0;
     },
     refetchInterval: 60000, // Refetch every minute
@@ -34,7 +36,9 @@ export function NotificationBell() {
   const { data: alerts = [] } = useQuery({
     queryKey: ["recent-alerts"],
     queryFn: async () => {
-      const data = await apiClient.get("/api/alerts?limit=10");
+      const data = await apiClient.get<{ alerts: Alert[] }>(
+        "/api/alerts?limit=10"
+      );
       return (data.data?.alerts || []) as Alert[];
     },
     enabled: isOpen, // Only fetch when dropdown is open

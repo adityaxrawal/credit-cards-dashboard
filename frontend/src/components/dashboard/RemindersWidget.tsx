@@ -22,7 +22,9 @@ export function RemindersWidget() {
   const { data: reminders, isLoading } = useQuery({
     queryKey: ["upcoming-reminders"],
     queryFn: async () => {
-      const data = await apiClient.get("/api/bills/upcoming?days=14");
+      const data = await apiClient.get<{ reminders: Reminder[] }>(
+        "/api/bills/upcoming?days=14"
+      );
       return (data.data?.reminders || []) as Reminder[];
     },
     refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes

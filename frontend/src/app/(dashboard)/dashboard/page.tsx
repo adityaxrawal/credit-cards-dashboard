@@ -124,14 +124,20 @@ export default function DashboardPage() {
     try {
       setAutoSyncChecked(true);
 
-      // Fetch last sync time
-      const data = await apiClient.get(`/api/gmail/last-sync/${user.id}`);
+      // Fetch Gmail connection status and last sync time
+      const response = await apiClient.get<{
+        connected: boolean;
+        historyId: string | null;
+        lastSync: string | null;
+      }>(`/api/gmail/status`);
 
-      if (!data.success || !data.gmailConnected) {
+      if (!response.data?.connected) {
         return;
       }
 
-      const lastSync = data.lastSync ? new Date(data.lastSync) : null;
+      const lastSync = response.data.lastSync
+        ? new Date(response.data.lastSync)
+        : null;
       const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
 
       // Trigger auto-sync if more than 30 minutes or first sync
@@ -143,12 +149,24 @@ export default function DashboardPage() {
 
         // Silent background sync
         apiClient
-          .post("/api/gmail/sync", {})
-          .then(async (result: any) => {
+          .post<{
+            summary: {
+              emailsScanned: number;
+              transactionEmailsFound: number;
+              newTransactions: number;
+              duplicatesSkipped: number;
+              errors?: number;
+              processingTime: string;
+            };
+          }>("/api/gmail/sync", {})
+          .then(async (result) => {
             setIsAutoSyncing(false);
-            if (result.summary?.newTransactions > 0) {
+            if (
+              result.data?.summary?.newTransactions &&
+              result.data.summary.newTransactions > 0
+            ) {
               console.log(
-                `Auto-sync completed: ${result.summary.newTransactions} new transactions`
+                `Auto-sync completed: ${result.data.summary.newTransactions} new transactions`
               );
               // Refresh dashboard data
               window.dispatchEvent(new CustomEvent("transactions-updated"));

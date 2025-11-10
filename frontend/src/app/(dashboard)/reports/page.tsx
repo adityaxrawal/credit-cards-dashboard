@@ -75,11 +75,11 @@ export default function ReportsPage() {
       setLoading(true);
 
       // Fetch spending summary
-      const data = await apiClient.get(
+      const data = await apiClient.get<ReportData>(
         `/api/analytics/spending-summary?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`
       );
 
-      setReportData(data.data);
+      setReportData(data.data ?? null);
     } catch (error) {
       console.error("Error fetching report data:", error);
     } finally {
@@ -89,23 +89,28 @@ export default function ReportsPage() {
 
   const handleExport = async () => {
     try {
-      const data = await apiClient.post("/api/reports/generate", {
-        type: "spending_summary",
-        format: exportFormat,
-        dateRange,
-        options: {
-          includeTrends: true,
-          includeComparisons: true,
-          includeCharts: true,
-        },
-      });
+      const data = await apiClient.post<{ id: string }>(
+        "/api/reports/generate",
+        {
+          type: "spending_summary",
+          format: exportFormat,
+          dateRange,
+          options: {
+            includeTrends: true,
+            includeComparisons: true,
+            includeCharts: true,
+          },
+        }
+      );
 
       // Trigger download
-      const reportId = (data as any).data?.id || data.id;
-      window.open(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/reports/${reportId}/download`,
-        "_blank"
-      );
+      const reportId = data.data?.id;
+      if (reportId) {
+        window.open(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/reports/${reportId}/download`,
+          "_blank"
+        );
+      }
     } catch (error) {
       console.error("Error exporting report:", error);
       alert("Failed to export report");

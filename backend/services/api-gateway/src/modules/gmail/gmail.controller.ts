@@ -165,7 +165,7 @@ export class GmailController {
       }
 
       const status = await gmailService.getStatus(userId);
-      res.json({ success: true, status });
+      res.json({ success: true, data: status });
     } catch (error) {
       logger.error("Gmail status error:", error);
       res.status(500).json({
