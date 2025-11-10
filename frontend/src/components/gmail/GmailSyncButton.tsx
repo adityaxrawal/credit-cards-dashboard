@@ -28,15 +28,20 @@ interface SyncResult {
 
 // Error code constants from backend
 const GMAIL_ERROR_MESSAGES: Record<string, string> = {
-  GMAIL_NOT_CONNECTED: "Gmail is not connected. Please connect your account.",
-  GMAIL_TOKEN_EXPIRED: "Gmail access expired. Please reconnect your account.",
-  GMAIL_TOKEN_INVALID: "Invalid Gmail credentials. Please reconnect.",
-  GMAIL_PERMISSION_DENIED: "Insufficient permissions. Please grant access.",
-  GMAIL_RATE_LIMIT: "Rate limit exceeded. Please try again in a few minutes.",
-  GMAIL_QUOTA_EXCEEDED: "Daily quota exceeded. Please try again tomorrow.",
-  GMAIL_API_ERROR: "Gmail service error. Please try again.",
-  NETWORK_ERROR: "Network error. Please check your connection.",
-  DATABASE_ERROR: "Database error. Please try again.",
+  GMAIL_NOT_CONNECTED:
+    "Gmail not connected. Click to authorize Gmail access and sync your transactions.",
+  GMAIL_TOKEN_EXPIRED: "Gmail access expired. Click to reconnect your account.",
+  GMAIL_TOKEN_INVALID:
+    "Gmail credentials invalid. Click to reconnect your account.",
+  GMAIL_PERMISSION_DENIED:
+    "Insufficient Gmail permissions. Please grant full read access when prompted.",
+  GMAIL_RATE_LIMIT:
+    "Gmail rate limit exceeded. Please try again in a few minutes.",
+  GMAIL_QUOTA_EXCEEDED:
+    "Gmail daily quota exceeded. Please try again tomorrow.",
+  GMAIL_API_ERROR: "Gmail service error. Please try again later.",
+  NETWORK_ERROR: "Network error. Please check your internet connection.",
+  DATABASE_ERROR: "Database error occurred. Please try again.",
   UNKNOWN_ERROR: "An unexpected error occurred. Please try again.",
 };
 
@@ -97,13 +102,18 @@ export function GmailSyncButton({
       } else {
         showToast("error", data.error || "Sync failed");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Sync error:", error);
 
       // Extract error code and message from structured error response
-      const errorCode = error?.data?.error || error?.error;
-      const errorMessage = error?.data?.message || error?.message;
-      const retryable = error?.data?.retryable || false;
+      const apiError = error as {
+        data?: { error?: string; message?: string; retryable?: boolean };
+        error?: string;
+        message?: string;
+      };
+      const errorCode = apiError?.data?.error || apiError?.error;
+      const errorMessage = apiError?.data?.message || apiError?.message;
+      const retryable = apiError?.data?.retryable || false;
 
       // Map error code to user-friendly message
       const displayMessage =
@@ -116,20 +126,56 @@ export function GmailSyncButton({
 
       showToast("error", displayMessage + hint);
 
-      // If token expired, suggest reconnecting
+      // If Gmail not connected or token issues, initiate Gmail connection
       if (
+        errorCode === "GMAIL_NOT_CONNECTED" ||
         errorCode === "GMAIL_TOKEN_EXPIRED" ||
         errorCode === "GMAIL_TOKEN_INVALID"
       ) {
-        setTimeout(() => {
-          showToast(
-            "info",
-            "Redirecting to Gmail connection...",
-            undefined,
-            2000
-          );
-          // Could redirect to Gmail auth here
-          // window.location.href = "/settings?tab=integrations";
+        setTimeout(async () => {
+          try {
+            showToast(
+              "info",
+              "Connecting Gmail...",
+              "Please authorize Gmail access",
+              2000
+            );
+
+            // Get Gmail OAuth URL using direct fetch (backend doesn't follow standard response format)
+            const response = await fetch(
+              `${
+                process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+              }/api/gmail/auth`,
+              {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(
+                `HTTP ${response.status}: ${response.statusText}`
+              );
+            }
+
+            const authData = await response.json();
+
+            if (authData.success && authData.authUrl) {
+              // Redirect to Google OAuth
+              window.location.href = authData.authUrl;
+            } else {
+              showToast("error", "Failed to get Gmail authorization URL");
+            }
+          } catch (authError) {
+            console.error("Failed to initiate Gmail auth:", authError);
+            showToast(
+              "error",
+              "Failed to connect Gmail. Please try from Settings."
+            );
+          }
         }, 2000);
       }
     } finally {

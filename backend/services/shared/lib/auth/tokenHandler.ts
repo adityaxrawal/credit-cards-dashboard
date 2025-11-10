@@ -242,6 +242,15 @@ export function extractToken(
   headers: Record<string, string | string[] | undefined>,
   cookies: Record<string, string>
 ): string | undefined {
+  // Debug logging for token extraction
+  if (process.env.NODE_ENV === "development") {
+    logger.debug("Token extraction attempt", {
+      cookiesReceived: Object.keys(cookies || {}),
+      hasAccessToken: !!cookies?.accessToken,
+      hasAuthHeader: !!(headers.authorization || headers.Authorization),
+    });
+  }
+
   // Try cookie first (httpOnly)
   if (cookies?.accessToken) {
     return cookies.accessToken;
@@ -252,6 +261,11 @@ export function extractToken(
   if (typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
     return authHeader.replace("Bearer ", "");
   }
+
+  logger.warn("No authentication token found in request", {
+    cookiesAvailable: Object.keys(cookies || {}),
+    hasAuthHeader: !!authHeader,
+  });
 
   return undefined;
 }

@@ -19,11 +19,18 @@ export class AuthController {
 
       if (!code) {
         res.status(HTTP_STATUS.BAD_REQUEST).json({
+          success: false,
           error: ERROR_MESSAGES.VALIDATION.REQUIRED_FIELD,
           message: "Authorization code is required",
         });
         return;
       }
+
+      // Log OAuth attempt for debugging
+      logger.info("Google OAuth attempt", {
+        codeLength: code.length,
+        codePrefix: code.substring(0, 10) + "...",
+      });
 
       const result = await authService.googleOAuth(code);
 
@@ -33,6 +40,7 @@ export class AuthController {
         httpOnly: true,
         secure: isProduction, // HTTPS only in production
         sameSite: "lax" as const,
+        domain: isProduction ? undefined : "localhost", // Ensure cookies work across ports in dev
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         path: "/",
       };
@@ -51,6 +59,7 @@ export class AuthController {
         httpOnly: true,
         secure: isProduction,
         sameSite: "lax" as const,
+        domain: isProduction ? undefined : "localhost", // Ensure cookies work across ports in dev
         maxAge: 7 * 24 * 60 * 60 * 1000,
         path: "/",
       });
@@ -98,6 +107,7 @@ export class AuthController {
         httpOnly: true,
         secure: isProduction,
         sameSite: "lax" as const,
+        domain: isProduction ? undefined : "localhost", // Ensure cookies work across ports in dev
         maxAge: 15 * 60 * 1000, // 15 minutes
         path: "/",
       });
