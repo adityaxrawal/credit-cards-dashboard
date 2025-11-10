@@ -40,6 +40,8 @@ export async function apiRequest(
 
 class ApiClient {
   private client: AxiosInstance;
+  private isAuthCheckInProgress = false;
+  private isRedirecting = false;
 
   constructor() {
     this.client = axios.create({
@@ -58,20 +60,35 @@ class ApiClient {
     // Request interceptor
     this.client.interceptors.request.use(
       (config) => {
-        // Add auth token if available
+        // Add auth token if available (backend uses 'accessToken' cookie)
         if (typeof window !== "undefined") {
           const token = document.cookie
             .split("; ")
-            .find((row) => row.startsWith("auth_token="))
+            .find((row) => row.startsWith("accessToken="))
             ?.split("=")[1];
 
           if (token && config.headers) {
             config.headers.Authorization = `Bearer ${token}`;
           }
+
+          // Mark auth check requests to prevent loops
+          if (config.url?.includes("/api/auth/me")) {
+            if (this.isAuthCheckInProgress) {
+              console.log(
+                "🔄 Auth check already in progress, skipping duplicate request"
+              );
+              return Promise.reject(
+                new axios.Cancel("Auth check already in progress")
+              );
+            }
+            this.isAuthCheckInProgress = true;
+            console.log("🔐 Starting auth check request");
+          }
         }
         return config;
       },
       (error) => {
+        this.isAuthCheckInProgress = false;
         return Promise.reject(error);
       }
     );
@@ -79,19 +96,50 @@ class ApiClient {
     // Response interceptor
     this.client.interceptors.response.use(
       (response: AxiosResponse<ApiResponse<unknown>>) => {
+        // Clear auth check flag on success
+        if (response.config.url?.includes("/api/auth/me")) {
+          this.isAuthCheckInProgress = false;
+          console.log("✅ Auth check completed successfully");
+        }
         return response;
       },
       async (error) => {
+        // Clear auth check flag on error
+        if (error.config?.url?.includes("/api/auth/me")) {
+          this.isAuthCheckInProgress = false;
+        }
+
+        // Handle cancelled requests (duplicate auth checks)
+        if (axios.isCancel(error)) {
+          return Promise.reject(error);
+        }
+
         // Dynamically import toast to avoid SSR issues
         const { toastService } = await import("@/lib/utils/toast");
 
         if (error.response?.status === 401) {
-          // Redirect to login on unauthorized
-          if (typeof window !== "undefined") {
-            toastService.error("Session expired. Please login again.");
-            setTimeout(() => {
-              window.location.href = "/login";
-            }, 1000);
+          // Only redirect to login if not already redirecting and not on login page
+          if (typeof window !== "undefined" && !this.isRedirecting) {
+            const isOnLoginPage =
+              window.location.pathname === "/login" ||
+              window.location.pathname === "/callback";
+
+            if (!isOnLoginPage) {
+              this.isRedirecting = true;
+              toastService.error("Session expired. Please login again.");
+
+              // Wait a moment before redirecting
+              setTimeout(() => {
+                window.location.href = "/login";
+                // Reset flag after redirect starts
+                setTimeout(() => {
+                  this.isRedirecting = false;
+                }, 2000);
+              }, 1000);
+            } else {
+              // On login page, don't show toast or redirect
+              console.log("❌ Auth check failed on login page (expected)");
+            }
           }
         } else if (
           error.code === "ECONNABORTED" ||

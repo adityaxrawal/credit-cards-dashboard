@@ -22,7 +22,6 @@ function CallbackPageContent() {
       try {
         const code = searchParams.get("code");
         const error = searchParams.get("error");
-        const returnUrl = searchParams.get("state") || "/";
 
         if (error) {
           setStatus("error");
@@ -36,17 +35,19 @@ function CallbackPageContent() {
           return;
         }
 
+        console.log("🔐 Processing OAuth callback with code");
+
         // Exchange code for tokens via backend
+        // This will also set the user in AuthContext and redirect to /dashboard
         await login(code);
 
         setStatus("success");
 
-        // Redirect after a brief success message
-        setTimeout(() => {
-          router.push(decodeURIComponent(returnUrl));
-        }, 1500);
+        // The login function already redirects to /dashboard
+        // But we show success message briefly first
+        console.log("✅ OAuth callback successful");
       } catch (err) {
-        console.error("OAuth callback error:", err);
+        console.error("❌ OAuth callback error:", err);
         setStatus("error");
         setError(err instanceof Error ? err.message : "Authentication failed");
       }
