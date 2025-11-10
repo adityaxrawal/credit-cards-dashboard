@@ -4,46 +4,47 @@
  */
 
 import { logger } from "../monitoring/logger";
-import { AppError } from "../errors/AppError";
+import { AppError, ErrorCode } from "../errors/AppError";
 
 /**
  * Handle database errors and convert to AppError
  */
 export function handleDatabaseError(error: unknown, operation: string): never {
-  logger.error(`Database error during ${operation}:`, error);
+  const errorObj = error instanceof Error ? error : new Error(String(error));
+  logger.error(`Database error during ${operation}:`, errorObj);
 
   if (error instanceof Error) {
     // PostgreSQL error codes
-    const pgError = error as any;
+    const pgError = error as Error & { code?: string };
 
     // Unique constraint violation
     if (pgError.code === "23505") {
-      throw new AppError("Resource already exists", 409);
+      throw new AppError(ErrorCode.E_DUPLICATE, "Resource already exists");
     }
 
     // Foreign key violation
     if (pgError.code === "23503") {
-      throw new AppError("Referenced resource not found", 404);
+      throw new AppError(ErrorCode.E_RESOURCE_NOT_FOUND, "Referenced resource not found");
     }
 
     // Not null violation
     if (pgError.code === "23502") {
-      throw new AppError("Required field is missing", 400);
+      throw new AppError(ErrorCode.E_MISSING_FIELD, "Required field is missing");
     }
 
     // Check violation
     if (pgError.code === "23514") {
-      throw new AppError("Invalid data: constraint violation", 400);
+      throw new AppError(ErrorCode.E_VALIDATION, "Invalid data: constraint violation");
     }
 
     // Connection errors
     if (pgError.code === "ECONNREFUSED" || pgError.code === "ETIMEDOUT") {
-      throw new AppError("Database connection failed", 503);
+      throw new AppError(ErrorCode.E_DB_CONNECTION, "Database connection failed");
     }
   }
 
   // Generic database error
-  throw new AppError(`Database operation failed: ${operation}`, 500);
+  throw new AppError(ErrorCode.E_DB_QUERY, `Database operation failed: ${operation}`);
 }
 
 /**
@@ -129,7 +130,10 @@ export function buildDateRangeFilter(
 
   // Validate range
   if (start > end) {
-    throw new AppError("Invalid date range: start date must be before end date", 400);
+    throw new AppError(
+      ErrorCode.E_INVALID_INPUT,
+      "Invalid date range: start date must be before end date"
+    );
   }
 
   return { startDate: start, endDate: end };
@@ -153,12 +157,12 @@ export function buildSortParams(
 
   // Validate sort field if allowed fields provided
   if (allowedFields.length > 0 && !allowedFields.includes(normalizedSortBy)) {
-    throw new AppError(`Invalid sort field: ${sortBy}`, 400);
+    throw new AppError(ErrorCode.E_INVALID_INPUT, `Invalid sort field: ${sortBy}`);
   }
 
   // Validate sort order
   if (!["asc", "desc"].includes(normalizedSortOrder)) {
-    throw new AppError(`Invalid sort order: ${sortOrder}`, 400);
+    throw new AppError(ErrorCode.E_INVALID_INPUT, `Invalid sort order: ${sortOrder}`);
   }
 
   return {
@@ -197,12 +201,12 @@ export function buildLikePattern(
 /**
  * Check if result is empty
  */
-export function isEmptyResult(result: any): boolean {
+export function isEmptyResult(result: unknown): boolean {
   return (
     result === null ||
     result === undefined ||
     (Array.isArray(result) && result.length === 0) ||
-    (typeof result === "object" && Object.keys(result).length === 0)
+    (typeof result === "object" && Object.keys(result as object).length === 0)
   );
 }
 
@@ -210,7 +214,7 @@ export function isEmptyResult(result: any): boolean {
  * Validate required fields in result
  */
 export function validateRequiredFields(
-  data: any,
+  data: Record<string, unknown>,
   requiredFields: string[],
   resourceName = "Resource"
 ): void {
@@ -218,8 +222,8 @@ export function validateRequiredFields(
 
   if (missingFields.length > 0) {
     throw new AppError(
-      `${resourceName} is missing required fields: ${missingFields.join(", ")}`,
-      400
+      ErrorCode.E_MISSING_FIELD,
+      `${resourceName} is missing required fields: ${missingFields.join(", ")}`
     );
   }
 }
@@ -227,7 +231,10 @@ export function validateRequiredFields(
 /**
  * Build WHERE IN clause safely
  */
-export function buildInClause(field: string, values: any[]): { clause: string; values: any[] } {
+export function buildInClause(
+  field: string,
+  values: unknown[]
+): { clause: string; values: unknown[] } {
   if (!values || values.length === 0) {
     return { clause: "1=1", values: [] };
   }
