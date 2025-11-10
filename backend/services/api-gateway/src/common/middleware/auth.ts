@@ -1,7 +1,13 @@
 import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
 import { AppError } from "./errorHandler";
-import redis from "shared/cache/redis";
+import {
+  validateToken,
+  validateSession,
+  extractToken,
+  TokenError,
+  TokenErrorCode,
+} from "shared/lib/auth/tokenHandler";
+import { logger } from "shared/monitoring/logger";
 
 /**
  * Extended Express Request with authentication context
@@ -15,41 +21,66 @@ export interface AuthRequest extends Request {
 
 /**
  * Middleware to verify JWT token and attach user info to request
+ * Checks for token in cookies first, then Authorization header
+ * Uses centralized token handler for consistent validation
  */
-export const authenticate = async (req: AuthRequest, _res: Response, next: NextFunction) => {
+export const authenticate = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   try {
-    const token = req.headers.authorization?.replace("Bearer ", "");
+    // Extract token from cookies or headers
+    const token = extractToken(req.headers, req.cookies);
 
-    if (!token) {
-      throw new AppError("No authentication token provided", 401);
-    }
+    // Validate token
+    const decoded = await validateToken(token, "access");
 
-    // Verify JWT token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
-      userId: string;
-      email: string;
-      role?: string;
-    };
-
-    // Check if session exists in Redis
-    const session = await redis.get(`session:${decoded.userId}`);
-    if (!session) {
-      throw new AppError("Session expired. Please login again", 401);
-    }
+    // Validate session exists in Redis
+    await validateSession(decoded.userId);
 
     // Attach user info to request
     req.userId = decoded.userId;
     req.email = decoded.email;
     req.userRole = decoded.role || "user";
 
+    logger.debug("User authenticated", { userId: decoded.userId, email: decoded.email });
+
     next();
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      return next(new AppError("Invalid authentication token", 401));
+    if (error instanceof TokenError) {
+      // Map token errors to appropriate HTTP responses with error codes
+      const errorResponse = {
+        success: false,
+        error: error.code,
+        message: error.message,
+      };
+
+      // For expired tokens, include a hint that refresh should be attempted
+      if (error.code === TokenErrorCode.TOKEN_EXPIRED) {
+        logger.warn("Token expired for request", {
+          path: req.path,
+          method: req.method,
+        });
+        res.status(401).json({
+          ...errorResponse,
+          hint: "TOKEN_REFRESH_REQUIRED",
+        });
+        return;
+      }
+
+      logger.warn("Authentication failed", {
+        errorCode: error.code,
+        path: req.path,
+        method: req.method,
+      });
+
+      res.status(error.statusCode).json(errorResponse);
+      return;
     }
-    if (error instanceof jwt.TokenExpiredError) {
-      return next(new AppError("Authentication token expired", 401));
-    }
-    next(error);
+
+    // Unknown error
+    logger.error("Authentication middleware error", error);
+    next(new AppError("Authentication failed", 401));
   }
 };

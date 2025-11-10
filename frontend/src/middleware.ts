@@ -32,13 +32,13 @@ function isPublicPath(pathname: string): boolean {
  * Verify JWT token and get user context from backend
  */
 async function verifyToken(
-  token: string,
+  accessToken: string,
   apiUrl: string
 ): Promise<UserSecurityContext | null> {
   try {
     const response = await fetch(`${apiUrl}/api/auth/me`, {
       headers: {
-        Cookie: `token=${token}`,
+        Cookie: `accessToken=${accessToken}`,
       },
       cache: "no-store",
     });
@@ -115,11 +115,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // Get JWT token from httpOnly cookie
-  const token = request.cookies.get("token")?.value;
+  const accessToken = request.cookies.get("accessToken")?.value;
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
   // No token - redirect to login
-  if (!token) {
+  if (!accessToken) {
     const loginUrl = new URL("/login", request.url);
     if (pathname !== "/login") {
       loginUrl.searchParams.set("next", pathname);
@@ -128,12 +128,12 @@ export async function middleware(request: NextRequest) {
   }
 
   // Verify token and get user context
-  const userContext = await verifyToken(token, apiUrl);
+  const userContext = await verifyToken(accessToken, apiUrl);
 
   // Invalid token - clear cookie and redirect to login
   if (!userContext) {
     const response = NextResponse.redirect(new URL("/login", request.url));
-    response.cookies.delete("token");
+    response.cookies.delete("accessToken");
     return response;
   }
 

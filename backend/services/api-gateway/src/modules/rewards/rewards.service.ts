@@ -1,4 +1,6 @@
 import { supabase } from "shared/database/supabase";
+import { logger } from "shared/monitoring/logger";
+import { AppError } from "shared/errors/AppError";
 
 // Helper function to subtract months from a date
 function subMonths(date: Date, months: number): Date {
@@ -140,10 +142,7 @@ export class RewardsService {
   /**
    * Get comprehensive rewards analytics for a user
    */
-  static async getRewardsAnalytics(
-    userId: string,
-    months: number = 12
-  ): Promise<RewardsAnalytics> {
+  static async getRewardsAnalytics(userId: string, months: number = 12): Promise<RewardsAnalytics> {
     try {
       const startDate = subMonths(new Date(), months);
 
@@ -173,13 +172,9 @@ export class RewardsService {
 
       if (cardsError) throw cardsError;
 
-      return this.calculateRewardsAnalytics(
-        earnedRewards || [],
-        redemptions || [],
-        cards || []
-      );
+      return this.calculateRewardsAnalytics(earnedRewards || [], redemptions || [], cards || []);
     } catch (error) {
-      console.error("Error getting rewards analytics:", error);
+      logger.error("Error getting rewards analytics", error as Error);
       throw error;
     }
   }
@@ -187,9 +182,7 @@ export class RewardsService {
   /**
    * Get personalized reward optimization recommendations
    */
-  static async getOptimizationRecommendations(
-    userId: string
-  ): Promise<RewardOptimizationTip[]> {
+  static async getOptimizationRecommendations(userId: string): Promise<RewardOptimizationTip[]> {
     try {
       // Get user's spending patterns
       const spendingPatterns = await this.analyzeSpendingPatterns(userId);
@@ -203,31 +196,21 @@ export class RewardsService {
       const recommendations: RewardOptimizationTip[] = [];
 
       // Analyze card portfolio gaps
-      recommendations.push(
-        ...this.analyzeCardPortfolioGaps(spendingPatterns, cardPortfolio)
-      );
+      recommendations.push(...this.analyzeCardPortfolioGaps(spendingPatterns, cardPortfolio));
 
       // Analyze category optimization opportunities
-      recommendations.push(
-        ...this.analyzeCategoryOptimization(spendingPatterns, cardPortfolio)
-      );
+      recommendations.push(...this.analyzeCategoryOptimization(spendingPatterns, cardPortfolio));
 
       // Analyze redemption strategies
-      recommendations.push(
-        ...this.analyzeRedemptionStrategies(userId, cardPortfolio)
-      );
+      recommendations.push(...this.analyzeRedemptionStrategies(userId, cardPortfolio));
 
       // Analyze timing optimization
-      recommendations.push(
-        ...this.analyzeTimingOptimization(userId, cardPortfolio)
-      );
+      recommendations.push(...this.analyzeTimingOptimization(userId, cardPortfolio));
 
       // Sort by potential benefit and return top recommendations
-      return recommendations
-        .sort((a, b) => b.potentialBenefit - a.potentialBenefit)
-        .slice(0, 10);
+      return recommendations.sort((a, b) => b.potentialBenefit - a.potentialBenefit).slice(0, 10);
     } catch (error) {
-      console.error("Error getting optimization recommendations:", error);
+      logger.error("Error getting optimization recommendations", error as Error);
       throw error;
     }
   }
@@ -257,20 +240,15 @@ export class RewardsService {
         .eq("user_id", userId)
         .eq("status", "active");
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
 
       if (!cards?.length) {
-        throw new Error("No active cards found");
+        throw AppError.notFound("Active cards");
       }
 
       // Calculate reward for each card
       const cardRewards = cards.map((card) => {
-        const reward = this.calculateRewardForTransaction(
-          card,
-          amount,
-          category,
-          merchantName
-        );
+        const reward = this.calculateRewardForTransaction(card, amount, category, merchantName);
         return {
           card,
           expectedReward: reward.amount,
@@ -288,7 +266,7 @@ export class RewardsService {
         alternatives: cardRewards.slice(1, 4), // Top 3 alternatives
       };
     } catch (error) {
-      console.error("Error getting optimal card:", error);
+      logger.error("Error getting optimal card", error as Error);
       throw error;
     }
   }
@@ -315,11 +293,7 @@ export class RewardsService {
       if (error || !card) return null;
 
       // Calculate reward
-      const reward = this.calculateRewardForTransaction(
-        card,
-        Math.abs(amount),
-        category
-      );
+      const reward = this.calculateRewardForTransaction(card, Math.abs(amount), category);
 
       if (reward.amount <= 0) return null;
 
@@ -345,7 +319,7 @@ export class RewardsService {
 
       return data;
     } catch (error) {
-      console.error("Error recording reward earning:", error);
+      logger.error("Error recording reward earning", error as Error);
       throw error;
     }
   }
@@ -370,7 +344,7 @@ export class RewardsService {
         .select("*, reward_programs(*)")
         .eq("user_id", userId);
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
 
       // Get current reward balances
       const balances = await this.getRewardBalances(userId);
@@ -394,8 +368,7 @@ export class RewardsService {
 
           // Add recommendations for each viable option
           rewardProgram.redemptionOptions.forEach((option: any) => {
-            const canRedeem =
-              cardBalance.amount >= (option.minimumRedemption || 0);
+            const canRedeem = cardBalance.amount >= (option.minimumRedemption || 0);
             recommendations.push({
               cardId: card.id,
               cardName: card.card_name,
@@ -414,7 +387,7 @@ export class RewardsService {
 
       return { available, recommendations };
     } catch (error) {
-      console.error("Error getting redemption options:", error);
+      logger.error("Error getting redemption options", error as Error);
       throw error;
     }
   }
@@ -435,7 +408,7 @@ export class RewardsService {
       const cardBalance = balances[cardId];
 
       if (!cardBalance || cardBalance.amount < amount) {
-        throw new Error("Insufficient reward balance");
+        throw AppError.validation("Insufficient reward balance");
       }
 
       // Get card details for redemption value calculation
@@ -446,16 +419,14 @@ export class RewardsService {
         .eq("user_id", userId)
         .single();
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
 
       // Calculate redemption value
       const rewardProgram = card.reward_programs[0];
       const redemptionOption = rewardProgram?.redemptionOptions?.find(
         (opt: any) => opt.type === redemptionMethod
       );
-      const redemptionValue = redemptionOption
-        ? redemptionOption.value * amount
-        : amount;
+      const redemptionValue = redemptionOption ? redemptionOption.value * amount : amount;
 
       // Create redemption record
       const redemption: Omit<RewardRedemption, "id"> = {
@@ -488,7 +459,7 @@ export class RewardsService {
 
       return data;
     } catch (error) {
-      console.error("Error processing redemption:", error);
+      logger.error("Error processing redemption", error as Error);
       throw error;
     }
   }
@@ -506,10 +477,9 @@ export class RewardsService {
         .eq("user_id", userId)
         .eq("status", "active");
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
 
-      const balances: { [cardId: string]: { amount: number; type: string } } =
-        {};
+      const balances: { [cardId: string]: { amount: number; type: string } } = {};
 
       rewards?.forEach((reward) => {
         if (!balances[reward.card_id]) {
@@ -520,7 +490,7 @@ export class RewardsService {
 
       return balances;
     } catch (error) {
-      console.error("Error getting reward balances:", error);
+      logger.error("Error getting reward balances", error as Error);
       return {};
     }
   }
@@ -548,10 +518,7 @@ export class RewardsService {
     }
 
     // Check for bonus categories
-    if (
-      rewardProgram.bonusCategories &&
-      rewardProgram.bonusCategories.includes(category)
-    ) {
+    if (rewardProgram.bonusCategories && rewardProgram.bonusCategories.includes(category)) {
       rewardRate = Math.max(rewardRate, rewardProgram.baseRate * 2); // 2x bonus example
     }
 
@@ -605,8 +572,7 @@ export class RewardsService {
 
       patterns[category].total += amount;
       patterns[category].count += 1;
-      patterns[category].avgAmount =
-        patterns[category].total / patterns[category].count;
+      patterns[category].avgAmount = patterns[category].total / patterns[category].count;
     });
 
     return patterns;
@@ -659,35 +625,32 @@ export class RewardsService {
     const tips: RewardOptimizationTip[] = [];
 
     // Check for high-spend categories without optimal cards
-    Object.entries(spendingPatterns).forEach(
-      ([category, data]: [string, any]) => {
-        if (data.total > 10000) {
-          // High spend category (>10k in 6 months)
-          const hasOptimalCard = cardPortfolio.some((card) => {
-            const program = card.reward_programs?.[0];
-            return (
-              program?.bonusCategories?.includes(category) ||
-              (program?.categoryRates &&
-                program.categoryRates[category] > program.baseRate)
-            );
-          });
+    Object.entries(spendingPatterns).forEach(([category, data]: [string, any]) => {
+      if (data.total > 10000) {
+        // High spend category (>10k in 6 months)
+        const hasOptimalCard = cardPortfolio.some((card) => {
+          const program = card.reward_programs?.[0];
+          return (
+            program?.bonusCategories?.includes(category) ||
+            (program?.categoryRates && program.categoryRates[category] > program.baseRate)
+          );
+        });
 
-          if (!hasOptimalCard) {
-            tips.push({
-              id: `gap_${category}`,
-              type: "card_recommendation",
-              title: `Missing optimal card for ${category}`,
-              description: `You spend ₹${data.total.toLocaleString()} on ${category} but don't have a card optimized for this category.`,
-              potentialBenefit: data.total * 0.02, // Estimate 2% additional reward
-              confidence: 80,
-              actionRequired: `Consider getting a card with bonus rewards for ${category}`,
-              priority: data.total > 50000 ? "high" : "medium",
-              category,
-            });
-          }
+        if (!hasOptimalCard) {
+          tips.push({
+            id: `gap_${category}`,
+            type: "card_recommendation",
+            title: `Missing optimal card for ${category}`,
+            description: `You spend ₹${data.total.toLocaleString()} on ${category} but don't have a card optimized for this category.`,
+            potentialBenefit: data.total * 0.02, // Estimate 2% additional reward
+            confidence: 80,
+            actionRequired: `Consider getting a card with bonus rewards for ${category}`,
+            priority: data.total > 50000 ? "high" : "medium",
+            category,
+          });
         }
       }
-    );
+    });
 
     return tips;
   }
@@ -702,46 +665,43 @@ export class RewardsService {
     const tips: RewardOptimizationTip[] = [];
 
     // Analyze if user is using suboptimal cards for specific categories
-    Object.entries(spendingPatterns).forEach(
-      ([category, data]: [string, any]) => {
-        if (data.total > 5000) {
-          const bestCard = cardPortfolio.reduce((best, card) => {
-            const program = card.reward_programs?.[0];
-            const rate =
-              program?.categoryRates?.[category] || program?.baseRate || 0;
-            const bestRate =
-              best?.reward_programs?.[0]?.categoryRates?.[category] ||
-              best?.reward_programs?.[0]?.baseRate ||
-              0;
-            return rate > bestRate ? card : best;
-          }, null);
+    Object.entries(spendingPatterns).forEach(([category, data]: [string, any]) => {
+      if (data.total > 5000) {
+        const bestCard = cardPortfolio.reduce((best, card) => {
+          const program = card.reward_programs?.[0];
+          const rate = program?.categoryRates?.[category] || program?.baseRate || 0;
+          const bestRate =
+            best?.reward_programs?.[0]?.categoryRates?.[category] ||
+            best?.reward_programs?.[0]?.baseRate ||
+            0;
+          return rate > bestRate ? card : best;
+        }, null);
 
-          if (bestCard) {
-            const currentRate =
-              bestCard.reward_programs[0]?.categoryRates?.[category] ||
-              bestCard.reward_programs[0]?.baseRate ||
-              0;
-            const potentialIncrease = data.total * (currentRate * 0.01); // 1% additional as example
+        if (bestCard) {
+          const currentRate =
+            bestCard.reward_programs[0]?.categoryRates?.[category] ||
+            bestCard.reward_programs[0]?.baseRate ||
+            0;
+          const potentialIncrease = data.total * (currentRate * 0.01); // 1% additional as example
 
-            if (potentialIncrease > 500) {
-              // Only suggest if benefit > ₹500
-              tips.push({
-                id: `optimize_${category}`,
-                type: "category_optimization",
-                title: `Optimize ${category} spending`,
-                description: `Use ${bestCard.card_name} for ${category} purchases to maximize rewards.`,
-                potentialBenefit: potentialIncrease,
-                confidence: 90,
-                actionRequired: `Switch to using ${bestCard.card_name} for ${category} purchases`,
-                priority: potentialIncrease > 2000 ? "high" : "medium",
-                category,
-                cardIds: [bestCard.id],
-              });
-            }
+          if (potentialIncrease > 500) {
+            // Only suggest if benefit > ₹500
+            tips.push({
+              id: `optimize_${category}`,
+              type: "category_optimization",
+              title: `Optimize ${category} spending`,
+              description: `Use ${bestCard.card_name} for ${category} purchases to maximize rewards.`,
+              potentialBenefit: potentialIncrease,
+              confidence: 90,
+              actionRequired: `Switch to using ${bestCard.card_name} for ${category} purchases`,
+              priority: potentialIncrease > 2000 ? "high" : "medium",
+              category,
+              cardIds: [bestCard.id],
+            });
           }
         }
       }
-    );
+    });
 
     return tips;
   }
@@ -784,12 +744,10 @@ export class RewardsService {
         id: "timing_quarterly",
         type: "timing_optimization",
         title: "Maximize quarterly bonus categories",
-        description:
-          "Plan major purchases around quarterly bonus categories to maximize rewards.",
+        description: "Plan major purchases around quarterly bonus categories to maximize rewards.",
         potentialBenefit: 2000,
         confidence: 85,
-        actionRequired:
-          "Check quarterly bonus categories and plan upcoming purchases",
+        actionRequired: "Check quarterly bonus categories and plan upcoming purchases",
         priority: "medium",
       },
     ];
@@ -806,8 +764,7 @@ export class RewardsService {
     // Aggregate earned rewards
     const totalEarned = earnedRewards.reduce(
       (acc, reward) => {
-        acc[reward.reward_type] =
-          (acc[reward.reward_type] || 0) + reward.amount;
+        acc[reward.reward_type] = (acc[reward.reward_type] || 0) + reward.amount;
         return acc;
       },
       { cashback: 0, points: 0, miles: 0 }
@@ -832,17 +789,11 @@ export class RewardsService {
 
     // Calculate total values (simplified - assumes 1:1 for cashback, 0.25:1 for points/miles)
     const earnedValueINR =
-      totalEarned.cashback +
-      totalEarned.points * 0.25 +
-      totalEarned.miles * 0.25;
+      totalEarned.cashback + totalEarned.points * 0.25 + totalEarned.miles * 0.25;
     const redeemedValueINR =
-      totalRedeemed.cashback +
-      totalRedeemed.points * 0.25 +
-      totalRedeemed.miles * 0.25;
+      totalRedeemed.cashback + totalRedeemed.points * 0.25 + totalRedeemed.miles * 0.25;
     const pendingValueINR =
-      pendingRedemption.cashback +
-      pendingRedemption.points * 0.25 +
-      pendingRedemption.miles * 0.25;
+      pendingRedemption.cashback + pendingRedemption.points * 0.25 + pendingRedemption.miles * 0.25;
 
     return {
       totalEarned: {
@@ -868,38 +819,38 @@ export class RewardsService {
    * CRUD Wrapper Methods for API Controller
    */
   async trackReward(data: any): Promise<any> {
-    const { data: reward } = await supabase.from("rewards").insert(data).select().single(); return reward;
+    const { data: reward } = await supabase.from("rewards").insert(data).select().single();
+    return reward;
   }
 
   async getReward(id: string): Promise<any> {
-    const { data } = await supabase
-      .from('rewards')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const { data } = await supabase.from("rewards").select("*").eq("id", id).single();
     return data;
   }
 
   async getUserRewards(userId: string): Promise<any> {
-    const { data } = await supabase.from("rewards").select("*").eq("user_id", userId).order("earned_date", { ascending: false }); return data || [];
+    const { data } = await supabase
+      .from("rewards")
+      .select("*")
+      .eq("user_id", userId)
+      .order("earned_date", { ascending: false });
+    return data || [];
   }
 
   async updateReward(id: string, data: any): Promise<any> {
     const { data: updated } = await supabase
-      .from('rewards')
+      .from("rewards")
       .update(data)
-      .eq('id', id)
+      .eq("id", id)
       .select()
       .single();
     return updated;
   }
 
   async deleteReward(id: string): Promise<void> {
-    await supabase.from('rewards').delete().eq('id', id);
+    await supabase.from("rewards").delete().eq("id", id);
   }
-
 }
-
 
 // Export singleton instance
 export const rewardsService = new RewardsService();

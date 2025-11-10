@@ -8,15 +8,17 @@ import React, {
   ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
+import { startTokenRefresh, stopTokenRefresh } from "./token-refresh";
+import { apiClient } from "@/lib/api-client";
 
 /**
  * User interface matching backend response
  */
-interface User {
+export interface User {
   id: string;
   email: string;
   name: string;
-  profilePicture: string;
+  profilePicture?: string;
   monthlyBudget?: number;
 }
 
@@ -30,6 +32,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
   isAuthenticated: boolean;
+  error: string | null;
+  clearError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,39 +45,78 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const router = useRouter();
 
-  // Check authentication status on mount
+  // Check authentication status on mount - ONLY ONCE
   useEffect(() => {
-    checkAuth();
+    if (!hasCheckedAuth) {
+      console.log("🔍 AuthProvider: Checking auth status on mount");
+      checkAuth();
+      setHasCheckedAuth(true);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hasCheckedAuth]);
+
+  // Start token refresh when user is authenticated
+  useEffect(() => {
+    if (user) {
+      startTokenRefresh(
+        () => {
+          // On successful refresh, just continue
+          console.log("Token refreshed successfully");
+        },
+        (error) => {
+          // On refresh error, clear user and redirect to login
+          console.error("Token refresh failed, logging out:", error);
+          setUser(null);
+          setError("Session expired. Please login again.");
+          router.push("/login");
+        }
+      );
+    } else {
+      stopTokenRefresh();
+    }
+
+    return () => {
+      stopTokenRefresh();
+    };
+  }, [user, router]);
 
   /**
    * Check if user is authenticated by verifying httpOnly cookie
    */
   async function checkAuth() {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/me`,
-        {
-          credentials: "include", // Send httpOnly cookie
-        }
-      );
+      console.log("📡 Making /api/auth/me request");
+      const data = await apiClient.get<{ user: User }>("/api/auth/me");
 
-      if (response.ok) {
-        const data = await response.json();
+      if (data.success && data.data?.user) {
+        console.log("✅ Auth check successful:", data.data.user.email);
         setUser(data.data.user);
-      } else if (response.status === 401) {
-        // Not authenticated
-        setUser(null);
       } else {
-        // Other errors
+        console.log("❌ Auth check failed: Invalid response");
         setUser(null);
       }
-    } catch (error) {
-      console.error("Auth check failed:", error);
-      setUser(null);
+    } catch (error: unknown) {
+      // Check if request was cancelled (duplicate prevention)
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      if (errorMessage?.includes("already in progress")) {
+        console.log("⏭️  Skipped duplicate auth check");
+        return;
+      }
+
+      const axiosError = error as { response?: { status?: number } };
+      if (axiosError?.response?.status === 401) {
+        // Not authenticated - this is expected for logged out users
+        console.log("🔓 User not authenticated (401)");
+        setUser(null);
+      } else {
+        console.error("Auth check failed:", error);
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -85,32 +128,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   async function login(code: string) {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`,
-        {
-          method: "POST",
-          credentials: "include", // Receive httpOnly cookie
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ code }),
-        }
-      );
+      const data = await apiClient.post<{ user: User }>("/api/auth/google", {
+        code,
+      });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Authentication failed");
+      if (!data.success || !data.data?.user) {
+        throw new Error("Invalid response from server");
       }
 
-      const data = await response.json();
-
-      // Set user state (token is in httpOnly cookie set by backend)
+      // Set user state (tokens are in httpOnly cookies set by backend)
       setUser(data.data.user);
+
+      console.log("✅ Login successful, redirecting to dashboard");
 
       // Redirect to dashboard
       router.push("/dashboard");
     } catch (error) {
-      console.error("Login failed:", error);
+      console.error("❌ Login failed:", error);
       throw error;
     }
   }
@@ -121,10 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function logout() {
     try {
       // Call logout endpoint (httpOnly cookie sent automatically)
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/logout`, {
-        method: "POST",
-        credentials: "include", // Send httpOnly cookie
-      });
+      await apiClient.post("/api/auth/logout", {});
     } catch (error) {
       console.error("Logout failed:", error);
     } finally {
@@ -144,6 +175,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await checkAuth();
   }
 
+  /**
+   * Clear error message
+   */
+  function clearError() {
+    setError(null);
+  }
+
   const value: AuthContextType = {
     user,
     loading,
@@ -151,6 +189,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     refreshToken,
     isAuthenticated: !!user,
+    error,
+    clearError,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

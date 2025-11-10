@@ -1,4 +1,6 @@
 import { supabase } from "shared/database/supabase";
+import { logger } from "shared/monitoring/logger";
+import { AppError } from "shared/errors/AppError";
 
 /**
  * Period type for budgets
@@ -128,7 +130,7 @@ export class EnhancedBudgetService {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
 
     // Log the creation
     await this.logBudgetAction(userId, data.id, "create", "budget_category", null, data, metadata);
@@ -164,7 +166,7 @@ export class EnhancedBudgetService {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
 
     // Log the update
     await this.logBudgetAction(
@@ -201,7 +203,7 @@ export class EnhancedBudgetService {
       ascending: false,
     });
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
     return data || [];
   }
 
@@ -233,7 +235,7 @@ export class EnhancedBudgetService {
       .gte("transaction_date", startDate.toISOString())
       .lte("transaction_date", endDate.toISOString());
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
 
     // Aggregate by category
     const categorySpending = (transactions || []).reduce(
@@ -302,7 +304,7 @@ export class EnhancedBudgetService {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
       result = data;
 
       await this.logBudgetAction(
@@ -329,7 +331,7 @@ export class EnhancedBudgetService {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) throw AppError.database("Database operation failed", { error });
       result = data;
 
       await this.logBudgetAction(userId, data.id, "create", "card_budget", null, data, metadata);
@@ -422,7 +424,7 @@ export class EnhancedBudgetService {
       return newConfig;
     }
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
     return data;
   }
 
@@ -443,7 +445,7 @@ export class EnhancedBudgetService {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
     return data;
   }
 
@@ -468,10 +470,10 @@ export class EnhancedBudgetService {
       .lte("transaction_date", endDate.toISOString())
       .order("transaction_date", { ascending: true });
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
 
     if (!transactions || transactions.length < 7) {
-      throw new Error("Insufficient historical data for forecasting");
+      throw AppError.internal("Insufficient historical data for forecasting", { originalError: error });
     }
 
     // Aggregate by day
@@ -532,7 +534,7 @@ export class EnhancedBudgetService {
       }
     );
 
-    if (insertError) console.error("Error storing forecasts:", insertError);
+    if (insertError) logger.error("Error storing forecasts", insertError);
 
     return forecasts;
   }
@@ -579,7 +581,7 @@ export class EnhancedBudgetService {
 
     const { data, error, count } = await query;
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
 
     return {
       logs: data || [],
@@ -701,7 +703,7 @@ export class EnhancedBudgetService {
       metadata: metadata || {},
     });
 
-    if (error) console.error("Error logging budget action:", error);
+    if (error) logger.error("Error logging budget action", error);
   }
 
   private static aggregateDailySpending(transactions: any[]): Record<string, number> {

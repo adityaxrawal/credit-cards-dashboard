@@ -11,6 +11,7 @@ import {
   Gift,
   Crown,
 } from "lucide-react";
+import { apiClient } from "@/lib/api-client";
 
 interface Achievement {
   id: string;
@@ -55,21 +56,9 @@ export default function RewardsDashboard() {
   const fetchRewards = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("accessToken");
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/rewards/summary`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setRewards(data.data);
-      }
+      const data = await apiClient.get("/api/rewards/summary");
+      setRewards(data.data as any);
     } catch (error) {
       console.error("Error fetching rewards:", error);
     } finally {

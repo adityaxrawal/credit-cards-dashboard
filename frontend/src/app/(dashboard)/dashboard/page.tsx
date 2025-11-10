@@ -13,6 +13,7 @@ import { GmailSyncButton } from "@/components/gmail/GmailSyncButton";
 import { RemindersWidget } from "@/components/dashboard/RemindersWidget";
 import { RefreshCw } from "lucide-react";
 import Link from "next/link";
+import { apiClient } from "@/lib/api-client";
 
 /**
  * Dashboard Page
@@ -42,13 +43,43 @@ export default function DashboardPage() {
     window.addEventListener("refresh-dashboard", handleTransactionsUpdated);
 
     // Auto-refresh dashboard data every 5 minutes
-    const refreshInterval = setInterval(
-      () => {
-        console.log("Auto-refreshing dashboard data (5-minute interval)");
+    // Pause when tab is inactive to save bandwidth
+    let refreshInterval: NodeJS.Timeout | null = null;
+
+    const startAutoRefresh = () => {
+      if (refreshInterval) return; // Already running
+      console.log("Starting auto-refresh (5-minute interval)");
+      refreshInterval = setInterval(() => {
+        console.log("Auto-refreshing dashboard data");
         loadDashboardData();
-      },
-      5 * 60 * 1000
-    ); // 5 minutes
+      }, 5 * 60 * 1000); // 5 minutes
+    };
+
+    const stopAutoRefresh = () => {
+      if (refreshInterval) {
+        console.log("Pausing auto-refresh (tab inactive)");
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+      }
+    };
+
+    // Handle visibility change
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopAutoRefresh();
+      } else {
+        console.log("Tab became active, resuming auto-refresh");
+        loadDashboardData(); // Refresh immediately on tab activation
+        startAutoRefresh();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Start auto-refresh if tab is visible
+    if (!document.hidden) {
+      startAutoRefresh();
+    }
 
     return () => {
       window.removeEventListener(
@@ -59,7 +90,8 @@ export default function DashboardPage() {
         "refresh-dashboard",
         handleTransactionsUpdated
       );
-      clearInterval(refreshInterval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      stopAutoRefresh();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -92,26 +124,20 @@ export default function DashboardPage() {
     try {
       setAutoSyncChecked(true);
 
-      // Fetch last sync time (httpOnly cookie sent automatically)
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/gmail/last-sync/${user.id}`,
-        {
-          credentials: "include", // Send httpOnly cookie
-        }
-      );
+      // Fetch Gmail connection status and last sync time
+      const response = await apiClient.get<{
+        connected: boolean;
+        historyId: string | null;
+        lastSync: string | null;
+      }>(`/api/gmail/status`);
 
-      if (!response.ok) {
-        console.error("Failed to fetch last sync time");
+      if (!response.data?.connected) {
         return;
       }
 
-      const data = await response.json();
-
-      if (!data.success || !data.gmailConnected) {
-        return;
-      }
-
-      const lastSync = data.lastSync ? new Date(data.lastSync) : null;
+      const lastSync = response.data.lastSync
+        ? new Date(response.data.lastSync)
+        : null;
       const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
 
       // Trigger auto-sync if more than 30 minutes or first sync
@@ -121,22 +147,29 @@ export default function DashboardPage() {
         );
         setIsAutoSyncing(true);
 
-        // Silent background sync (httpOnly cookie sent automatically)
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/gmail/sync`, {
-          method: "POST",
-          credentials: "include", // Send httpOnly cookie
-        })
-          .then(async (res) => {
+        // Silent background sync
+        apiClient
+          .post<{
+            summary: {
+              emailsScanned: number;
+              transactionEmailsFound: number;
+              newTransactions: number;
+              duplicatesSkipped: number;
+              errors?: number;
+              processingTime: string;
+            };
+          }>("/api/gmail/sync", {})
+          .then(async (result) => {
             setIsAutoSyncing(false);
-            if (res.ok) {
-              const result = await res.json();
-              if (result.summary?.newTransactions > 0) {
-                console.log(
-                  `Auto-sync completed: ${result.summary.newTransactions} new transactions`
-                );
-                // Refresh dashboard data
-                window.dispatchEvent(new CustomEvent("transactions-updated"));
-              }
+            if (
+              result.data?.summary?.newTransactions &&
+              result.data.summary.newTransactions > 0
+            ) {
+              console.log(
+                `Auto-sync completed: ${result.data.summary.newTransactions} new transactions`
+              );
+              // Refresh dashboard data
+              window.dispatchEvent(new CustomEvent("transactions-updated"));
             }
           })
           .catch((err) => {
@@ -417,8 +450,8 @@ export default function DashboardPage() {
                             {bill.days_until_due === 0
                               ? "Due today"
                               : bill.days_until_due === 1
-                                ? "Due tomorrow"
-                                : `Due in ${bill.days_until_due} days`}
+                              ? "Due tomorrow"
+                              : `Due in ${bill.days_until_due} days`}
                           </p>
                         </div>
                         <p className="font-semibold text-red-600">

@@ -1,17 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useRef } from "react";
+import { useSearchParams } from "next/navigation";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 /**
  * Login Form Component
- * Handles Google OAuth login flow
+ * Handles Google OAuth login flow with proper error handling
  */
 export default function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const [error, setError] = useState<string | null>(null);
+  const { login, error: authError, clearError } = useAuth();
+  const [localError, setLocalError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const hasProcessedCode = useRef(false);
+
+  // Combined error message
+  const error = authError || localError;
+
+  // Clear errors when component mounts
+  useEffect(() => {
+    clearError();
+    setLocalError(null);
+  }, [clearError]);
 
   // Handle OAuth callback
   useEffect(() => {
@@ -19,11 +30,26 @@ export default function LoginForm() {
     const errorParam = searchParams?.get("error");
 
     if (errorParam) {
-      setError("Authentication was cancelled or failed");
+      console.error("❌ OAuth Error:", errorParam);
+
+      // Provide specific error messages
+      let errorMessage = "Authentication failed";
+
+      if (errorParam === "redirect_uri_mismatch") {
+        errorMessage = `Redirect URI Mismatch Error\n\nThe redirect URI configured in Google Cloud Console doesn't match what this app is sending.\n\nExpected: ${process.env.NEXT_PUBLIC_APP_URL}/login\n\nPlease check OAUTH_REDIRECT_URI_FIX.md for setup instructions.`;
+      } else if (errorParam === "access_denied") {
+        errorMessage = "Authentication was cancelled or denied by user";
+      } else {
+        errorMessage = `Authentication error: ${errorParam}`;
+      }
+
+      setLocalError(errorMessage);
       return;
     }
 
-    if (code && !isProcessing) {
+    // Prevent duplicate API calls (handles React Strict Mode double-mounting)
+    if (code && !hasProcessedCode.current) {
+      hasProcessedCode.current = true;
       handleOAuthCallback(code);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -31,41 +57,34 @@ export default function LoginForm() {
 
   /**
    * Handle OAuth callback with authorization code
+   * Exchanges code for tokens and redirects to dashboard on success
    */
   async function handleOAuthCallback(code: string) {
     setIsProcessing(true);
-    setError(null);
+    setLocalError(null);
+    clearError();
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ code }),
-          credentials: "include", // Include httpOnly cookie
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Authentication failed");
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Get redirect path from query param or default to dashboard
-        const next = searchParams?.get("next") || "/dashboard";
-        router.push(next);
-      } else {
-        throw new Error(data.error || "Authentication failed");
-      }
+      await login(code);
+      // If login succeeds, user is redirected by AuthContext
+      // No need to manually redirect here
     } catch (err) {
       console.error("Login error:", err);
-      setError("Authentication failed. Please try again.");
+
+      // Display the actual error message from backend
+      let errorMessage = "Authentication failed. Please try again.";
+
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === "string") {
+        errorMessage = err;
+      }
+
+      setLocalError(errorMessage);
       setIsProcessing(false);
+
+      // Clear the code from URL to prevent retry
+      window.history.replaceState({}, "", "/login");
     }
   }
 
@@ -73,9 +92,19 @@ export default function LoginForm() {
    * Initiate Google OAuth flow
    */
   function handleGoogleLogin() {
+    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/login`;
+
+    // Log for debugging
+    console.log("🔐 Starting Google OAuth flow");
+    console.log("📍 Redirect URI:", redirectUri);
+    console.log("⚠️  Make sure this EXACT URI is in Google Console:");
+    console.log("   → Go to: https://console.cloud.google.com/");
+    console.log("   → APIs & Services → Credentials");
+    console.log("   → Add to Authorized redirect URIs:", redirectUri);
+
     const params = new URLSearchParams({
       client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!,
-      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/login`,
+      redirect_uri: redirectUri,
       response_type: "code",
       scope: [
         "openid",
@@ -88,6 +117,8 @@ export default function LoginForm() {
     });
 
     const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+
+    console.log("🌐 Redirecting to Google OAuth...");
     window.location.href = googleAuthUrl;
   }
 
@@ -134,8 +165,28 @@ export default function LoginForm() {
 
           {/* Error Message */}
           {error && (
-            <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-              <p className="text-sm text-red-500">{error}</p>
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <div className="flex items-start gap-3">
+                <svg
+                  className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-500">
+                    Authentication Error
+                  </p>
+                  <p className="text-sm text-red-400 mt-1">{error}</p>
+                </div>
+              </div>
             </div>
           )}
 

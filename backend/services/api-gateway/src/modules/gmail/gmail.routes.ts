@@ -12,6 +12,13 @@ const router = Router();
 router.post("/auth", authenticate, GmailController.authorize);
 
 /**
+ * @route   GET /api/gmail/callback
+ * @desc    Handle Gmail OAuth callback
+ * @access  Protected
+ */
+router.get("/callback", authenticate, GmailController.callback);
+
+/**
  * @route   POST /api/gmail/sync
  * @desc    Sync Gmail emails
  * @access  Protected

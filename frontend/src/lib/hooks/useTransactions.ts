@@ -1,5 +1,6 @@
 import { useApi, useApiMutation, ApiResponse } from "./useApi";
 import { Transaction } from "@/types";
+import apiClient from "@/lib/api-client";
 
 export interface TransactionFilters {
   cardId?: string;
@@ -20,58 +21,39 @@ export interface PaginatedTransactions {
   totalPages: number;
 }
 
-// API functions
+// API functions using centralized apiClient
 const api = {
   transactions: {
     getAll: async (
       filters: TransactionFilters = {}
     ): Promise<ApiResponse<PaginatedTransactions>> => {
-      const params = new URLSearchParams();
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          params.append(key, String(value));
-        }
-      });
-
-      const response = await fetch(`/api/transactions?${params.toString()}`);
-      const data = await response.json();
-      return data;
+      return await apiClient.get<PaginatedTransactions>(
+        "/api/transactions",
+        filters as Record<string, unknown>
+      );
     },
 
     getById: async (id: string): Promise<ApiResponse<Transaction>> => {
-      const response = await fetch(`/api/transactions/${id}`);
-      const data = await response.json();
-      return data;
+      return await apiClient.get<Transaction>(`/api/transactions/${id}`);
     },
 
     getByCard: async (
       cardId: string,
       filters: TransactionFilters = {}
     ): Promise<ApiResponse<PaginatedTransactions>> => {
-      const params = new URLSearchParams();
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          params.append(key, String(value));
-        }
-      });
-
-      const response = await fetch(
-        `/api/cards/${cardId}/transactions?${params.toString()}`
+      return await apiClient.get<PaginatedTransactions>(
+        `/api/cards/${cardId}/transactions`,
+        filters as Record<string, unknown>
       );
-      const data = await response.json();
-      return data;
     },
 
     create: async (
       transaction: Partial<Transaction>
     ): Promise<ApiResponse<Transaction>> => {
-      const response = await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(transaction),
-      });
-      const data = await response.json();
-      return data;
+      return await apiClient.post<Transaction>(
+        "/api/transactions",
+        transaction
+      );
     },
 
     update: async ({
@@ -80,21 +62,14 @@ const api = {
     }: { id: string } & Partial<Transaction>): Promise<
       ApiResponse<Transaction>
     > => {
-      const response = await fetch(`/api/transactions/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(transaction),
-      });
-      const data = await response.json();
-      return data;
+      return await apiClient.put<Transaction>(
+        `/api/transactions/${id}`,
+        transaction
+      );
     },
 
     delete: async (id: string): Promise<ApiResponse<void>> => {
-      const response = await fetch(`/api/transactions/${id}`, {
-        method: "DELETE",
-      });
-      const data = await response.json();
-      return data;
+      return await apiClient.delete<void>(`/api/transactions/${id}`);
     },
 
     getStats: async (
@@ -109,18 +84,10 @@ const api = {
         topCategory: string;
       }>
     > => {
-      const params = new URLSearchParams();
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          params.append(key, String(value));
-        }
-      });
-
-      const response = await fetch(
-        `/api/transactions/stats?${params.toString()}`
+      return await apiClient.get(
+        "/api/transactions/stats",
+        filters as Record<string, unknown>
       );
-      const data = await response.json();
-      return data;
     },
   },
 };

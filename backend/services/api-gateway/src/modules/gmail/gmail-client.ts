@@ -5,6 +5,7 @@ import { gmail_v1 } from "googleapis";
 import { supabase } from "shared/database/supabase";
 import { createTokenManager, TokenManager } from "./token-manager";
 import { logger } from "shared/monitoring/logger";
+import { AppError } from "shared/errors/AppError";
 
 // Load environment variables
 dotenv.config();
@@ -69,7 +70,7 @@ export class GmailClient {
       };
     } catch (error) {
       logger.error("Error exchanging code for tokens", error as Error);
-      throw new Error("Failed to exchange authorization code for tokens");
+      throw AppError.internal("Failed to exchange authorization code for tokens", { originalError: error });
     }
   }
 
@@ -168,7 +169,7 @@ export class GmailClient {
       return response.data.emailAddress!;
     } catch (error) {
       console.error("Error fetching Gmail profile:", error);
-      throw new Error("Failed to fetch Gmail profile");
+      throw AppError.database("Failed to fetch Gmail profile", { error });
     }
   }
 
@@ -227,7 +228,7 @@ export class GmailClient {
       };
     } catch (error) {
       console.error("Error listing messages:", error);
-      throw new Error("Failed to list Gmail messages");
+      throw AppError.internal("Failed to list Gmail messages", { originalError: error });
     }
   }
 
@@ -253,7 +254,7 @@ export class GmailClient {
       return response.data;
     } catch (error) {
       console.error(`Error fetching message ${messageId}:`, error);
-      throw new Error("Failed to fetch Gmail message");
+      throw AppError.database("Failed to fetch Gmail message", { error });
     }
   }
 
@@ -337,7 +338,7 @@ export class GmailClient {
       logger.info("Gmail disconnected successfully", {  userId  });
     } catch (error) {
       logger.error("Error disconnecting Gmail", error as Error);
-      throw new Error("Failed to disconnect Gmail");
+      throw AppError.internal("Failed to disconnect Gmail", { originalError: error });
     }
   }
 }

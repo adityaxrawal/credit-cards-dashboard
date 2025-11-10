@@ -38,8 +38,30 @@ interface RequestOptions extends RequestInit {
 }
 
 /**
+ * Refresh the access token using the refresh token cookie
+ * @returns true if refresh successful, false otherwise
+ */
+async function refreshAccessToken(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_URL}/api/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    return response.ok;
+  } catch (error) {
+    console.error("Token refresh failed:", error);
+    return false;
+  }
+}
+
+/**
  * Make an API request
  * Uses httpOnly cookies for authentication (no tokens in JS)
+ * Automatically refreshes token on 401 and retries once
  */
 async function makeRequest<T>(
   endpoint: string,
@@ -78,12 +100,28 @@ async function makeRequest<T>(
       credentials: "include", // Include httpOnly cookies
     });
 
-    // Handle 401 Unauthorized
-    if (response.status === 401) {
-      if (retry && typeof window !== "undefined") {
-        // Redirect to login on auth failure
+    // Handle 401 Unauthorized - try to refresh token and retry
+    if (response.status === 401 && retry && typeof window !== "undefined") {
+      console.log("Access token expired, attempting refresh...");
+
+      // Try to refresh the token
+      const refreshSuccess = await refreshAccessToken();
+
+      if (refreshSuccess) {
+        console.log("Token refreshed successfully, retrying request...");
+
+        // Retry the original request with new token (disable retry to prevent infinite loop)
+        return makeRequest<T>(endpoint, { ...options, retry: false });
+      } else {
+        // Refresh failed, redirect to login
+        console.log("Token refresh failed, redirecting to login...");
         window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+        throw new ApiError(401, "Session expired. Please login again.", null);
       }
+    }
+
+    // If this was a retry that still failed with 401, throw error
+    if (response.status === 401 && !retry) {
       throw new ApiError(401, "Unauthorized", null);
     }
 

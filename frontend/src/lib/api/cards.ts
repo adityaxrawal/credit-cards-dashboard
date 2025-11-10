@@ -41,30 +41,32 @@ export const cardApi = {
    * Get all cards for the authenticated user
    */
   getCards: async (): Promise<Card[]> => {
-    return apiGet<{ data: Card[] }>("/cards").then((res) => res.data);
+    return apiGet<{ data: Card[] }>("/api/cards").then((res) => res.data);
   },
 
   /**
    * Get a single card by ID
    */
   getCard: async (cardId: string): Promise<Card> => {
-    return apiGet<{ data: Card }>(`/cards/${cardId}`).then((res) => res.data);
+    return apiGet<{ data: Card }>(`/api/cards/${cardId}`).then(
+      (res) => res.data
+    );
   },
 
   /**
    * Get statistics for a card
    */
   getCardStatistics: async (cardId: string): Promise<CardStatistics> => {
-    return apiGet<{ data: CardStatistics }>(`/cards/${cardId}/statistics`).then(
-      (res) => res.data
-    );
+    return apiGet<{ data: CardStatistics }>(
+      `/api/cards/${cardId}/statistics`
+    ).then((res) => res.data);
   },
 
   /**
    * Create a new card
    */
   createCard: async (data: CardFormData): Promise<Card> => {
-    return apiPost<{ data: Card }>("/cards", data).then((res) => res.data);
+    return apiPost<{ data: Card }>("/api/cards", data).then((res) => res.data);
   },
 
   /**
@@ -74,7 +76,7 @@ export const cardApi = {
     cardId: string,
     data: Partial<CardFormData>
   ): Promise<Card> => {
-    return apiPut<{ data: Card }>(`/cards/${cardId}`, data).then(
+    return apiPut<{ data: Card }>(`/api/cards/${cardId}`, data).then(
       (res) => res.data
     );
   },
@@ -83,6 +85,6 @@ export const cardApi = {
    * Delete a card
    */
   deleteCard: async (cardId: string): Promise<void> => {
-    await apiDelete<void>(`/cards/${cardId}`);
+    await apiDelete<void>(`/api/cards/${cardId}`);
   },
 };

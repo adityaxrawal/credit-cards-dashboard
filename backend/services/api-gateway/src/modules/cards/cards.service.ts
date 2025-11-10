@@ -1,5 +1,6 @@
 import { logger } from "shared/monitoring/logger";
 import { supabase } from "shared/database/supabase";
+import { AppError } from "shared/errors/AppError";
 
 /**
  * Card interface matching database schema
@@ -47,12 +48,12 @@ export class CardService {
 
       if (error) {
         logger.error("Get cards error", error as Error);
-        throw new Error("Failed to fetch cards");
+        throw AppError.database("Failed to fetch cards", { error });
       }
 
       return cards || [];
     } catch (error: any) {
-      throw new Error(`Failed to fetch cards: ${error.message}`);
+      throw AppError.internal(`Failed to fetch cards: ${error.message}`);
     }
   }
 
@@ -72,14 +73,14 @@ export class CardService {
 
       if (error) {
         if (error.code === "PGRST116") {
-          throw new Error("Card not found");
+          throw AppError.notFound("Card");
         }
-        throw new Error("Failed to fetch card");
+        throw AppError.database("Failed to fetch card", { error });
       }
 
       return card;
     } catch (error: any) {
-      throw new Error(`Failed to fetch card: ${error.message}`);
+      throw AppError.internal(`Failed to fetch card: ${error.message}`);
     }
   }
 
@@ -102,7 +103,7 @@ export class CardService {
         .eq("is_active", true);
 
       if (existingCards && existingCards.length > 0) {
-        throw new Error("A card with these last 4 digits already exists");
+        throw AppError.validation("A card with these last 4 digits already exists");
       }
 
       const { data: card, error } = await supabase
@@ -126,12 +127,12 @@ export class CardService {
 
       if (error) {
         logger.error("Create card error", error as Error);
-        throw new Error("Failed to create card");
+        throw AppError.database("Failed to create card", { error });
       }
 
       return card;
     } catch (error: any) {
-      throw new Error(`Failed to create card: ${error.message}`);
+      throw AppError.internal(`Failed to create card: ${error.message}`);
     }
   }
 
@@ -168,12 +169,12 @@ export class CardService {
 
       if (error) {
         logger.error("Update card error", error as Error);
-        throw new Error("Failed to update card");
+        throw AppError.database("Failed to update card", { error });
       }
 
       return card;
     } catch (error: any) {
-      throw new Error(`Failed to update card: ${error.message}`);
+      throw AppError.internal(`Failed to update card: ${error.message}`);
     }
   }
 
@@ -195,12 +196,12 @@ export class CardService {
 
       if (error) {
         logger.error("Delete card error", error as Error);
-        throw new Error("Failed to delete card");
+        throw AppError.database("Failed to delete card", { error });
       }
 
       return { success: true };
     } catch (error: any) {
-      throw new Error(`Failed to delete card: ${error.message}`);
+      throw AppError.internal(`Failed to delete card: ${error.message}`);
     }
   }
 
@@ -226,7 +227,7 @@ export class CardService {
         .gte("transaction_date", startOfMonth.toISOString());
 
       if (error) {
-        throw new Error("Failed to fetch transactions");
+        throw AppError.database("Failed to fetch transactions", { error });
       }
 
       const totalSpent =
@@ -250,7 +251,7 @@ export class CardService {
         transaction_count: transactions?.length || 0,
       };
     } catch (error: any) {
-      throw new Error(`Failed to fetch card statistics: ${error.message}`);
+      throw AppError.internal(`Failed to fetch card statistics: ${error.message}`);
     }
   }
 
@@ -270,27 +271,27 @@ export class CardService {
 
     for (const field of required) {
       if (!(field in cardData) || cardData[field as keyof Card] === undefined) {
-        throw new Error(`${field} is required`);
+        throw AppError.internal(`${field} is required`);
       }
     }
 
     // Validate last 4 digits
     if (cardData.last_four_digits && !/^\d{4}$/.test(cardData.last_four_digits)) {
-      throw new Error("Last 4 digits must be exactly 4 digits");
+      throw AppError.validation("Last 4 digits must be exactly 4 digits");
     }
 
     // Validate billing and due dates (1-31)
     if (cardData.billing_date && (cardData.billing_date < 1 || cardData.billing_date > 31)) {
-      throw new Error("Billing date must be between 1 and 31");
+      throw AppError.validation("Billing date must be between 1 and 31");
     }
 
     if (cardData.due_date && (cardData.due_date < 1 || cardData.due_date > 31)) {
-      throw new Error("Due date must be between 1 and 31");
+      throw AppError.validation("Due date must be between 1 and 31");
     }
 
     // Validate credit limit
     if (cardData.credit_limit && cardData.credit_limit <= 0) {
-      throw new Error("Credit limit must be greater than 0");
+      throw AppError.validation("Credit limit must be greater than 0");
     }
   }
 }

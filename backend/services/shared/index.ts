@@ -6,6 +6,27 @@ export { supabase } from "./database/supabase";
 // Cache
 export { redis } from "./cache/redis";
 
+// Monitoring
+export { logger } from "./monitoring/logger";
+
+// Errors
+export { AppError, ErrorCode, ErrorStatusCode, handleError, asyncHandler } from "./errors/AppError";
+
+// Middleware
+export {
+  validateRequest,
+  validateBody,
+  validateParams,
+  validateQuery,
+  validateMultiple,
+} from "./middleware/validation";
+
+// Auth utilities
+export * from "./lib/auth/tokenHandler";
+
+// Gmail utilities
+export * from "./lib/gmail/syncService";
+
 // Types
 export * from "./types/database";
 

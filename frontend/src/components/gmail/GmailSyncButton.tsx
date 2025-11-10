@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { RefreshCw } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { apiPost } from "@/lib/api/client";
 
 interface SyncResult {
   success: boolean;
@@ -12,10 +13,37 @@ interface SyncResult {
     transactionEmailsFound: number;
     newTransactions: number;
     duplicatesSkipped: number;
+    errors?: number;
     processingTime: string;
   };
   error?: string;
+  message?: string;
+  retryable?: boolean;
+  errorDetails?: Array<{
+    code: string;
+    message: string;
+    emailId?: string;
+  }>;
 }
+
+// Error code constants from backend
+const GMAIL_ERROR_MESSAGES: Record<string, string> = {
+  GMAIL_NOT_CONNECTED:
+    "Gmail not connected. Click to authorize Gmail access and sync your transactions.",
+  GMAIL_TOKEN_EXPIRED: "Gmail access expired. Click to reconnect your account.",
+  GMAIL_TOKEN_INVALID:
+    "Gmail credentials invalid. Click to reconnect your account.",
+  GMAIL_PERMISSION_DENIED:
+    "Insufficient Gmail permissions. Please grant full read access when prompted.",
+  GMAIL_RATE_LIMIT:
+    "Gmail rate limit exceeded. Please try again in a few minutes.",
+  GMAIL_QUOTA_EXCEEDED:
+    "Gmail daily quota exceeded. Please try again tomorrow.",
+  GMAIL_API_ERROR: "Gmail service error. Please try again later.",
+  NETWORK_ERROR: "Network error. Please check your internet connection.",
+  DATABASE_ERROR: "Database error occurred. Please try again.",
+  UNKNOWN_ERROR: "An unexpected error occurred. Please try again.",
+};
 
 interface GmailSyncButtonProps {
   onSyncComplete?: () => void;
@@ -43,21 +71,10 @@ export function GmailSyncButton({
     setSyncing(true);
 
     try {
-      // Step 1: Trigger Gmail sync (httpOnly cookie sent automatically)
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/gmail/sync`,
-        {
-          method: "POST",
-          credentials: "include", // Send httpOnly cookie
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      // Step 1: Trigger Gmail sync (auto-refreshes token if expired)
+      const data = await apiPost<SyncResult>("/api/gmail/sync");
 
-      const data: SyncResult = await response.json();
-
-      if (response.ok && data.success) {
+      if (data.success) {
         setLastSync(new Date());
 
         const newCount = data.summary?.newTransactions || 0;
@@ -85,9 +102,82 @@ export function GmailSyncButton({
       } else {
         showToast("error", data.error || "Sync failed");
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Sync error:", error);
-      showToast("error", "Network error during sync");
+
+      // Extract error code and message from structured error response
+      const apiError = error as {
+        data?: { error?: string; message?: string; retryable?: boolean };
+        error?: string;
+        message?: string;
+      };
+      const errorCode = apiError?.data?.error || apiError?.error;
+      const errorMessage = apiError?.data?.message || apiError?.message;
+      const retryable = apiError?.data?.retryable || false;
+
+      // Map error code to user-friendly message
+      const displayMessage =
+        errorCode && GMAIL_ERROR_MESSAGES[errorCode]
+          ? GMAIL_ERROR_MESSAGES[errorCode]
+          : errorMessage || "Failed to sync Gmail. Please try again.";
+
+      // Show retry hint if error is retryable
+      const hint = retryable ? " (Retryable - please try again)" : "";
+
+      showToast("error", displayMessage + hint);
+
+      // If Gmail not connected or token issues, initiate Gmail connection
+      if (
+        errorCode === "GMAIL_NOT_CONNECTED" ||
+        errorCode === "GMAIL_TOKEN_EXPIRED" ||
+        errorCode === "GMAIL_TOKEN_INVALID"
+      ) {
+        setTimeout(async () => {
+          try {
+            showToast(
+              "info",
+              "Connecting Gmail...",
+              "Please authorize Gmail access",
+              2000
+            );
+
+            // Get Gmail OAuth URL using direct fetch (backend doesn't follow standard response format)
+            const response = await fetch(
+              `${
+                process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+              }/api/gmail/auth`,
+              {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(
+                `HTTP ${response.status}: ${response.statusText}`
+              );
+            }
+
+            const authData = await response.json();
+
+            if (authData.success && authData.authUrl) {
+              // Redirect to Google OAuth
+              window.location.href = authData.authUrl;
+            } else {
+              showToast("error", "Failed to get Gmail authorization URL");
+            }
+          } catch (authError) {
+            console.error("Failed to initiate Gmail auth:", authError);
+            showToast(
+              "error",
+              "Failed to connect Gmail. Please try from Settings."
+            );
+          }
+        }, 2000);
+      }
     } finally {
       setSyncing(false);
     }
@@ -100,27 +190,24 @@ export function GmailSyncButton({
     const services = [
       {
         name: "update-budget",
-        url: `${process.env.NEXT_PUBLIC_API_URL}/services/update-budget`,
+        endpoint: "/api/services/update-budget",
       },
       {
         name: "check-alerts",
-        url: `${process.env.NEXT_PUBLIC_API_URL}/services/check-alerts`,
+        endpoint: "/api/services/check-alerts",
       },
       {
         name: "check-reminders",
-        url: `${process.env.NEXT_PUBLIC_API_URL}/services/check-reminders`,
+        endpoint: "/api/services/check-reminders",
       },
       {
         name: "refresh-analytics",
-        url: `${process.env.NEXT_PUBLIC_API_URL}/services/refresh-analytics`,
+        endpoint: "/api/services/refresh-analytics",
       },
     ];
 
     const servicePromises = services.map((service) =>
-      fetch(service.url, {
-        method: "POST",
-        credentials: "include", // Send httpOnly cookie
-      }).catch((err) => {
+      apiPost(service.endpoint).catch((err) => {
         console.error(`Service ${service.name} failed:`, err);
         return null;
       })
@@ -131,41 +218,40 @@ export function GmailSyncButton({
     // Handle alerts and reminders
     for (let i = 0; i < results.length; i++) {
       if (results[i].status === "fulfilled") {
-        const response = (results[i] as PromiseFulfilledResult<Response | null>)
-          .value;
+        const result = results[i] as PromiseFulfilledResult<unknown>;
+        const data = result.value as {
+          alerts?: Array<{ message?: string; title?: string }>;
+          reminders?: Array<{ message?: string }>;
+        } | null;
 
-        if (!response) continue;
+        if (!data) continue;
 
-        try {
-          const data = await response.json();
-
-          // Show alerts (service index 1)
-          if (i === 1 && data.alerts?.length > 0) {
-            data.alerts.forEach(
-              (alert: { message?: string; title?: string }) => {
-                showToast(
-                  "warning",
-                  alert.message || alert.title || "Alert",
-                  undefined,
-                  5000
-                );
-              }
-            );
-          }
-
-          // Show reminders (service index 2)
-          if (i === 2 && data.reminders?.length > 0) {
-            const reminderCount = data.reminders.length;
+        // Show alerts (service index 1)
+        if (i === 1 && Array.isArray(data.alerts) && data.alerts.length > 0) {
+          data.alerts.forEach((alert) => {
             showToast(
-              "info",
-              `${reminderCount} upcoming bill reminder${
-                reminderCount !== 1 ? "s" : ""
-              }`,
-              data.reminders[0]?.message
+              "warning",
+              alert.message || alert.title || "Alert",
+              undefined,
+              5000
             );
-          }
-        } catch (err) {
-          console.error("Error parsing service response:", err);
+          });
+        }
+
+        // Show reminders (service index 2)
+        if (
+          i === 2 &&
+          Array.isArray(data.reminders) &&
+          data.reminders.length > 0
+        ) {
+          const reminderCount = data.reminders.length;
+          showToast(
+            "info",
+            `${reminderCount} upcoming bill reminder${
+              reminderCount !== 1 ? "s" : ""
+            }`,
+            data.reminders[0]?.message
+          );
         }
       }
     }

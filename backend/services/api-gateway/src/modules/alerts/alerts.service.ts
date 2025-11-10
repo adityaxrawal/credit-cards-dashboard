@@ -1,4 +1,6 @@
 import { supabase } from "shared/database/supabase";
+import { logger } from "shared/monitoring/logger";
+import { AppError } from "shared/errors/AppError";
 
 /**
  * Enhanced Alert Service with event-driven architecture and multi-channel support
@@ -56,7 +58,7 @@ export class EnhancedAlertService {
       .single();
 
     if (templateError || !template) {
-      throw new Error(`Alert template not found: ${alertType} (${priority})`);
+      throw AppError.internal("An error occurred", { originalError: templateError });
     }
 
     // Substitute variables in title and message
@@ -116,7 +118,7 @@ export class EnhancedAlertService {
       return newPrefs;
     }
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
     return data;
   }
 
@@ -134,7 +136,7 @@ export class EnhancedAlertService {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
     return data;
   }
 
@@ -163,7 +165,7 @@ export class EnhancedAlertService {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
     return data;
   }
 
@@ -183,7 +185,7 @@ export class EnhancedAlertService {
 
     const { data, error } = await query;
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
     return data || [];
   }
 
@@ -206,7 +208,7 @@ export class EnhancedAlertService {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
     return data;
   }
 
@@ -220,7 +222,7 @@ export class EnhancedAlertService {
       .eq("id", ruleId)
       .eq("user_id", userId);
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
   }
 
   /**
@@ -233,7 +235,7 @@ export class EnhancedAlertService {
       .eq("alert_id", alertId)
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
     return data || [];
   }
 
@@ -253,7 +255,7 @@ export class EnhancedAlertService {
       .eq("user_id", userId)
       .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
 
     const logs = data || [];
     const byChannel: Record<string, any> = {};
@@ -291,7 +293,7 @@ export class EnhancedAlertService {
       interaction_details: details || {},
     });
 
-    if (error) console.error("Error recording interaction:", error);
+    if (error) logger.error("Error recording interaction:", error);
 
     // Update alert if dismissed
     if (interactionType === "dismissed") {
@@ -405,7 +407,7 @@ export class EnhancedAlertService {
       .order("priority", { ascending: false })
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
 
     const digestAlerts = alerts || [];
 
@@ -466,7 +468,7 @@ export class EnhancedAlertService {
       })
       .eq("id", digestId);
 
-    if (error) console.error("Error marking digest as sent:", error);
+    if (error) logger.error("Error marking digest as sent:", error);
   }
 
   /**
@@ -488,7 +490,7 @@ export class EnhancedAlertService {
       .eq("delivery_status", "pending")
       .limit(100);
 
-    if (error) throw error;
+    if (error) throw AppError.database("Database operation failed", { error });
 
     let sent = 0;
     let failed = 0;
@@ -580,22 +582,22 @@ export class EnhancedAlertService {
     // Placeholder implementations - would integrate with actual services
     switch (channel) {
       case "email":
-        console.log(`Sending email notification to user ${userId}:`, alert);
-        // await sendEmail(userId, alert);
+        logger.info(`Sending email notification to user ${userId}:`, { alert });
+        // await sendEmail(userId, { alert });
         break;
       case "sms":
-        console.log(`Sending SMS notification to user ${userId}:`, alert);
-        // await sendSMS(userId, alert);
+        logger.info(`Sending SMS notification to user ${userId}:`, { alert });
+        // await sendSMS(userId, { alert });
         break;
       case "push":
-        console.log(`Sending push notification to user ${userId}:`, alert);
-        // await sendPushNotification(userId, alert);
+        logger.info(`Sending push notification to user ${userId}:`, { alert });
+        // await sendPushNotification(userId, { alert });
         break;
       case "in_app":
         // Already created in database
         break;
       default:
-        throw new Error(`Unsupported channel: ${channel}`);
+        throw AppError.internal(`Unsupported channel: ${channel}`);
     }
   }
 

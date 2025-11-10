@@ -1,7 +1,7 @@
-// TODO: Fix AlertService import
-// import { enhancedAlertService } from "../alerts/alerts.service";
 import { supabase } from "shared/database/supabase";
+import { logger } from "shared/monitoring/logger";
 import { EnhancedAlertService } from "../alerts/alerts.service";
+import { AppError } from "shared/errors/AppError";
 
 /**
  * Bill information interface
@@ -59,11 +59,7 @@ export class BillReminderService {
   /**
    * Calculate next bill date based on card billing cycle
    */
-  static calculateNextBillDate(
-    cardId: string,
-    billingCycleDay: number,
-    lastBillDate?: Date
-  ): Date {
+  static calculateNextBillDate(cardId: string, billingCycleDay: number, lastBillDate?: Date): Date {
     const today = new Date();
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
@@ -147,21 +143,13 @@ export class BillReminderService {
           if (result.generated) generated++;
           if (result.updated) updated++;
         } catch (error) {
-          errors.push(
-            `Card ${card.id}: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
+          errors.push(`Card ${card.id}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
 
       return { generated, updated, errors };
     } catch (error) {
-      throw new Error(
-        `Failed to generate bills: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+      throw AppError.internal("An error occurred", { originalError: error });
     }
   }
 
@@ -182,7 +170,7 @@ export class BillReminderService {
         .single();
 
       if (!card) {
-        throw new Error("Card not found");
+        throw AppError.notFound("Card");
       }
 
       const billingCycleDay = card.billing_cycle_day || 1;
@@ -226,10 +214,7 @@ export class BillReminderService {
         .gte("transaction_date", statementPeriod.start.toISOString())
         .lte("transaction_date", statementPeriod.end.toISOString());
 
-      const totalAmount = (transactions || []).reduce(
-        (sum, t) => sum + Number(t.amount),
-        0
-      );
+      const totalAmount = (transactions || []).reduce((sum, t) => sum + Number(t.amount), 0);
 
       // Minimum payment is typically 5% of total or minimum ₹200
       const minimumAmount = Math.max(totalAmount * 0.05, 200);
@@ -255,11 +240,11 @@ export class BillReminderService {
         .single();
 
       if (error) {
-        throw new Error(`Failed to create bill: ${error.message}`);
+        throw AppError.database(`Failed to create bill: ${error.message}`);
       }
 
       // Generate automatic reminders
-      await this.scheduleReminders(createdBill.id);
+      await this.createReminderRecords(createdBill.id);
 
       return {
         generated: true,
@@ -287,10 +272,7 @@ export class BillReminderService {
     total: number;
   }> {
     try {
-      let query = supabase
-        .from("bills")
-        .select("*, credit_cards(card_name)")
-        .eq("user_id", userId);
+      let query = supabase.from("bills").select("*, credit_cards(card_name)").eq("user_id", userId);
 
       if (options.status && options.status !== "all") {
         query = query.eq("status", options.status);
@@ -302,15 +284,12 @@ export class BillReminderService {
 
       query = query
         .order("bill_date", { ascending: false })
-        .range(
-          options.offset || 0,
-          (options.offset || 0) + (options.limit || 50) - 1
-        );
+        .range(options.offset || 0, (options.offset || 0) + (options.limit || 50) - 1);
 
       const { data: bills, error, count } = await query;
 
       if (error) {
-        throw new Error(`Failed to fetch bills: ${error.message}`);
+        throw AppError.internal(`Failed to fetch bills: ${error.message}`);
       }
 
       const formattedBills = (bills || []).map((bill: any) => ({
@@ -360,7 +339,7 @@ export class BillReminderService {
         .single();
 
       if (!bill) {
-        throw new Error("Bill not found");
+        throw AppError.notFound("Bill");
       }
 
       const paymentDate = paymentDetails.paymentDate || new Date();
@@ -474,10 +453,7 @@ export class BillReminderService {
           });
           notified++;
         } catch (error) {
-          console.error(
-            `Failed to send overdue notification for bill ${bill.id}:`,
-            error
-          );
+          logger.error(`Failed to send overdue notification for bill ${bill.id}`, error as Error);
         }
       }
 
@@ -490,9 +466,7 @@ export class BillReminderService {
   /**
    * Get bill reminder settings for a user
    */
-  static async getReminderSettings(
-    userId: string
-  ): Promise<BillReminderSettings> {
+  static async getReminderSettings(userId: string): Promise<BillReminderSettings> {
     try {
       const { data: settings } = await supabase
         .from("bill_reminder_settings")
@@ -550,7 +524,7 @@ export class BillReminderService {
         .single();
 
       if (error) {
-        throw new Error(`Failed to update settings: ${error.message}`);
+        throw AppError.database(`Failed to update settings: ${error.message}`);
       }
 
       return {
@@ -567,9 +541,11 @@ export class BillReminderService {
   }
 
   /**
-   * Schedule reminders for a bill
+   * Create reminder records for a bill
+   * Zero-cost architecture: Creates alert records in database that are checked by frontend-triggered services
+   * No background schedulers or cron jobs are used
    */
-  static async scheduleReminders(billId: string): Promise<void> {
+  static async createReminderRecords(billId: string): Promise<void> {
     try {
       const { data: bill } = await supabase
         .from("bills")
@@ -578,7 +554,7 @@ export class BillReminderService {
         .single();
 
       if (!bill) {
-        throw new Error("Bill not found");
+        throw AppError.notFound("Bill");
       }
 
       const settings = await this.getReminderSettings(bill.user_id);
@@ -590,12 +566,12 @@ export class BillReminderService {
       const dueDate = new Date(bill.due_date);
       const cardName = bill.credit_cards?.card_name || "Your credit card";
 
-      // Schedule reminders for each configured day
+      // Create reminder records for each configured day
       for (const daysBefore of settings.reminderDays) {
         const reminderDate = new Date(dueDate);
         reminderDate.setDate(reminderDate.getDate() - daysBefore);
 
-        // Only schedule future reminders
+        // Only create reminders for future dates
         if (reminderDate > new Date()) {
           await EnhancedAlertService.createAlert({
             userId: bill.user_id,
@@ -684,15 +660,12 @@ export class BillReminderService {
 
       query = query
         .order("payment_date", { ascending: false })
-        .range(
-          options.offset || 0,
-          (options.offset || 0) + (options.limit || 50) - 1
-        );
+        .range(options.offset || 0, (options.offset || 0) + (options.limit || 50) - 1);
 
       const { data: payments, error, count } = await query;
 
       if (error) {
-        throw new Error(`Failed to fetch payment history: ${error.message}`);
+        throw AppError.internal(`Failed to fetch payment history: ${error.message}`);
       }
 
       const formattedPayments = (payments || []).map((payment: any) => ({
@@ -744,8 +717,7 @@ export class BillReminderService {
       .select()
       .single();
 
-    if (error)
-      throw new Error(`Failed to create bill reminder: ${error.message}`);
+    if (error) throw AppError.database(`Failed to create bill reminder: ${error.message}`);
     return data;
   }
 
@@ -781,8 +753,7 @@ export class BillReminderService {
 
     const { data, error } = await query.order("due_date", { ascending: true });
 
-    if (error)
-      throw new Error(`Failed to fetch bill reminders: ${error.message}`);
+    if (error) throw AppError.internal(`Failed to fetch bill reminders: ${error.message}`);
     return data || [];
   }
 
@@ -804,7 +775,7 @@ export class BillReminderService {
       .is("last_sent_at", null);
 
     if (error) {
-      console.error("Error fetching reminders:", error);
+      logger.error("Error fetching reminders", error);
       return { sent: 0, failed: 0 };
     }
 
@@ -837,7 +808,7 @@ export class BillReminderService {
 
         sent++;
       } catch (err) {
-        console.error(`Failed to send reminder ${reminder.id}:`, err);
+        logger.error(`Failed to send reminder ${reminder.id}`, err as Error);
         failed++;
       }
     }
@@ -853,11 +824,7 @@ export class BillReminderService {
   }
 
   static async getBillById(id: string): Promise<any> {
-    const { data } = await supabase
-      .from('bill_reminders')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const { data } = await supabase.from("bill_reminders").select("*").eq("id", id).single();
     return data;
   }
 
@@ -866,16 +833,19 @@ export class BillReminderService {
   }
 
   static async updateBill(id: string, data: any): Promise<any> {
-    const { data: updated } = await supabase.from("bill_reminders").update(data).eq("id", id).select().single();
+    const { data: updated } = await supabase
+      .from("bill_reminders")
+      .update(data)
+      .eq("id", id)
+      .select()
+      .single();
     return updated;
   }
 
   static async deleteBill(id: string): Promise<void> {
     await supabase.from("bill_reminders").delete().eq("id", id);
   }
-
 }
-
 
 // Export singleton instance
 export const billReminderService = new BillReminderService();

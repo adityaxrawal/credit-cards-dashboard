@@ -10,6 +10,7 @@ import {
   RefreshCw,
   AlertCircle,
 } from "lucide-react";
+import { apiClient } from "@/lib/api-client";
 
 // Simple card components since we're using Tailwind
 const Card = ({
@@ -89,16 +90,8 @@ export default function GmailIntegrationCard() {
   async function fetchGmailStatus() {
     try {
       setLoading(true);
-      const response = await fetch("/api/gmail/status", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setStatus(data);
-      }
+      const data = await apiClient.get<GmailStatus>("/api/gmail/status");
+      setStatus(data.data ?? null);
     } catch (err) {
       console.error("Failed to fetch Gmail status:", err);
     } finally {
@@ -112,17 +105,14 @@ export default function GmailIntegrationCard() {
       setError(null);
 
       // Get authorization URL from backend
-      const response = await fetch("/api/gmail/auth-url", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-        },
-      });
+      const data = await apiClient.get<{ authUrl: string }>(
+        "/api/gmail/auth-url"
+      );
+      const authUrl = data.data?.authUrl;
 
-      if (!response.ok) {
-        throw new Error("Failed to get authorization URL");
+      if (!authUrl) {
+        throw new Error("No authorization URL received");
       }
-
-      const { authUrl } = await response.json();
 
       // Redirect to Google OAuth
       window.location.href = authUrl;
@@ -145,17 +135,7 @@ export default function GmailIntegrationCard() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch("/api/gmail/disconnect", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to disconnect Gmail");
-      }
+      await apiClient.post("/api/gmail/disconnect", {});
 
       setStatus(null);
       await fetchGmailStatus();
