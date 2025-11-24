@@ -1,10 +1,9 @@
 "use client";
 
 import React from "react";
-import { FileText, CheckCircle, XCircle, Clock, ExternalLink, Download, Trash2 } from "lucide-react";
+import { FileText, CheckCircle, XCircle, Clock, Download, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 
 export interface Statement {
   id: string;

@@ -1,9 +1,9 @@
 import React, { useState, useRef } from "react";
-import { Modal, Button, Input } from "@/components/ui";
+import { Modal, Button } from "@/components/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { transactionApi, TransactionFormData } from "@/lib/api/transactions";
 import { useToast } from "@/components/ui/Toast";
-import { Upload, Check, AlertCircle, FileText, X } from "lucide-react";
+import { Upload, AlertCircle, FileText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BulkImportModalProps {
@@ -27,7 +27,7 @@ export function BulkImportModal({ isOpen, onClose, cards }: BulkImportModalProps
   const [parsedData, setParsedData] = useState<ParsedTransaction[]>([]);
   const [selectedCardId, setSelectedCardId] = useState<string>("");
   const [progress, setProgress] = useState(0);
-  const [errors, setErrors] = useState<string[]>([]);
+
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
@@ -39,7 +39,7 @@ export function BulkImportModal({ isOpen, onClose, cards }: BulkImportModalProps
     setParsedData([]);
     setSelectedCardId("");
     setProgress(0);
-    setErrors([]);
+
   };
 
   const handleClose = () => {
@@ -71,10 +71,10 @@ export function BulkImportModal({ isOpen, onClose, cards }: BulkImportModalProps
 
         // Simple CSV parsing (assuming headers: Date, Description, Amount, Merchant, Category)
         // Adjust logic to be more flexible or map columns in a real app
-        const headers = rows[0].toLowerCase().split(",").map(h => h.trim());
+        // Adjust logic to be more flexible or map columns in a real app
         const dataRows = rows.slice(1);
 
-        const parsed: ParsedTransaction[] = dataRows.map((row, index) => {
+        const parsed: ParsedTransaction[] = dataRows.map((row) => {
           // Handle quotes if necessary, simplified split for now
           const cols = row.split(",").map(c => c.trim());
           
@@ -104,8 +104,8 @@ export function BulkImportModal({ isOpen, onClose, cards }: BulkImportModalProps
 
         setParsedData(parsed);
         setStep("preview");
-      } catch (err: any) {
-        errorToast(err.message || "Failed to parse CSV");
+      } catch (err) {
+        errorToast((err as Error).message || "Failed to parse CSV");
         setFile(null);
       }
     };

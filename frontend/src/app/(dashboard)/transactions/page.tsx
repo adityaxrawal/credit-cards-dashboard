@@ -3,7 +3,6 @@
 import React, { useState, useMemo } from "react";
 import {
   Plus,
-  Calendar,
   Download,
   Filter as FilterIcon,
   X,
@@ -24,6 +23,7 @@ import {
   transactionApi,
   type TransactionFormData,
   type TransactionFilters,
+  type Transaction,
 } from "@/lib/api/transactions";
 import { cardApi } from "@/lib/api/cards";
 import { useToast } from "@/components/ui/Toast";
@@ -54,7 +54,6 @@ export default function TransactionsPage() {
     useState<TransactionModalData | null>(null);
 
   // Filters state
-  const [filters, setFilters] = useState<TransactionFilters>({});
   const [selectedCard, setSelectedCard] = useState<string>("");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -125,8 +124,8 @@ export default function TransactionsPage() {
       setShowModal(false);
       setEditingTransaction(null);
     },
-    onError: (error: any) => {
-      errorToast(error?.response?.data?.message || "Failed to add transaction");
+    onError: (error: Error) => {
+      errorToast((error as any)?.response?.data?.message || "Failed to add transaction");
     },
   });
 
@@ -149,9 +148,9 @@ export default function TransactionsPage() {
       setShowModal(false);
       setEditingTransaction(null);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       errorToast(
-        error?.response?.data?.message || "Failed to update transaction"
+        (error as any)?.response?.data?.message || "Failed to update transaction"
       );
     },
   });
@@ -167,9 +166,9 @@ export default function TransactionsPage() {
       window.dispatchEvent(new CustomEvent("budget-updated"));
       success("Transaction deleted successfully");
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       errorToast(
-        error?.response?.data?.message || "Failed to delete transaction"
+        (error as any)?.response?.data?.message || "Failed to delete transaction"
       );
     },
   });
@@ -199,7 +198,7 @@ export default function TransactionsPage() {
     }
   };
 
-  const handleEdit = (transaction: any) => {
+  const handleEdit = (transaction: Transaction) => {
     setEditingTransaction({
       id: transaction.id,
       card_id: transaction.card_id,
@@ -258,7 +257,7 @@ export default function TransactionsPage() {
           <div>
             <div className="font-medium">{value as string}</div>
             <div className="text-xs text-secondary-text">
-              {(row as any).description || ""}
+              {(row as Transaction).description || ""}
             </div>
           </div>
         </div>
@@ -268,7 +267,7 @@ export default function TransactionsPage() {
       key: "amount",
       header: "Amount",
       render: (value: unknown, row: unknown) => {
-        const type = (row as any).transaction_type;
+        const type = (row as Transaction).transaction_type;
         const amount = Math.abs(value as number);
         return (
           <span
@@ -288,7 +287,7 @@ export default function TransactionsPage() {
       header: "Card",
       render: (_: unknown, row: unknown) => (
         <Badge
-          label={(row as any).card?.card_name || "Unknown"}
+          label={(row as Transaction).card?.card_name || "Unknown"}
           variant="default"
           size="sm"
         />
@@ -326,7 +325,7 @@ export default function TransactionsPage() {
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              handleEdit(row);
+              handleEdit(row as unknown as Transaction);
             }}
           >
             Edit
@@ -336,7 +335,7 @@ export default function TransactionsPage() {
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              handleDelete((row as any).id);
+              handleDelete((row as unknown as Transaction).id);
             }}
           >
             Delete

@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 
 export default function StatementsPage() {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { success, error: errorToast } = useToast();
   const [isUploading, setIsUploading] = useState(false);
 
   // Fetch statements with polling for processing status
@@ -33,18 +33,14 @@ export default function StatementsPage() {
       setIsUploading(true);
     },
     onSuccess: () => {
-      toast({
+      success("Statement uploaded and queued for processing.", {
         title: "Upload Successful",
-        description: "Statement uploaded and queued for processing.",
-        variant: "success",
       });
       queryClient.invalidateQueries({ queryKey: ["statements"] });
     },
-    onError: (error: any) => {
-      toast({
+    onError: (error: Error) => {
+      errorToast(error.message || "Failed to upload statement.", {
         title: "Upload Failed",
-        description: error.message || "Failed to upload statement.",
-        variant: "destructive",
       });
     },
     onSettled: () => {
@@ -56,18 +52,14 @@ export default function StatementsPage() {
   const deleteMutation = useMutation({
     mutationFn: statementsApi.deleteStatement,
     onSuccess: () => {
-      toast({
+      success("The statement has been removed.", {
         title: "Statement Deleted",
-        description: "The statement has been removed.",
-        variant: "success",
       });
       queryClient.invalidateQueries({ queryKey: ["statements"] });
     },
-    onError: (error: any) => {
-      toast({
+    onError: (error: Error) => {
+      errorToast(error.message || "Failed to delete statement.", {
         title: "Delete Failed",
-        description: error.message || "Failed to delete statement.",
-        variant: "destructive",
       });
     },
   });
@@ -88,7 +80,7 @@ export default function StatementsPage() {
         {/* Header Section */}
         <div>
           <p className="text-secondary-text">
-            Upload and manage your credit card statements. We'll automatically extract transactions and insights.
+            Upload and manage your credit card statements. We&apos;ll automatically extract transactions and insights.
           </p>
         </div>
 
