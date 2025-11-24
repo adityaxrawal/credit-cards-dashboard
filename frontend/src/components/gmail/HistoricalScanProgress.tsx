@@ -38,7 +38,7 @@ export default function HistoricalScanProgress({ jobId }: { jobId: string }) {
   const fetchProgress = async () => {
     try {
       const data = await apiClient.get(`/api/scanner/progress/${jobId}`);
-      setProgress(data as any);
+      setProgress(data as unknown as ScanProgress);
     } catch (error) {
       console.error("Failed to fetch progress:", error);
     } finally {

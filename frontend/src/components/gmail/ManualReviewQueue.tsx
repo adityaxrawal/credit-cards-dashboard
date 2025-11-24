@@ -36,7 +36,7 @@ export default function ManualReviewQueue() {
   const fetchPendingReviews = async () => {
     try {
       const data = await apiClient.get("/api/review/pending");
-      setItems((data as any).items || []);
+      setItems((data as unknown as { items: ReviewItem[] }).items || []);
     } catch (error) {
       console.error("Failed to fetch reviews:", error);
     } finally {

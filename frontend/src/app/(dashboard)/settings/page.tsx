@@ -57,7 +57,7 @@ export default function SettingsPage() {
 
 function SpendingLimitsSettings() {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { success, error: errorToast } = useToast();
 
   // Fetch settings
   const { data: userSettings, isLoading } = useQuery({
@@ -88,18 +88,13 @@ function SpendingLimitsSettings() {
 
   // Update mutation
   const updateMutation = useMutation({
-    mutationFn: (data: Partial<UserSettings>) =>
-      settingsApi.updateSettings(data),
+    mutationFn: settingsApi.updateSettings,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user-settings"] });
-      toast({ title: "Success", description: "Settings saved successfully", variant: "success" });
+      success("Spending limits updated successfully");
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
     },
     onError: (error: Error) => {
-      toast({ 
-        title: "Error", 
-        description: (error as any)?.response?.data?.message || "Failed to save settings", 
-        variant: "destructive" 
-      });
+      errorToast((error as any)?.response?.data?.message || "Failed to update settings");
     },
   });
 
@@ -204,7 +199,7 @@ function SpendingLimitsSettings() {
 
 function EmailPreferencesSettings() {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { success, error: errorToast } = useToast();
 
   // Fetch settings
   const { data: userSettings, isLoading } = useQuery({
@@ -244,10 +239,10 @@ function EmailPreferencesSettings() {
       settingsApi.updateSettings(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-settings"] });
-      toast({ title: "Success", description: "Preferences saved successfully", variant: "success" });
+      success("Preferences saved successfully");
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to save preferences", variant: "destructive" });
+      errorToast("Failed to save preferences");
     },
   });
 
@@ -357,7 +352,7 @@ function EmailPreferencesSettings() {
 }
 
 function GmailIntegrationSettings() {
-  const { toast } = useToast();
+  const { success, error: errorToast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: status, isLoading } = useQuery({
@@ -377,7 +372,7 @@ function GmailIntegrationSettings() {
       window.location.href = url;
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to initiate Gmail connection", variant: "destructive" });
+      errorToast("Failed to initiate Gmail connection", { title: "Error" });
     }
   });
 
@@ -387,15 +382,13 @@ function GmailIntegrationSettings() {
       return res.data;
     },
     onSuccess: (data) => {
-      toast({ 
-        title: "Sync Complete", 
-        description: `Found ${data.summary?.newTransactions || 0} new transactions.`, 
-        variant: "success" 
+      success(`Found ${data.summary?.newTransactions || 0} new transactions.`, { 
+        title: "Sync Complete" 
       });
       queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
     },
     onError: () => {
-      toast({ title: "Error", description: "Sync failed", variant: "destructive" });
+      errorToast("Sync failed", { title: "Error" });
     }
   });
 
@@ -404,11 +397,11 @@ function GmailIntegrationSettings() {
       await apiClient.post("/api/gmail/disconnect");
     },
     onSuccess: () => {
-      toast({ title: "Disconnected", description: "Gmail account disconnected", variant: "success" });
+      success("Gmail account disconnected", { title: "Disconnected" });
       queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to disconnect", variant: "destructive" });
+      errorToast("Failed to disconnect", { title: "Error" });
     }
   });
 
