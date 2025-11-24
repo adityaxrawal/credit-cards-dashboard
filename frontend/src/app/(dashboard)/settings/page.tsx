@@ -1,18 +1,18 @@
 "use client";
 
 import React from "react";
-import { Save, Mail, CreditCard, Smartphone } from "lucide-react";
+import { Save, Mail, CreditCard, Smartphone, Check, AlertTriangle, RefreshCw } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout";
 import { Button, Input, Toggle, ProgressBar } from "@/components/ui";
 import { cn, formatCurrency } from "@/lib/utils";
 import { settingsApi, type UserSettings } from "@/lib/api/settings";
 import { useToast } from "@/components/ui/Toast";
+import { apiClient } from "@/lib/api-client";
 
 const tabs = [
   { key: "spending", label: "Spending Limits", icon: CreditCard },
   { key: "email", label: "Email Preferences", icon: Mail },
-  { key: "cards", label: "Card Management", icon: CreditCard },
   { key: "gmail", label: "Gmail Integration", icon: Smartphone },
 ];
 
@@ -21,9 +21,9 @@ export default function SettingsPage() {
 
   return (
     <AppLayout title="Settings" showRightSidebar={false}>
-      <div className="flex gap-8">
+      <div className="flex flex-col md:flex-row gap-8">
         {/* Sidebar Navigation */}
-        <div className="w-64 space-y-2">
+        <div className="w-full md:w-64 space-y-2">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -45,10 +45,9 @@ export default function SettingsPage() {
         </div>
 
         {/* Content */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           {activeTab === "spending" && <SpendingLimitsSettings />}
           {activeTab === "email" && <EmailPreferencesSettings />}
-          {activeTab === "cards" && <CardManagementSettings />}
           {activeTab === "gmail" && <GmailIntegrationSettings />}
         </div>
       </div>
@@ -58,7 +57,7 @@ export default function SettingsPage() {
 
 function SpendingLimitsSettings() {
   const queryClient = useQueryClient();
-  const { success, error: errorToast } = useToast();
+  const { toast } = useToast();
 
   // Fetch settings
   const { data: userSettings, isLoading } = useQuery({
@@ -93,12 +92,14 @@ function SpendingLimitsSettings() {
       settingsApi.updateSettings(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-settings"] });
-      success("Settings saved successfully");
+      toast({ title: "Success", description: "Settings saved successfully", variant: "success" });
     },
     onError: (error: Error) => {
-      errorToast(
-        (error as any)?.response?.data?.message || "Failed to save settings"
-      );
+      toast({ 
+        title: "Error", 
+        description: (error as any)?.response?.data?.message || "Failed to save settings", 
+        variant: "destructive" 
+      });
     },
   });
 
@@ -111,12 +112,12 @@ function SpendingLimitsSettings() {
     updateMutation.mutate(data);
   };
 
-  const currentSpending = 400;
+  const currentSpending = 400; // This should ideally come from analytics API
   const monthlyLimit = parseInt(settings.monthlyLimit) || 0;
 
   if (isLoading) {
     return (
-      <div className="bg-card-bg rounded-lg p-6">
+      <div className="bg-card-bg rounded-xl p-6 border border-muted-text/10">
         <div className="animate-pulse space-y-4">
           <div className="h-4 bg-hover-bg rounded w-3/4"></div>
           <div className="h-4 bg-hover-bg rounded w-1/2"></div>
@@ -126,7 +127,7 @@ function SpendingLimitsSettings() {
   }
 
   return (
-    <div className="bg-card-bg rounded-lg p-6 space-y-6">
+    <div className="bg-card-bg rounded-xl p-6 border border-muted-text/10 space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-primary-text mb-2">
           Spending Limits
@@ -159,7 +160,7 @@ function SpendingLimitsSettings() {
             onChange={(e) =>
               setSettings({ ...settings, alertThreshold: e.target.value })
             }
-            className="w-full h-2 bg-hover-bg rounded-lg appearance-none cursor-pointer slider"
+            className="w-full h-2 bg-hover-bg rounded-lg appearance-none cursor-pointer accent-primary-green"
           />
           <p className="text-sm text-secondary-text mt-1">
             Get alerted when you reach {settings.alertThreshold}% of your
@@ -174,33 +175,10 @@ function SpendingLimitsSettings() {
           }
           label="Enable spending limit alerts"
         />
-
-        <div className="pt-4 border-t border-muted-text/20">
-          <Toggle
-            checked={settings.enableDailyLimit}
-            onChange={(checked) =>
-              setSettings({ ...settings, enableDailyLimit: checked })
-            }
-            label="Enable daily spending limit"
-          />
-
-          {settings.enableDailyLimit && (
-            <div className="mt-4">
-              <Input
-                label="Daily Spending Limit"
-                type="number"
-                value={settings.dailyLimit}
-                onChange={(e) =>
-                  setSettings({ ...settings, dailyLimit: e.target.value })
-                }
-              />
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Current Progress */}
-      <div className="pt-4 border-t border-muted-text/20">
+      <div className="pt-4 border-t border-muted-text/10">
         <h3 className="text-lg font-medium text-primary-text mb-4">
           Current Month Progress
         </h3>
@@ -226,7 +204,7 @@ function SpendingLimitsSettings() {
 
 function EmailPreferencesSettings() {
   const queryClient = useQueryClient();
-  const { success, error: errorToast } = useToast();
+  const { toast } = useToast();
 
   // Fetch settings
   const { data: userSettings, isLoading } = useQuery({
@@ -266,10 +244,10 @@ function EmailPreferencesSettings() {
       settingsApi.updateSettings(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-settings"] });
-      success("Preferences saved successfully");
+      toast({ title: "Success", description: "Preferences saved successfully", variant: "success" });
     },
     onError: () => {
-      errorToast("Failed to save preferences");
+      toast({ title: "Error", description: "Failed to save preferences", variant: "destructive" });
     },
   });
 
@@ -287,7 +265,7 @@ function EmailPreferencesSettings() {
 
   if (isLoading) {
     return (
-      <div className="bg-card-bg rounded-lg p-6">
+      <div className="bg-card-bg rounded-xl p-6 border border-muted-text/10">
         <div className="animate-pulse space-y-4">
           <div className="h-4 bg-hover-bg rounded w-3/4"></div>
           <div className="h-4 bg-hover-bg rounded w-1/2"></div>
@@ -297,7 +275,7 @@ function EmailPreferencesSettings() {
   }
 
   return (
-    <div className="bg-card-bg rounded-lg p-6 space-y-6">
+    <div className="bg-card-bg rounded-xl p-6 border border-muted-text/10 space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-primary-text mb-2">
           Email Preferences
@@ -316,7 +294,7 @@ function EmailPreferencesSettings() {
           label="Enable email notifications"
         />
 
-        <div className="ml-6 space-y-4">
+        <div className="ml-6 space-y-4 border-l-2 border-muted-text/10 pl-4">
           <Toggle
             checked={preferences.spendingAlerts}
             onChange={(checked) =>
@@ -356,29 +334,11 @@ function EmailPreferencesSettings() {
           </div>
 
           <Toggle
-            checked={preferences.unusualTransactions}
-            onChange={(checked) =>
-              setPreferences({ ...preferences, unusualTransactions: checked })
-            }
-            label="Unusual transaction alerts"
-            disabled={!preferences.emailNotifications}
-          />
-
-          <Toggle
             checked={preferences.weeklySummary}
             onChange={(checked) =>
               setPreferences({ ...preferences, weeklySummary: checked })
             }
             label="Weekly spending summary"
-            disabled={!preferences.emailNotifications}
-          />
-
-          <Toggle
-            checked={preferences.monthlyReport}
-            onChange={(checked) =>
-              setPreferences({ ...preferences, monthlyReport: checked })
-            }
-            label="Monthly spending report"
             disabled={!preferences.emailNotifications}
           />
         </div>
@@ -396,63 +356,99 @@ function EmailPreferencesSettings() {
   );
 }
 
-function CardManagementSettings() {
-  return (
-    <div className="bg-card-bg rounded-lg p-6">
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-primary-text mb-2">
-          Card Management
-        </h2>
-        <p className="text-secondary-text">
-          Manage your credit cards and their settings.
-        </p>
-      </div>
-
-      <div className="text-center py-12">
-        <CreditCard className="w-12 h-12 mx-auto mb-3 text-muted-text" />
-        <p className="text-secondary-text mb-4">
-          Card management settings will be available here.
-        </p>
-        <Button variant="secondary">Go to Cards Page</Button>
-      </div>
-    </div>
-  );
-}
-
 function GmailIntegrationSettings() {
-  const [isConnected, setIsConnected] = React.useState(false);
-  const [settings, setSettings] = React.useState({
-    autoSync: true,
-    syncFrequency: "hourly",
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: status, isLoading } = useQuery({
+    queryKey: ["gmail-status"],
+    queryFn: async () => {
+      const res = await apiClient.get<any>("/api/gmail/status");
+      return res.data;
+    }
   });
 
+  const connectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.post<any>("/api/gmail/auth-url");
+      return res.data.url;
+    },
+    onSuccess: (url) => {
+      window.location.href = url;
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to initiate Gmail connection", variant: "destructive" });
+    }
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.post<any>("/api/gmail/sync");
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: "Sync Complete", 
+        description: `Found ${data.summary?.newTransactions || 0} new transactions.`, 
+        variant: "success" 
+      });
+      queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Sync failed", variant: "destructive" });
+    }
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: async () => {
+      await apiClient.post("/api/gmail/disconnect");
+    },
+    onSuccess: () => {
+      toast({ title: "Disconnected", description: "Gmail account disconnected", variant: "success" });
+      queryClient.invalidateQueries({ queryKey: ["gmail-status"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to disconnect", variant: "destructive" });
+    }
+  });
+
+  if (isLoading) {
+    return (
+      <div className="bg-card-bg rounded-xl p-6 border border-muted-text/10">
+        <div className="animate-pulse space-y-4">
+          <div className="h-4 bg-hover-bg rounded w-3/4"></div>
+          <div className="h-4 bg-hover-bg rounded w-1/2"></div>
+        </div>
+      </div>
+    );
+  }
+
+  const isConnected = status?.connected;
+
   return (
-    <div className="bg-card-bg rounded-lg p-6 space-y-6">
+    <div className="bg-card-bg rounded-xl p-6 border border-muted-text/10 space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-primary-text mb-2">
           Gmail Integration
         </h2>
         <p className="text-secondary-text">
-          Connect your Gmail account to automatically import transactions.
+          Connect your Gmail account to automatically import transactions from bank emails.
         </p>
       </div>
 
       {/* Connection Status */}
-      <div className="p-4 bg-hover-bg rounded-lg">
+      <div className={cn(
+        "p-4 rounded-lg border",
+        isConnected ? "bg-success/5 border-success/20" : "bg-warning/5 border-warning/20"
+      )}>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-medium text-primary-text">Connection Status</h3>
-            <p
-              className={cn(
-                "text-sm",
-                isConnected ? "text-success" : "text-warning"
-              )}
-            >
+            <h3 className={cn("font-medium", isConnected ? "text-success" : "text-warning")}>
               {isConnected ? "Connected to Gmail" : "Not connected"}
-            </p>
-            {isConnected && (
+            </h3>
+            {isConnected && status?.lastSync && (
               <p className="text-xs text-secondary-text mt-1">
-                Last synced: 2 hours ago
+                Last synced: {new Date(status.lastSync).toLocaleString()}
               </p>
             )}
           </div>
@@ -468,55 +464,46 @@ function GmailIntegrationSettings() {
       {/* Actions */}
       <div className="space-y-4">
         {!isConnected ? (
-          <Button onClick={() => setIsConnected(true)} className="w-full">
+          <Button 
+            onClick={() => connectMutation.mutate()} 
+            className="w-full"
+            disabled={connectMutation.isPending}
+          >
             <Mail className="w-4 h-4 mr-2" />
-            Connect Gmail Account
+            {connectMutation.isPending ? "Connecting..." : "Connect Gmail Account"}
           </Button>
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <Button variant="secondary">Sync Now</Button>
-              <Button variant="secondary">Scan Historical Emails</Button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Button 
+                variant="secondary" 
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
+              >
+                <RefreshCw className={cn("w-4 h-4 mr-2", syncMutation.isPending && "animate-spin")} />
+                {syncMutation.isPending ? "Syncing..." : "Sync Now"}
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={() => disconnectMutation.mutate()}
+                disabled={disconnectMutation.isPending}
+              >
+                Disconnect Gmail
+              </Button>
             </div>
 
-            <Toggle
-              checked={settings.autoSync}
-              onChange={(checked) =>
-                setSettings({ ...settings, autoSync: checked })
-              }
-              label="Enable automatic sync"
-            />
-
-            {settings.autoSync && (
-              <div>
-                <label className="block text-sm font-medium text-primary-text mb-2">
-                  Sync Frequency
-                </label>
-                <select
-                  value={settings.syncFrequency}
-                  onChange={(e) =>
-                    setSettings({ ...settings, syncFrequency: e.target.value })
-                  }
-                  className="w-full p-2 bg-primary-bg border border-muted-text/20 rounded-lg text-primary-text"
-                >
-                  <option value="realtime">Real-time</option>
-                  <option value="hourly">Hourly</option>
-                  <option value="daily">Daily</option>
-                </select>
+            <div className="bg-hover-bg p-4 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                <div className="text-sm text-secondary-text">
+                  <p className="font-medium text-primary-text mb-1">Privacy Note</p>
+                  <p>We only scan emails from known banks for transaction details. Your other emails are never accessed or stored.</p>
+                </div>
               </div>
-            )}
-
-            <Button variant="error" onClick={() => setIsConnected(false)}>
-              Disconnect Gmail
-            </Button>
+            </div>
           </div>
         )}
       </div>
-
-      <Button className="w-full">
-        <Save className="w-4 h-4 mr-2" />
-        Save Settings
-      </Button>
     </div>
   );
 }

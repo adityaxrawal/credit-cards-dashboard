@@ -1,7 +1,8 @@
 import React from "react";
-import { Search, Mail, MessageCircle, Wallet, User } from "lucide-react";
+import { Search, Mail, MessageCircle, Wallet, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "./NotificationBell";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 export interface HeaderProps {
   title: string;
@@ -10,6 +11,7 @@ export interface HeaderProps {
 
 export function Header({ title, className }: HeaderProps) {
   const [searchValue, setSearchValue] = React.useState("");
+  const { logout } = useAuth();
 
   return (
     <div
@@ -42,6 +44,7 @@ export function Header({ title, className }: HeaderProps) {
           <HeaderAction icon={Mail} />
           <HeaderAction icon={MessageCircle} />
           <HeaderAction icon={Wallet} />
+          <HeaderAction icon={LogOut} onClick={logout} className="text-error hover:text-error/80" />
 
           {/* Notifications with dynamic badge */}
           <NotificationBell />

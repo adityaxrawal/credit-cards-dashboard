@@ -2,22 +2,26 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Home,
-  BarChart3,
+  LayoutDashboard,
   CreditCard,
-  Wallet,
-  FolderOpen,
+  ArrowRightLeft,
+  Receipt,
+  FileText,
+  Gift,
+  BarChart3,
   Settings,
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigationItems = [
-  { icon: Home, href: "/", label: "Dashboard" },
-  { icon: BarChart3, href: "/analytics", label: "Analytics" },
+  { icon: LayoutDashboard, href: "/dashboard", label: "Dashboard" },
   { icon: CreditCard, href: "/cards", label: "Cards" },
-  { icon: Wallet, href: "/transactions", label: "Transactions" },
-  { icon: FolderOpen, href: "/documents", label: "Documents" },
+  { icon: ArrowRightLeft, href: "/transactions", label: "Transactions" },
+  { icon: Receipt, href: "/bills", label: "Bills" },
+  { icon: FileText, href: "/statements", label: "Statements" },
+  { icon: Gift, href: "/rewards", label: "Rewards" },
+  { icon: BarChart3, href: "/analytics", label: "Analytics" },
   { icon: Settings, href: "/settings", label: "Settings" },
 ];
 
@@ -38,7 +42,7 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex flex-col space-y-4 flex-1">
         {navigationItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href));
           const Icon = item.icon;
 
           return (
@@ -61,7 +65,7 @@ export function Sidebar() {
                 />
 
                 {/* Tooltip */}
-                <div className="absolute left-full ml-2 px-2 py-1 bg-card-bg text-primary-text text-sm rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                <div className="absolute left-full ml-2 px-2 py-1 bg-card-bg text-primary-text text-sm rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 shadow-lg border border-muted-text/10">
                   {item.label}
                 </div>
               </div>
@@ -84,7 +88,7 @@ export function MobileSidebar() {
     <>
       {/* Mobile toggle button */}
       <button
-        className="fixed top-4 left-4 z-50 w-10 h-10 bg-card-bg rounded-lg flex items-center justify-center md:hidden"
+        className="fixed top-4 left-4 z-50 w-10 h-10 bg-card-bg rounded-lg flex items-center justify-center md:hidden shadow-sm border border-muted-text/10"
         onClick={() => setIsOpen(!isOpen)}
       >
         <div className="w-5 h-5 flex flex-col justify-center space-y-1">
@@ -130,14 +134,13 @@ export function MobileSidebar() {
               <User className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="font-semibold text-primary-text">User Name</p>
-              <p className="text-sm text-secondary-text">user@example.com</p>
+              <p className="font-semibold text-primary-text">Dashboard</p>
             </div>
           </div>
 
           <nav className="space-y-2">
             {navigationItems.map((item) => {
-              const isActive = pathname === item.href;
+              const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href));
               const Icon = item.icon;
 
               return (

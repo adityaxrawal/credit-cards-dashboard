@@ -61,7 +61,7 @@ export const analyticsApi = {
    * Get dashboard overview statistics
    */
   getDashboardOverview: async (): Promise<DashboardOverview> => {
-    return apiGet<{ data: DashboardOverview }>("/analytics/dashboard").then(
+    return apiGet<{ data: DashboardOverview }>("/api/analytics/dashboard").then(
       (res) => res.data
     );
   },
@@ -78,7 +78,7 @@ export const analyticsApi = {
     if (endDate) params.append("endDate", endDate);
 
     return apiGet<{ data: CategorySpending[] }>(
-      `/analytics/spending-by-category?${params.toString()}`
+      `/api/analytics/spending-by-category?${params.toString()}`
     ).then((res) => res.data);
   },
 
@@ -90,7 +90,7 @@ export const analyticsApi = {
     limit: number = 12
   ): Promise<SpendingTrendItem[]> => {
     return apiGet<{ data: { trend: SpendingTrendItem[] } }>(
-      `/analytics/spending-trend?period=${period}&limit=${limit}`
+      `/api/analytics/spending-trend?period=${period}&limit=${limit}`
     ).then((res) => res.data.trend);
   },
 
@@ -99,7 +99,7 @@ export const analyticsApi = {
    */
   getUpcomingBills: async (days: number = 30): Promise<UpcomingBill[]> => {
     return apiGet<{ data: { bills: UpcomingBill[] } }>(
-      `/analytics/upcoming-bills?days=${days}`
+      `/api/analytics/upcoming-bills?days=${days}`
     ).then((res) => res.data.bills);
   },
 
@@ -108,7 +108,7 @@ export const analyticsApi = {
    */
   getCardUtilization: async (): Promise<CardUtilization[]> => {
     return apiGet<{ data: { cards: CardUtilization[] } }>(
-      "/analytics/card-utilization"
+      "/api/analytics/card-utilization"
     ).then((res) => res.data.cards);
   },
 
@@ -117,7 +117,7 @@ export const analyticsApi = {
    */
   getMonthlyComparison: async (): Promise<MonthlyComparison> => {
     return apiGet<{ data: MonthlyComparison }>(
-      "/analytics/monthly-comparison"
+      "/api/analytics/monthly-comparison"
     ).then((res) => res.data);
   },
 };
