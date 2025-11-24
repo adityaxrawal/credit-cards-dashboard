@@ -364,6 +364,15 @@ interface AddCardModalProps {
   isSubmitting: boolean;
 }
 
+const CARD_PRESETS = [
+  { name: "SBI Cashback", bank: "SBI", billDate: 9, dueDate: 29 },
+  { name: "HDFC Swiggy", bank: "HDFC", billDate: 13, dueDate: 2 },
+  { name: "HDFC Tata Neu Plus", bank: "HDFC", billDate: 1, dueDate: 21 },
+  { name: "Axis Ace", bank: "Axis", billDate: 15, dueDate: 5 },
+  { name: "ICICI Amazon Pay", bank: "ICICI", billDate: 12, dueDate: 2 },
+  { name: "Amex Platinum Travel", bank: "American Express", billDate: 18, dueDate: 8 },
+];
+
 function AddCardModal({
   isOpen,
   onClose,
@@ -405,6 +414,22 @@ function AddCardModal({
     }
   }, [card, isOpen]);
 
+  const handlePresetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const presetName = e.target.value;
+    if (!presetName) return;
+
+    const preset = CARD_PRESETS.find((p) => p.name === presetName);
+    if (preset) {
+      setFormData((prev) => ({
+        ...prev,
+        card_name: preset.name,
+        bank_name: preset.bank,
+        bill_date: preset.billDate,
+        due_date: preset.dueDate,
+      }));
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit(formData);
@@ -418,6 +443,26 @@ function AddCardModal({
       size="md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {!card && (
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-secondary-text">
+              Quick Fill (Optional)
+            </label>
+            <select
+              className="w-full p-2 rounded-lg border border-border bg-input-bg text-primary-text focus:ring-2 focus:ring-primary-green focus:border-transparent outline-none transition-all"
+              onChange={handlePresetChange}
+              defaultValue=""
+            >
+              <option value="">Select a popular card...</option>
+              {CARD_PRESETS.map((preset) => (
+                <option key={preset.name} value={preset.name}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <Input
           label="Card Name"
           required

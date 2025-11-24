@@ -11,11 +11,12 @@ import {
   Clock,
   AlertCircle,
   Repeat,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Modal } from "@/components/ui/Modal";
-import { Badge } from "@/components/ui/Badge";
+import { AppLayout } from "@/components/layout";
+import { Button, Input, Modal, Badge } from "@/components/ui";
+import { formatCurrency, cn } from "@/lib/utils";
 
 interface BillReminder {
   id: string;
@@ -81,7 +82,7 @@ export default function BillsCalendarPage() {
     queryKey: ["billCalendar", selectedMonth.toISOString()],
     queryFn: async () => {
       const response = await apiClient.get<any>(
-        `/bills/calendar?startDate=${startOfMonth.toISOString()}&endDate=${endOfMonth.toISOString()}`
+        `/api/bills/calendar?startDate=${startOfMonth.toISOString()}&endDate=${endOfMonth.toISOString()}`
       );
       return response.data as CalendarEvent[];
     },
@@ -91,7 +92,7 @@ export default function BillsCalendarPage() {
   const { data: reminders } = useQuery({
     queryKey: ["billReminders"],
     queryFn: async () => {
-      const response = await apiClient.get<any>("/bills/reminders");
+      const response = await apiClient.get<any>("/api/bills/reminders");
       return response.data as BillReminder[];
     },
   });
@@ -101,7 +102,7 @@ export default function BillsCalendarPage() {
     queryKey: ["recurringTemplates"],
     queryFn: async () => {
       const response = await apiClient.get<any>(
-        "/bills/recurring-templates?activeOnly=true"
+        "/api/bills/recurring-templates?activeOnly=true"
       );
       return response.data;
     },
@@ -110,7 +111,7 @@ export default function BillsCalendarPage() {
   // Create reminder mutation
   const createReminderMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await apiClient.post("/bills/reminders", data);
+      const response = await apiClient.post("/api/bills/reminders", data);
       return response.data;
     },
     onSuccess: () => {
@@ -124,7 +125,7 @@ export default function BillsCalendarPage() {
   // Mark as paid mutation
   const markAsPaidMutation = useMutation({
     mutationFn: async ({ id, amount }: { id: string; amount: number }) => {
-      const response = await apiClient.put(`/bills/reminders/${id}/paid`, {
+      const response = await apiClient.put(`/api/bills/reminders/${id}/paid`, {
         amount,
       });
       return response.data;
@@ -138,7 +139,7 @@ export default function BillsCalendarPage() {
   // Detect recurring bills
   const detectRecurringMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiClient.post<any>("/bills/detect-recurring");
+      const response = await apiClient.post<any>("/api/bills/detect-recurring");
       return response.data;
     },
     onSuccess: (data: any) => {
@@ -205,11 +206,11 @@ export default function BillsCalendarPage() {
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { label: string; className: string }> = {
-      pending: { label: "Pending", className: "bg-yellow-100 text-yellow-800" },
-      sent: { label: "Sent", className: "bg-blue-100 text-blue-800" },
-      paid: { label: "Paid", className: "bg-green-100 text-green-800" },
-      overdue: { label: "Overdue", className: "bg-red-100 text-red-800" },
-      cancelled: { label: "Cancelled", className: "bg-gray-100 text-gray-800" },
+      pending: { label: "Pending", className: "bg-warning/10 text-warning" },
+      sent: { label: "Sent", className: "bg-info/10 text-info" },
+      paid: { label: "Paid", className: "bg-success/10 text-success" },
+      overdue: { label: "Overdue", className: "bg-error/10 text-error" },
+      cancelled: { label: "Cancelled", className: "bg-muted-text/10 text-muted-text" },
     };
     const variant = variants[status] || variants.pending;
     return (
@@ -225,23 +226,22 @@ export default function BillsCalendarPage() {
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+    <AppLayout title="Bills & Reminders" showRightSidebar={false}>
+      <div className="space-y-6">
+        {/* Header Actions */}
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Bill Calendar & Reminders</h1>
-            <p className="text-gray-500 mt-1">
+            <p className="text-secondary-text">
               Manage your bill due dates and payment reminders
             </p>
           </div>
           <div className="flex items-center space-x-3">
             <Button
-              variant="outline"
+              variant="secondary"
               onClick={() => detectRecurringMutation.mutate()}
             >
               <Repeat className="w-4 h-4 mr-2" />
-              Detect Recurring Bills
+              Detect Recurring
             </Button>
             <Button onClick={() => setShowCreateModal(true)}>
               <Plus className="w-4 h-4 mr-2" />
@@ -251,29 +251,36 @@ export default function BillsCalendarPage() {
         </div>
 
         {/* View Toggle */}
-        <div className="mb-6 flex items-center space-x-2">
-          <Button
-            variant={viewMode === "calendar" ? "primary" : "outline"}
+        <div className="flex items-center space-x-2 bg-hover-bg p-1 rounded-lg w-fit">
+          <button
+            className={cn(
+              "px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center",
+              viewMode === "calendar" ? "bg-card-bg text-primary-text shadow-sm" : "text-secondary-text hover:text-primary-text"
+            )}
             onClick={() => setViewMode("calendar")}
           >
             <CalendarIcon className="w-4 h-4 mr-2" />
             Calendar View
-          </Button>
-          <Button
-            variant={viewMode === "list" ? "primary" : "outline"}
+          </button>
+          <button
+            className={cn(
+              "px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center",
+              viewMode === "list" ? "bg-card-bg text-primary-text shadow-sm" : "text-secondary-text hover:text-primary-text"
+            )}
             onClick={() => setViewMode("list")}
           >
             List View
-          </Button>
+          </button>
         </div>
 
         {viewMode === "calendar" ? (
           <>
             {/* Calendar Navigation */}
-            <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+            <div className="bg-card-bg rounded-xl border border-muted-text/10 shadow-sm p-4">
               <div className="flex items-center justify-between">
                 <Button
-                  variant="outline"
+                  variant="ghost"
+                  size="sm"
                   onClick={() =>
                     setSelectedMonth(
                       new Date(
@@ -283,16 +290,17 @@ export default function BillsCalendarPage() {
                     )
                   }
                 >
-                  Previous
+                  <ChevronLeft className="w-4 h-4" />
                 </Button>
-                <h2 className="text-xl font-semibold">
+                <h2 className="text-xl font-semibold text-primary-text">
                   {selectedMonth.toLocaleDateString("en-US", {
                     month: "long",
                     year: "numeric",
                   })}
                 </h2>
                 <Button
-                  variant="outline"
+                  variant="ghost"
+                  size="sm"
                   onClick={() =>
                     setSelectedMonth(
                       new Date(
@@ -302,18 +310,18 @@ export default function BillsCalendarPage() {
                     )
                   }
                 >
-                  Next
+                  <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
             </div>
 
             {/* Calendar Grid */}
-            <div className="bg-white rounded-lg shadow-sm p-4">
+            <div className="bg-card-bg rounded-xl border border-muted-text/10 shadow-sm p-4">
               <div className="grid grid-cols-7 gap-2 mb-2">
                 {weekDays.map((day) => (
                   <div
                     key={day}
-                    className="text-center font-semibold text-gray-600 py-2"
+                    className="text-center font-semibold text-secondary-text py-2"
                   >
                     {day}
                   </div>
@@ -325,7 +333,7 @@ export default function BillsCalendarPage() {
                     return (
                       <div
                         key={`empty-${index}`}
-                        className="min-h-[100px] bg-gray-50 rounded"
+                        className="min-h-[100px] bg-hover-bg/50 rounded-lg"
                       ></div>
                     );
                   }
@@ -339,14 +347,15 @@ export default function BillsCalendarPage() {
                   return (
                     <div
                       key={day.toISOString()}
-                      className={`min-h-[100px] border rounded-lg p-2 cursor-pointer hover:shadow-md transition-shadow ${
+                      className={cn(
+                        "min-h-[100px] border rounded-lg p-2 cursor-pointer hover:shadow-md transition-all",
                         isToday
-                          ? "border-blue-500 bg-blue-50"
-                          : "border-gray-200"
-                      }`}
+                          ? "border-primary-green bg-primary-green/5"
+                          : "border-muted-text/10 bg-card-bg hover:bg-hover-bg"
+                      )}
                       onClick={() => setSelectedDate(day)}
                     >
-                      <div className="font-semibold text-sm mb-1">
+                      <div className={cn("font-semibold text-sm mb-1", isToday ? "text-primary-green" : "text-primary-text")}>
                         {day.getDate()}
                       </div>
                       <div className="space-y-1">
@@ -363,7 +372,7 @@ export default function BillsCalendarPage() {
                           </div>
                         ))}
                         {events.length > 3 && (
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-secondary-text">
                             +{events.length - 3} more
                           </div>
                         )}
@@ -377,10 +386,10 @@ export default function BillsCalendarPage() {
         ) : (
           <>
             {/* List View */}
-            <div className="space-y-4">
+            <div className="space-y-6">
               {/* Upcoming Bills */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-semibold mb-4">Upcoming Bills</h3>
+              <div className="bg-card-bg rounded-xl border border-muted-text/10 shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-primary-text mb-4">Upcoming Bills</h3>
                 <div className="space-y-3">
                   {reminders
                     ?.filter(
@@ -394,23 +403,23 @@ export default function BillsCalendarPage() {
                     .map((reminder) => (
                       <div
                         key={reminder.id}
-                        className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
+                        className="flex items-center justify-between p-4 bg-hover-bg rounded-lg hover:shadow-sm transition-shadow"
                       >
                         <div className="flex-1">
                           <div className="flex items-center space-x-3">
-                            <h4 className="font-semibold">{reminder.title}</h4>
+                            <h4 className="font-semibold text-primary-text">{reminder.title}</h4>
                             {getStatusBadge(reminder.status)}
                             {reminder.isRecurring && (
-                              <Badge variant="secondary" className="text-xs">
+                              <Badge variant="secondary" className="text-xs bg-card-bg">
                                 <Repeat className="w-3 h-3 mr-1" />
                                 {reminder.recurrencePattern}
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-gray-600 mt-1">
+                          <p className="text-sm text-secondary-text mt-1">
                             {reminder.description}
                           </p>
-                          <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
+                          <div className="flex items-center space-x-4 mt-2 text-sm text-secondary-text">
                             <span className="flex items-center">
                               <CalendarIcon className="w-4 h-4 mr-1" />
                               Due:{" "}
@@ -424,15 +433,15 @@ export default function BillsCalendarPage() {
                               ).toLocaleDateString()}
                             </span>
                             {reminder.credit_cards && (
-                              <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                              <span className="text-xs bg-card-bg px-2 py-1 rounded border border-muted-text/10">
                                 {reminder.credit_cards.card_name}
                               </span>
                             )}
                           </div>
                         </div>
                         <div className="flex flex-col items-end space-y-2 ml-4">
-                          <p className="text-xl font-bold">
-                            ${reminder.amount.toFixed(2)}
+                          <p className="text-xl font-bold text-primary-text">
+                            {formatCurrency(reminder.amount)}
                           </p>
                           {reminder.status !== "paid" && (
                             <Button
@@ -454,7 +463,7 @@ export default function BillsCalendarPage() {
                   {!reminders?.some(
                     (r) => r.status === "pending" || r.status === "sent"
                   ) && (
-                    <p className="text-center text-gray-500 py-8">
+                    <p className="text-center text-secondary-text py-8">
                       No upcoming bills
                     </p>
                   )}
@@ -463,8 +472,8 @@ export default function BillsCalendarPage() {
 
               {/* Overdue Bills */}
               {reminders?.some((r) => r.status === "overdue") && (
-                <div className="bg-red-50 border border-red-200 rounded-lg shadow-sm p-6">
-                  <h3 className="text-lg font-semibold text-red-800 mb-4 flex items-center">
+                <div className="bg-error/5 border border-error/20 rounded-xl shadow-sm p-6">
+                  <h3 className="text-lg font-semibold text-error mb-4 flex items-center">
                     <AlertCircle className="w-5 h-5 mr-2" />
                     Overdue Bills
                   </h3>
@@ -474,23 +483,23 @@ export default function BillsCalendarPage() {
                       .map((reminder) => (
                         <div
                           key={reminder.id}
-                          className="flex items-center justify-between p-4 bg-white border border-red-200 rounded-lg"
+                          className="flex items-center justify-between p-4 bg-card-bg border border-error/20 rounded-lg"
                         >
                           <div className="flex-1">
-                            <h4 className="font-semibold text-red-800">
+                            <h4 className="font-semibold text-error">
                               {reminder.title}
                             </h4>
-                            <p className="text-sm text-gray-600 mt-1">
+                            <p className="text-sm text-secondary-text mt-1">
                               {reminder.description}
                             </p>
-                            <p className="text-sm text-red-600 mt-2">
+                            <p className="text-sm text-error mt-2">
                               Due:{" "}
                               {new Date(reminder.dueDate).toLocaleDateString()}
                             </p>
                           </div>
                           <div className="flex flex-col items-end space-y-2 ml-4">
-                            <p className="text-xl font-bold text-red-600">
-                              ${reminder.amount.toFixed(2)}
+                            <p className="text-xl font-bold text-error">
+                              {formatCurrency(reminder.amount)}
                             </p>
                             <Button
                               variant="destructive"
@@ -514,35 +523,35 @@ export default function BillsCalendarPage() {
 
               {/* Recurring Templates */}
               {recurringTemplates && recurringTemplates.length > 0 && (
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h3 className="text-lg font-semibold mb-4">
+                <div className="bg-card-bg rounded-xl border border-muted-text/10 shadow-sm p-6">
+                  <h3 className="text-lg font-semibold text-primary-text mb-4">
                     Recurring Bills
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {recurringTemplates.map((template: any) => (
                       <div
                         key={template.id}
-                        className="p-4 border border-gray-200 rounded-lg"
+                        className="p-4 border border-muted-text/10 rounded-lg bg-hover-bg"
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-semibold">{template.title}</h4>
-                          <Badge variant="secondary">
+                          <h4 className="font-semibold text-primary-text">{template.title}</h4>
+                          <Badge variant="secondary" className="bg-card-bg">
                             <Repeat className="w-3 h-3 mr-1" />
                             {template.recurrence_pattern}
                           </Badge>
                         </div>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-secondary-text">
                           {template.description}
                         </p>
                         <div className="mt-3 flex items-center justify-between text-sm">
-                          <span className="text-gray-500">
+                          <span className="text-secondary-text">
                             Next:{" "}
                             {new Date(
                               template.next_generation_date
                             ).toLocaleDateString()}
                           </span>
-                          <span className="font-semibold">
-                            ${template.typical_amount?.toFixed(2) || "N/A"}
+                          <span className="font-semibold text-primary-text">
+                            {template.typical_amount ? formatCurrency(template.typical_amount) : "N/A"}
                           </span>
                         </div>
                       </div>
@@ -563,7 +572,7 @@ export default function BillsCalendarPage() {
           >
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-primary-text mb-1">
                   Title
                 </label>
                 <Input
@@ -575,7 +584,7 @@ export default function BillsCalendarPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-primary-text mb-1">
                   Description
                 </label>
                 <Input
@@ -590,7 +599,7 @@ export default function BillsCalendarPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-primary-text mb-1">
                   Amount
                 </label>
                 <Input
@@ -603,7 +612,7 @@ export default function BillsCalendarPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-primary-text mb-1">
                   Due Date
                 </label>
                 <Input
@@ -624,15 +633,15 @@ export default function BillsCalendarPage() {
                       isRecurring: e.target.checked,
                     })
                   }
-                  className="w-4 h-4"
+                  className="w-4 h-4 rounded border-muted-text/20 bg-input-bg text-primary-green focus:ring-primary-green"
                 />
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-primary-text">
                   Recurring Bill
                 </label>
               </div>
               {newReminder.isRecurring && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-primary-text mb-1">
                     Recurrence
                   </label>
                   <select
@@ -643,7 +652,7 @@ export default function BillsCalendarPage() {
                         recurrencePattern: e.target.value,
                       })
                     }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    className="w-full border border-muted-text/20 rounded-lg px-3 py-2 bg-input-bg text-primary-text focus:outline-none focus:ring-2 focus:ring-primary-green"
                   >
                     <option value="monthly">Monthly</option>
                     <option value="biweekly">Bi-weekly</option>
@@ -654,7 +663,7 @@ export default function BillsCalendarPage() {
               )}
               <div className="flex justify-end space-x-3 mt-6">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   onClick={() => setShowCreateModal(false)}
                 >
                   Cancel
@@ -670,6 +679,6 @@ export default function BillsCalendarPage() {
           </Modal>
         )}
       </div>
-    </div>
+    </AppLayout>
   );
 }

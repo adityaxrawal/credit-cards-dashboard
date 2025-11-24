@@ -7,6 +7,7 @@ import {
   Download,
   Filter as FilterIcon,
   X,
+  Upload,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout";
@@ -26,6 +27,7 @@ import {
 } from "@/lib/api/transactions";
 import { cardApi } from "@/lib/api/cards";
 import { useToast } from "@/components/ui/Toast";
+import { BulkImportModal } from "@/components/transactions/BulkImportModal";
 
 interface TransactionModalData {
   id?: string;
@@ -46,6 +48,7 @@ export default function TransactionsPage() {
   const [searchValue, setSearchValue] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "debit" | "credit">("all");
   const [showModal, setShowModal] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [editingTransaction, setEditingTransaction] =
     useState<TransactionModalData | null>(null);
@@ -382,6 +385,10 @@ export default function TransactionsPage() {
               {(selectedCard || dateRange.start || categoryFilter) && (
                 <Badge label="•" variant="warning" size="sm" className="ml-1" />
               )}
+            </Button>
+            <Button variant="secondary" onClick={() => setShowBulkImport(true)}>
+              <Upload className="w-4 h-4 mr-2" />
+              Bulk Import
             </Button>
             <Button variant="secondary">
               <Download className="w-4 h-4 mr-2" />
@@ -734,6 +741,13 @@ export default function TransactionsPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Bulk Import Modal */}
+      <BulkImportModal
+        isOpen={showBulkImport}
+        onClose={() => setShowBulkImport(false)}
+        cards={cards}
+      />
     </AppLayout>
   );
 }

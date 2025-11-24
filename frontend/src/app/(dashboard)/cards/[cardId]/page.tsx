@@ -2,92 +2,19 @@
 
 import React, { useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Edit3, Trash2, Plus, Filter, Calendar } from "lucide-react";
 import { AppLayout } from "@/components/layout";
-import { Button, ProgressBar, Modal, Input, Badge } from "@/components/ui";
+import { Button, ProgressBar, Modal, Input, Badge, CardVisual } from "@/components/ui";
+import { useToast } from "@/components/ui/Toast";
 import {
   SpendingTrendChart,
   CategoryBreakdownChart,
   WeeklySpendingChart,
 } from "@/components/analytics";
-import { formatCurrency, cn } from "@/lib/utils";
-import type { CreditCard, Transaction } from "@/types";
-
-// Mock data for card details
-const mockCard: CreditCard = {
-  id: "1",
-  card_name: "Chase Sapphire Preferred",
-  bank_name: "Chase",
-  card_number_last4: "4080",
-  bill_date: 15,
-  due_date: 5,
-  credit_limit: 10000,
-  current_balance: 2500,
-  is_active: true,
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-};
-
-const mockExpiryDate = "08/28";
-
-// Mock transactions data
-const mockTransactions: Transaction[] = [
-  {
-    id: "1",
-    amount: -85.5,
-    transaction_date: "2024-01-15",
-    merchant: "Amazon",
-    description: "Online purchase",
-    category: "Shopping",
-    card_id: "1",
-    bill_month: 1,
-    bill_year: 2024,
-    is_settled: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    amount: -45.2,
-    transaction_date: "2024-01-14",
-    merchant: "Starbucks",
-    description: "Coffee",
-    category: "Food & Dining",
-    card_id: "1",
-    bill_month: 1,
-    bill_year: 2024,
-    is_settled: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
-
-// Mock analytics data
-const spendingTrendData = [
-  { month: "Jan", spending: 2800 },
-  { month: "Feb", spending: 3200 },
-  { month: "Mar", spending: 2100 },
-  { month: "Apr", spending: 2900 },
-  { month: "May", spending: 3500 },
-  { month: "Jun", spending: 2400 },
-];
-
-const categoryData = [
-  { category: "Shopping", amount: 1200, percentage: 48 },
-  { category: "Food & Dining", amount: 800, percentage: 32 },
-  { category: "Transportation", amount: 300, percentage: 12 },
-  { category: "Entertainment", amount: 200, percentage: 8 },
-];
-
-const weeklyData = [
-  { day: "Mon", amount: 45 },
-  { day: "Tue", amount: 78 },
-  { day: "Wed", amount: 32 },
-  { day: "Thu", amount: 95 },
-  { day: "Fri", amount: 120 },
-  { day: "Sat", amount: 85 },
-  { day: "Sun", amount: 40 },
-];
+import { formatCurrency, cn, getCardGradient, calculateUtilization } from "@/lib/utils";
+import { cardApi, type Card, type CardFormData } from "@/lib/api/cards";
+import { transactionApi, type Transaction, type TransactionFormData } from "@/lib/api/transactions";
 
 const tabs = [
   { key: "transactions", label: "Transactions" },
@@ -98,6 +25,8 @@ export default function CardDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+  const { success, error: errorToast } = useToast();
   const cardId = params.cardId as string;
 
   const [activeTab, setActiveTab] = useState(
@@ -106,19 +35,100 @@ export default function CardDetailPage() {
   const [showAddTransaction, setShowAddTransaction] = useState(false);
   const [showEditCard, setShowEditCard] = useState(false);
 
-  const creditLimit = mockCard.credit_limit || 0;
-  const availableCredit = creditLimit - mockCard.current_balance;
+  // Fetch Card Details
+  const { data: card, isLoading: isCardLoading } = useQuery({
+    queryKey: ["card", cardId],
+    queryFn: () => cardApi.getCard(cardId),
+  });
 
-  const transactionColumns = [
-    { key: "date", label: "Date" },
-    { key: "description", label: "Description" },
-    { key: "category", label: "Category" },
-    { key: "amount", label: "Amount" },
-    { key: "status", label: "Status" },
-  ];
+  // Fetch Transactions
+  const { data: transactionData, isLoading: isTransactionsLoading } = useQuery({
+    queryKey: ["transactions", cardId],
+    queryFn: () => transactionApi.getTransactions({ cardId }),
+  });
+
+  // Fetch Statistics
+  const { data: stats, isLoading: isStatsLoading } = useQuery({
+    queryKey: ["card-stats", cardId],
+    queryFn: () => cardApi.getCardStatistics(cardId),
+  });
+
+  // Delete Card Mutation
+  const deleteCardMutation = useMutation({
+    mutationFn: (id: string) => cardApi.deleteCard(id),
+    onSuccess: () => {
+      success("Card deleted successfully");
+      router.push("/cards");
+    },
+    onError: (error: any) => {
+      errorToast(error.response?.data?.message || "Failed to delete card");
+    },
+  });
+
+  // Update Card Mutation
+  const updateCardMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<CardFormData> }) =>
+      cardApi.updateCard(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["card", cardId] });
+      queryClient.invalidateQueries({ queryKey: ["cards"] });
+      success("Card updated successfully");
+      setShowEditCard(false);
+    },
+    onError: (error: any) => {
+      errorToast(error.response?.data?.message || "Failed to update card");
+    },
+  });
+
+  // Add Transaction Mutation
+  const addTransactionMutation = useMutation({
+    mutationFn: (data: TransactionFormData) => transactionApi.createTransaction(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions", cardId] });
+      queryClient.invalidateQueries({ queryKey: ["card", cardId] }); // Balance might change
+      queryClient.invalidateQueries({ queryKey: ["card-stats", cardId] });
+      success("Transaction added successfully");
+      setShowAddTransaction(false);
+    },
+    onError: (error: any) => {
+      errorToast(error.response?.data?.message || "Failed to add transaction");
+    },
+  });
+
+  if (isCardLoading) {
+    return (
+      <AppLayout title="Card Details" showRightSidebar={false}>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-600">Loading card details...</div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!card) {
+    return (
+      <AppLayout title="Card Not Found" showRightSidebar={false}>
+        <div className="text-center py-12">
+          <p className="text-secondary-text mb-4">Card not found</p>
+          <Button onClick={() => router.push("/cards")}>Back to Cards</Button>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const creditLimit = card.credit_limit || 0;
+  const availableCredit = creditLimit - card.current_outstanding;
+  const utilization = calculateUtilization(card.current_outstanding, creditLimit);
+  const gradient = getCardGradient(card.card_name || card.bank_name || "default");
+
+  const handleDelete = () => {
+    if (confirm(`Are you sure you want to delete ${card.card_name}?`)) {
+      deleteCardMutation.mutate(card.id);
+    }
+  };
 
   return (
-    <AppLayout title={mockCard.card_name} showRightSidebar={false}>
+    <AppLayout title={card.card_name} showRightSidebar={false}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -129,9 +139,9 @@ export default function CardDetailPage() {
             </Button>
             <div>
               <h1 className="text-2xl font-bold text-primary-text">
-                {mockCard.card_name}
+                {card.card_name}
               </h1>
-              <p className="text-secondary-text">{mockCard.bank_name}</p>
+              <p className="text-secondary-text">{card.bank_name}</p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -143,7 +153,7 @@ export default function CardDetailPage() {
               <Edit3 className="w-4 h-4 mr-2" />
               Edit
             </Button>
-            <Button variant="error" size="sm">
+            <Button variant="error" size="sm" onClick={handleDelete}>
               <Trash2 className="w-4 h-4 mr-2" />
               Delete
             </Button>
@@ -154,23 +164,13 @@ export default function CardDetailPage() {
         <div className="bg-card-bg rounded-lg p-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Card Visual */}
-            <div className="bg-gradient-to-br from-purple-600 to-blue-600 rounded-xl p-6 text-white min-h-[200px] flex flex-col justify-between">
-              <div className="flex justify-between items-start">
-                <div className="w-8 h-6 bg-yellow-400 rounded"></div>
-                <div className="text-right">
-                  <p className="text-sm opacity-80">{mockCard.bank_name}</p>
-                  <p className="text-xs opacity-60">VISA</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-lg tracking-wider mb-2">
-                  •••• •••• •••• {mockCard.card_number_last4}
-                </p>
-                <div className="flex justify-between">
-                  <p className="text-sm">{mockCard.card_name}</p>
-                  <p className="text-sm">{mockExpiryDate}</p>
-                </div>
-              </div>
+            <div className="flex justify-center lg:justify-start">
+               <CardVisual
+                  cardName={card.card_name}
+                  cardNumber={card.last_four_digits}
+                  gradient={gradient}
+                  className="w-full max-w-md aspect-[1.586/1]"
+                />
             </div>
 
             {/* Metrics */}
@@ -178,7 +178,7 @@ export default function CardDetailPage() {
               <div className="space-y-1">
                 <p className="text-sm text-secondary-text">Current Balance</p>
                 <p className="text-2xl font-bold text-primary-text">
-                  {formatCurrency(mockCard.current_balance)}
+                  {formatCurrency(card.current_outstanding)}
                 </p>
               </div>
               <div className="space-y-1">
@@ -196,7 +196,7 @@ export default function CardDetailPage() {
               <div className="space-y-1">
                 <p className="text-sm text-secondary-text">Utilization</p>
                 <ProgressBar
-                  value={mockCard.current_balance}
+                  value={card.current_outstanding}
                   max={creditLimit}
                   showPercentage={true}
                   className="mt-2"
@@ -230,16 +230,15 @@ export default function CardDetailPage() {
         <div className="min-h-[500px]">
           {activeTab === "transactions" && (
             <TransactionsTab
-              transactions={mockTransactions}
-              columns={transactionColumns}
+              transactions={transactionData?.transactions || []}
+              isLoading={isTransactionsLoading}
               onAddTransaction={() => setShowAddTransaction(true)}
             />
           )}
           {activeTab === "insights" && (
             <InsightsTab
-              spendingTrend={spendingTrendData}
-              categoryData={categoryData}
-              weeklyData={weeklyData}
+              stats={stats}
+              isLoading={isStatsLoading}
             />
           )}
         </div>
@@ -250,13 +249,17 @@ export default function CardDetailPage() {
         isOpen={showAddTransaction}
         onClose={() => setShowAddTransaction(false)}
         cardId={cardId}
+        onSubmit={(data) => addTransactionMutation.mutate(data)}
+        isSubmitting={addTransactionMutation.isPending}
       />
 
       {/* Edit Card Modal */}
       <EditCardModal
         isOpen={showEditCard}
         onClose={() => setShowEditCard(false)}
-        card={mockCard}
+        card={card}
+        onSubmit={(data) => updateCardMutation.mutate({ id: card.id, data })}
+        isSubmitting={updateCardMutation.isPending}
       />
     </AppLayout>
   );
@@ -265,15 +268,19 @@ export default function CardDetailPage() {
 // Transactions Tab Component
 interface TransactionsTabProps {
   transactions: Transaction[];
-  columns: Array<{ key: string; label: string }>;
+  isLoading: boolean;
   onAddTransaction: () => void;
 }
 
 function TransactionsTab({
   transactions,
-  columns,
+  isLoading,
   onAddTransaction,
 }: TransactionsTabProps) {
+  if (isLoading) {
+    return <div className="text-center py-8">Loading transactions...</div>;
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -297,17 +304,19 @@ function TransactionsTab({
       </div>
 
       <div className="bg-card-bg rounded-lg overflow-hidden">
+        {transactions.length === 0 ? (
+            <div className="text-center py-12 text-secondary-text">
+                No transactions found. Add one to get started.
+            </div>
+        ) : (
         <table className="w-full">
           <thead className="bg-hover-bg">
             <tr>
-              {columns.map((column) => (
-                <th
-                  key={column.key}
-                  className="text-left p-4 font-medium text-secondary-text"
-                >
-                  {column.label}
-                </th>
-              ))}
+              <th className="text-left p-4 font-medium text-secondary-text">Date</th>
+              <th className="text-left p-4 font-medium text-secondary-text">Description</th>
+              <th className="text-left p-4 font-medium text-secondary-text">Category</th>
+              <th className="text-left p-4 font-medium text-secondary-text">Amount</th>
+              <th className="text-left p-4 font-medium text-secondary-text">Cycle</th>
             </tr>
           </thead>
           <tbody>
@@ -319,27 +328,32 @@ function TransactionsTab({
                 <td className="p-4 text-primary-text">
                   {new Date(item.transaction_date).toLocaleDateString()}
                 </td>
-                <td className="p-4 text-primary-text">{item.merchant}</td>
+                <td className="p-4 text-primary-text">
+                    <div className="font-medium">{item.merchant_name}</div>
+                    <div className="text-xs text-secondary-text">{item.description}</div>
+                </td>
+                <td className="p-4">
+                  <Badge label={item.merchant_category || "Uncategorized"} variant="default" />
+                </td>
                 <td className="p-4">
                   <span
                     className={cn(
                       "font-medium",
-                      item.amount > 0 ? "text-success" : "text-error"
+                      item.transaction_type === "credit" ? "text-success" : "text-primary-text"
                     )}
                   >
-                    {formatCurrency(Math.abs(item.amount))}
+                    {item.transaction_type === "credit" ? "+" : ""}
+                    {formatCurrency(item.amount)}
                   </span>
                 </td>
-                <td className="p-4">
-                  <Badge label={item.category || ""} variant="default" />
-                </td>
                 <td className="p-4 text-primary-text">
-                  {item.bill_month}/{item.bill_year}
+                  {item.billing_cycle}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        )}
       </div>
     </div>
   );
@@ -347,25 +361,43 @@ function TransactionsTab({
 
 // Insights Tab Component
 interface InsightsTabProps {
-  spendingTrend: Array<{ month: string; spending: number }>;
-  categoryData: Array<{ category: string; amount: number; percentage: number }>;
-  weeklyData: Array<{ day: string; amount: number }>;
+  stats?: any; // Replace with proper type
+  isLoading: boolean;
 }
 
 function InsightsTab({
-  spendingTrend,
-  categoryData,
-  weeklyData,
+  stats,
+  isLoading,
 }: InsightsTabProps) {
+    if (isLoading) {
+        return <div className="text-center py-8">Loading insights...</div>;
+    }
+
+    if (!stats) {
+        return <div className="text-center py-8">No data available for insights.</div>;
+    }
+
+    // Transform stats for charts
+    // Assuming stats matches CardStatistics interface
+    const categoryData = stats.category_breakdown?.map((c: any) => ({
+        category: c.category,
+        amount: c.total,
+        percentage: (c.total / stats.total_spent) * 100
+    })) || [];
+
+    // Mock trend data if not available in stats (API might need update)
+    const spendingTrend = [
+        { month: "Current", spending: stats.current_month_spent || 0 }
+    ];
+
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold text-primary-text">Card Insights</h2>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SpendingTrendChart data={spendingTrend} height={250} />
+        {/* Charts would go here - using placeholders if data structure doesn't match exactly */}
         <CategoryBreakdownChart data={categoryData} height={250} />
-        <WeeklySpendingChart data={weeklyData} height={250} />
-
+        
         {/* Key Metrics */}
         <div className="bg-card-bg rounded-lg p-6">
           <h3 className="text-lg font-semibold text-primary-text mb-4">
@@ -373,25 +405,27 @@ function InsightsTab({
           </h3>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
+              <span className="text-secondary-text">Total Spent</span>
+              <span className="font-semibold text-primary-text">
+                {formatCurrency(stats.total_spent || 0)}
+              </span>
+            </div>
+             <div className="flex justify-between items-center">
+              <span className="text-secondary-text">This Month</span>
+              <span className="font-semibold text-primary-text">
+                {formatCurrency(stats.current_month_spent || 0)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
               <span className="text-secondary-text">Average Transaction</span>
               <span className="font-semibold text-primary-text">
-                {formatCurrency(65.35)}
+                {formatCurrency(stats.average_transaction || 0)}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-secondary-text">Most Used Category</span>
-              <Badge label="Shopping" variant="default" />
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-secondary-text">Peak Spending Day</span>
-              <span className="font-semibold text-primary-text">Friday</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-secondary-text">
-                This Month&apos;s Spending
-              </span>
+              <span className="text-secondary-text">Total Transactions</span>
               <span className="font-semibold text-primary-text">
-                {formatCurrency(2500)}
+                {stats.total_transactions || 0}
               </span>
             </div>
           </div>
@@ -406,26 +440,30 @@ interface AddTransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
   cardId: string;
+  onSubmit: (data: TransactionFormData) => void;
+  isSubmitting: boolean;
 }
 
 function AddTransactionModal({
   isOpen,
   onClose,
   cardId,
+  onSubmit,
+  isSubmitting,
 }: AddTransactionModalProps) {
-  const [formData, setFormData] = useState({
-    amount: "",
-    date: "",
-    merchant: "",
-    category: "",
+  const [formData, setFormData] = useState<TransactionFormData>({
+    card_id: cardId,
+    amount: 0,
+    transaction_date: new Date().toISOString().split('T')[0],
+    merchant_name: "",
+    merchant_category: "",
+    transaction_type: "debit",
     description: "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission
-    console.log("Adding transaction:", formData, "for card:", cardId);
-    onClose();
+    onSubmit(formData);
   };
 
   return (
@@ -435,44 +473,48 @@ function AddTransactionModal({
           label="Amount"
           type="number"
           step="0.01"
-          value={formData.amount}
-          onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+          value={formData.amount.toString()}
+          onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) })}
           required
         />
         <Input
           label="Date"
           type="date"
-          value={formData.date}
-          onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+          value={formData.transaction_date}
+          onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
           required
         />
         <Input
           label="Merchant"
-          value={formData.merchant}
+          value={formData.merchant_name}
           onChange={(e) =>
-            setFormData({ ...formData, merchant: e.target.value })
+            setFormData({ ...formData, merchant_name: e.target.value })
           }
           required
         />
         <Input
           label="Category"
-          value={formData.category}
+          value={formData.merchant_category}
           onChange={(e) =>
-            setFormData({ ...formData, category: e.target.value })
+            setFormData({ ...formData, merchant_category: e.target.value })
           }
+          placeholder="e.g. Food, Travel"
+          required
         />
         <Input
           label="Description"
-          value={formData.description}
+          value={formData.description || ""}
           onChange={(e) =>
             setFormData({ ...formData, description: e.target.value })
           }
         />
         <div className="flex justify-end space-x-2 pt-4">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit">Add Transaction</Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Adding..." : "Add Transaction"}
+          </Button>
         </div>
       </form>
     </Modal>
@@ -483,10 +525,12 @@ function AddTransactionModal({
 interface EditCardModalProps {
   isOpen: boolean;
   onClose: () => void;
-  card: CreditCard;
+  card: Card;
+  onSubmit: (data: Partial<CardFormData>) => void;
+  isSubmitting: boolean;
 }
 
-function EditCardModal({ isOpen, onClose, card }: EditCardModalProps) {
+function EditCardModal({ isOpen, onClose, card, onSubmit, isSubmitting }: EditCardModalProps) {
   const [formData, setFormData] = useState({
     card_name: card.card_name,
     bank_name: card.bank_name,
@@ -497,9 +541,13 @@ function EditCardModal({ isOpen, onClose, card }: EditCardModalProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission
-    console.log("Updating card:", formData);
-    onClose();
+    onSubmit({
+        card_name: formData.card_name,
+        bank_name: formData.bank_name,
+        credit_limit: parseFloat(formData.credit_limit),
+        bill_date: parseInt(formData.bill_date),
+        due_date: parseInt(formData.due_date),
+    });
   };
 
   return (
@@ -551,10 +599,12 @@ function EditCardModal({ isOpen, onClose, card }: EditCardModalProps) {
           />
         </div>
         <div className="flex justify-end space-x-2 pt-4">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit">Save Changes</Button>
+          <Button type="submit" disabled={isSubmitting}>
+             {isSubmitting ? "Saving..." : "Save Changes"}
+          </Button>
         </div>
       </form>
     </Modal>

@@ -20,8 +20,8 @@ import {
   Area,
   AreaChart,
 } from "recharts";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/Button";
+import { AppLayout } from "@/components/layout";
+import { Button, Badge } from "@/components/ui";
 import {
   Select,
   SelectContent,
@@ -29,8 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/Badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   TrendingUp,
   TrendingDown,
@@ -39,6 +38,7 @@ import {
   Calendar,
   PieChart as PieChartIcon,
 } from "lucide-react";
+import { formatCurrency, cn } from "@/lib/utils";
 
 const COLORS = [
   "#0088FE",
@@ -59,12 +59,6 @@ interface KPI {
   changeType?: "increase" | "decrease" | "stable";
   trend?: "positive" | "negative" | "neutral";
   description: string;
-}
-
-interface TrendPoint {
-  period: string;
-  value: number;
-  label: string;
 }
 
 interface CategoryAnalytics {
@@ -153,11 +147,11 @@ export default function AnalyticsPage() {
   ];
 
   const renderKPICard = (kpi: KPI, icon: React.ReactNode) => (
-    <Card className="p-6">
+    <div className="bg-card-bg p-6 rounded-xl border border-muted-text/10 shadow-sm">
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <p className="text-sm text-gray-500 mb-1">{kpi.name}</p>
-          <h3 className="text-3xl font-bold">
+          <p className="text-sm text-secondary-text mb-1">{kpi.name}</p>
+          <h3 className="text-3xl font-bold text-primary-text">
             {kpi.unit === "$" ? "$" : ""}
             {kpi.value.toLocaleString()}
             {kpi.unit && kpi.unit !== "$" ? kpi.unit : ""}
@@ -165,48 +159,47 @@ export default function AnalyticsPage() {
           {kpi.change !== undefined && (
             <div className="flex items-center mt-2">
               {kpi.changeType === "increase" ? (
-                <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
+                <TrendingUp className="w-4 h-4 text-success mr-1" />
               ) : kpi.changeType === "decrease" ? (
-                <TrendingDown className="w-4 h-4 text-red-500 mr-1" />
+                <TrendingDown className="w-4 h-4 text-error mr-1" />
               ) : null}
               <span
                 className={`text-sm ${
                   kpi.trend === "positive"
-                    ? "text-green-600"
+                    ? "text-success"
                     : kpi.trend === "negative"
-                    ? "text-red-600"
-                    : "text-gray-600"
+                    ? "text-error"
+                    : "text-secondary-text"
                 }`}
               >
                 {kpi.change > 0 ? "+" : ""}
                 {kpi.change.toFixed(1)}%
               </span>
-              <span className="text-xs text-gray-500 ml-2">
+              <span className="text-xs text-secondary-text ml-2">
                 vs previous period
               </span>
             </div>
           )}
-          <p className="text-xs text-gray-500 mt-2">{kpi.description}</p>
+          <p className="text-xs text-secondary-text mt-2">{kpi.description}</p>
         </div>
-        <div className="ml-4 p-3 bg-blue-50 rounded-lg">{icon}</div>
+        <div className="ml-4 p-3 bg-primary-green/10 rounded-lg">{icon}</div>
       </div>
-    </Card>
+    </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+    <AppLayout title="Analytics" showRightSidebar={false}>
+      <div className="space-y-6">
+        {/* Header Actions */}
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Analytics Dashboard</h1>
-            <p className="text-gray-500 mt-1">
+            <p className="text-secondary-text">
               Comprehensive insights into your spending patterns
             </p>
           </div>
           <div className="flex items-center space-x-4">
             <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-48 bg-card-bg border-muted-text/20">
                 <SelectValue placeholder="Select period" />
               </SelectTrigger>
               <SelectContent>
@@ -217,28 +210,26 @@ export default function AnalyticsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button>Export Report</Button>
+            <Button variant="secondary">Export Report</Button>
           </div>
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {kpiLoading ? (
             <>
               {[1, 2, 3, 4].map((i) => (
-                <Card key={i} className="p-6 animate-pulse">
-                  <div className="h-20 bg-gray-200 rounded"></div>
-                </Card>
+                <div key={i} className="bg-card-bg p-6 rounded-xl animate-pulse h-40"></div>
               ))}
             </>
           ) : (
             <>
               {kpiData?.kpis?.slice(0, 4).map((kpi: KPI, index: number) => {
                 const icons = [
-                  <DollarSign key="dollar" className="w-6 h-6 text-blue-600" />,
-                  <CreditCard key="credit" className="w-6 h-6 text-blue-600" />,
-                  <Calendar key="calendar" className="w-6 h-6 text-blue-600" />,
-                  <PieChartIcon key="pie" className="w-6 h-6 text-blue-600" />,
+                  <DollarSign key="dollar" className="w-6 h-6 text-primary-green" />,
+                  <CreditCard key="credit" className="w-6 h-6 text-primary-green" />,
+                  <Calendar key="calendar" className="w-6 h-6 text-primary-green" />,
+                  <PieChartIcon key="pie" className="w-6 h-6 text-primary-green" />,
                 ];
                 return renderKPICard(kpi, icons[index]);
               })}
@@ -246,60 +237,15 @@ export default function AnalyticsPage() {
           )}
         </div>
 
-        {/* Financial Health Score */}
-        {kpiData?.healthScore && (
-          <Card className="p-6 mb-6">
-            <h3 className="text-lg font-semibold mb-4">
-              Financial Health Score
-            </h3>
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <div className="relative pt-1">
-                  <div className="flex mb-2 items-center justify-between">
-                    <div>
-                      <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200">
-                        Health Score
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs font-semibold inline-block text-blue-600">
-                        {kpiData.healthScore.overall}/100
-                      </span>
-                    </div>
-                  </div>
-                  <div className="overflow-hidden h-4 mb-4 text-xs flex rounded bg-blue-200">
-                    <div
-                      style={{ width: `${kpiData.healthScore.overall}%` }}
-                      className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-600 transition-all duration-500"
-                    ></div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
-                  {Object.entries(kpiData.healthScore.components).map(
-                    ([key, value]: [string, any]) => (
-                      <div key={key} className="text-center">
-                        <p className="text-xs text-gray-500 capitalize">
-                          {key.replace(/([A-Z])/g, " $1")}
-                        </p>
-                        <p className="text-lg font-semibold">{value}</p>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
-
         {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Spending Trends */}
-          <Card className="p-6">
+          <div className="bg-card-bg p-6 rounded-xl border border-muted-text/10 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Spending Trends</h3>
+              <h3 className="text-lg font-semibold text-primary-text">Spending Trends</h3>
               <div className="flex space-x-2">
                 <Select value={trendMetric} onValueChange={setTrendMetric}>
-                  <SelectTrigger className="w-32">
+                  <SelectTrigger className="w-32 bg-hover-bg border-0 h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -309,7 +255,7 @@ export default function AnalyticsPage() {
                   </SelectContent>
                 </Select>
                 <Select value={trendPeriod} onValueChange={setTrendPeriod}>
-                  <SelectTrigger className="w-32">
+                  <SelectTrigger className="w-32 bg-hover-bg border-0 h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -322,42 +268,41 @@ export default function AnalyticsPage() {
             </div>
             {trendsLoading ? (
               <div className="h-64 flex items-center justify-center">
-                <p className="text-gray-500">Loading trends...</p>
+                <p className="text-secondary-text">Loading trends...</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={trendsData?.trends || []}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
-                  <YAxis />
-                  <Tooltip />
+                  <defs>
+                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#F3F4F6' }}
+                  />
                   <Area
                     type="monotone"
                     dataKey="value"
-                    stroke="#0088FE"
-                    fill="#0088FE"
-                    fillOpacity={0.3}
+                    stroke="#10B981"
+                    fillOpacity={1}
+                    fill="url(#colorValue)"
                   />
                 </AreaChart>
               </ResponsiveContainer>
             )}
-            {trendsData?.forecast && (
-              <div className="mt-4 p-3 bg-blue-50 rounded">
-                <p className="text-sm text-gray-700">
-                  <strong>Forecast:</strong> $
-                  {trendsData.forecast.predictedValue.toFixed(2)} (
-                  {trendsData.forecast.confidence}% confidence)
-                </p>
-              </div>
-            )}
-          </Card>
+          </div>
 
           {/* Category Breakdown */}
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4">Spending by Category</h3>
+          <div className="bg-card-bg p-6 rounded-xl border border-muted-text/10 shadow-sm">
+            <h3 className="text-lg font-semibold text-primary-text mb-4">Spending by Category</h3>
             {categoryLoading ? (
               <div className="h-64 flex items-center justify-center">
-                <p className="text-gray-500">Loading categories...</p>
+                <p className="text-secondary-text">Loading categories...</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
@@ -366,12 +311,9 @@ export default function AnalyticsPage() {
                     data={categoryData?.categories?.slice(0, 8) || []}
                     cx="50%"
                     cy="50%"
-                    labelLine={false}
-                    label={(entry) =>
-                      `${entry.category}: ${entry.percentage.toFixed(1)}%`
-                    }
+                    innerRadius={60}
                     outerRadius={100}
-                    fill="#8884d8"
+                    paddingAngle={5}
                     dataKey="totalSpent"
                   >
                     {categoryData?.categories
@@ -380,84 +322,57 @@ export default function AnalyticsPage() {
                         <Cell
                           key={`cell-${index}`}
                           fill={COLORS[index % COLORS.length]}
+                          stroke="rgba(0,0,0,0)"
                         />
                       ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#F3F4F6' }}
+                    formatter={(value: number) => formatCurrency(value)}
+                  />
+                  <Legend />
                 </PieChart>
               </ResponsiveContainer>
             )}
-          </Card>
+          </div>
         </div>
 
         {/* Detailed Tables */}
-        <Tabs defaultValue="categories" className="mb-6">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8">
-              <button className="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                Categories
-              </button>
-              <button className="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                Merchants
-              </button>
-              <button className="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                Comparative
-              </button>
-            </nav>
-          </div>
+        <div className="bg-card-bg p-6 rounded-xl border border-muted-text/10 shadow-sm">
+          <Tabs defaultValue="categories">
+            <div className="border-b border-muted-text/10 mb-6">
+              <TabsList className="bg-transparent p-0">
+                <TabsTrigger value="categories" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary-green data-[state=active]:text-primary-green rounded-none px-4 pb-2">Categories</TabsTrigger>
+                <TabsTrigger value="merchants" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary-green data-[state=active]:text-primary-green rounded-none px-4 pb-2">Merchants</TabsTrigger>
+                <TabsTrigger value="comparative" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary-green data-[state=active]:text-primary-green rounded-none px-4 pb-2">Comparative</TabsTrigger>
+              </TabsList>
+            </div>
 
-          {/* Categories Table */}
-          <div className="mt-6">
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Category Details</h3>
+            <TabsContent value="categories">
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Category
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total Spent
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Transactions
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Avg Transaction
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        % of Total
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Growth
-                      </th>
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="border-b border-muted-text/10">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-text uppercase tracking-wider">Category</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-text uppercase tracking-wider">Total Spent</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-text uppercase tracking-wider">Transactions</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-text uppercase tracking-wider">Avg Transaction</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-text uppercase tracking-wider">% of Total</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-text uppercase tracking-wider">Growth</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y divide-muted-text/10">
                     {categoryData?.categories?.map((cat: CategoryAnalytics) => (
                       <tr key={cat.category}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {cat.category}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          ${cat.totalSpent.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {cat.transactionCount}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          ${cat.averageTransaction.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {cat.percentage.toFixed(1)}%
-                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary-text">{cat.category}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-text">{formatCurrency(cat.totalSpent)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-text">{cat.transactionCount}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-text">{formatCurrency(cat.averageTransaction)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-text">{cat.percentage.toFixed(1)}%</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <Badge
-                            variant={
-                              cat.monthlyGrowth > 0 ? "destructive" : "default"
-                            }
-                            className="text-xs"
+                            variant={cat.monthlyGrowth > 0 ? "destructive" : "default"}
+                            className="bg-opacity-10"
                           >
                             {cat.monthlyGrowth > 0 ? "+" : ""}
                             {cat.monthlyGrowth.toFixed(1)}%
@@ -468,78 +383,55 @@ export default function AnalyticsPage() {
                   </tbody>
                 </table>
               </div>
-            </Card>
-          </div>
-        </Tabs>
-
-        {/* Top Merchants */}
-        <Card className="p-6 mb-6">
-          <h3 className="text-lg font-semibold mb-4">Top Merchants</h3>
-          <div className="space-y-3">
-            {merchantData?.merchants
-              ?.slice(0, 10)
-              .map((merchant: MerchantAnalytics, index: number) => (
-                <div
-                  key={merchant.merchant}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-semibold text-sm">
-                      {index + 1}
+            </TabsContent>
+            
+            <TabsContent value="merchants">
+               <div className="space-y-3">
+                {merchantData?.merchants?.slice(0, 10).map((merchant: MerchantAnalytics, index: number) => (
+                  <div key={merchant.merchant} className="flex items-center justify-between p-3 bg-hover-bg rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary-green/20 text-primary-green font-semibold text-sm">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <p className="font-medium text-primary-text">{merchant.merchant}</p>
+                        <p className="text-sm text-secondary-text">{merchant.category}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">{merchant.merchant}</p>
-                      <p className="text-sm text-gray-500">
-                        {merchant.category}
-                      </p>
+                    <div className="text-right">
+                      <p className="font-semibold text-primary-text">{formatCurrency(merchant.totalSpent)}</p>
+                      <p className="text-sm text-secondary-text">{merchant.transactionCount} transactions</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold">
-                      ${merchant.totalSpent.toFixed(2)}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {merchant.transactionCount} transactions
-                    </p>
-                  </div>
-                </div>
-              ))}
-          </div>
-        </Card>
+                ))}
+              </div>
+            </TabsContent>
 
-        {/* Comparative Analysis */}
-        {comparativeData && (
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4">
-              Month-over-Month Comparison
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {comparativeData.comparisons?.map((comp: any) => (
-                <div key={comp.metric} className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-500 mb-1">{comp.metric}</p>
-                  <div className="flex items-baseline space-x-2">
-                    <p className="text-2xl font-bold">
-                      ${comp.period2Value.toFixed(2)}
-                    </p>
-                    <Badge
-                      variant={
-                        comp.trend === "improving" ? "default" : "destructive"
-                      }
-                      className="text-xs"
-                    >
-                      {comp.percentageChange > 0 ? "+" : ""}
-                      {comp.percentageChange.toFixed(1)}%
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Previous: ${comp.period1Value.toFixed(2)}
-                  </p>
+            <TabsContent value="comparative">
+              {comparativeData && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {comparativeData.comparisons?.map((comp: any) => (
+                    <div key={comp.metric} className="p-4 bg-hover-bg rounded-lg">
+                      <p className="text-sm text-secondary-text mb-1">{comp.metric}</p>
+                      <div className="flex items-baseline space-x-2">
+                        <p className="text-2xl font-bold text-primary-text">${comp.period2Value.toFixed(2)}</p>
+                        <Badge
+                          variant={comp.trend === "improving" ? "default" : "destructive"}
+                          className="text-xs"
+                        >
+                          {comp.percentageChange > 0 ? "+" : ""}
+                          {comp.percentageChange.toFixed(1)}%
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-secondary-text mt-1">Previous: ${comp.period1Value.toFixed(2)}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </Card>
-        )}
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }

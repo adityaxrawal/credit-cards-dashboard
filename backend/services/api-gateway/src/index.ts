@@ -34,6 +34,7 @@ import { reportsRoutes } from "@modules/reports";
 import { rewardsRoutes } from "@modules/rewards";
 import servicesRoutes from "./routes/services.routes"; // Health check routes
 import monitoringRoutes from "./routes/monitoring"; // Monitoring and health routes
+import { initializeJobs } from "./jobs";
 
 // Validate environment early
 const env = validateEnv();
@@ -134,6 +135,9 @@ if (process.env.NODE_ENV !== "test") {
   server = app.listen(PORT, () => {
     logger.info(`API Gateway running on port ${PORT}`);
     logger.info("Zero-cost architecture: Services triggered from frontend");
+    
+    // Initialize background jobs
+    initializeJobs();
   });
 
   // Graceful shutdown handler to prevent memory leaks
