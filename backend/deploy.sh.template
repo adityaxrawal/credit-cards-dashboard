@@ -7,7 +7,7 @@ REGION="us-central1" # You can change this to your preferred region
 
 # Build the image using Cloud Build
 echo "Building Docker image..."
-gcloud builds submit --tag gcr.io/$PROJECT_ID/$SERVICE_NAME .
+gcloud builds submit --tag gcr.io/$PROJECT_ID/$SERVICE_NAME backend
 
 # Deploy to Cloud Run
 echo "Deploying to Cloud Run..."
