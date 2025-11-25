@@ -5,3 +5,10 @@ dist
 coverage
 .vercel
 backend/deploy.sh
+.next
+.env.prod
+.env.local
+.gitignore
+.dockerignore
+backend/logs
+.md

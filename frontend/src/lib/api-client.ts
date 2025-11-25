@@ -3,7 +3,7 @@ import { ApiResponse } from "@/types";
 
 /**
  * Enhanced API request with cold start handling
- * Supports 45s timeout for Render cold starts
+ * Supports 45s timeout for Cloud Run cold starts
  */
 export async function apiRequest(
   endpoint: string,
