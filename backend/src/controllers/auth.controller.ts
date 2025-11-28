@@ -1,18 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
-import pool from '../db';
-import { z } from 'zod';
+import { UserRepository } from '../repositories/user.repository';
+import { env } from '../config/env';
 
 const client = new OAuth2Client(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
+  env.GOOGLE_CLIENT_ID,
+  env.GOOGLE_CLIENT_SECRET,
+  env.GOOGLE_REDIRECT_URI
 );
 
 const generateTokens = (userId: string) => {
-  const accessToken = jwt.sign({ userId }, process.env.JWT_SECRET as string, { expiresIn: '1h' });
-  const refreshToken = jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET as string, { expiresIn: '30d' });
+  const accessToken = jwt.sign({ userId }, env.JWT_SECRET, { expiresIn: '1h' });
+  const refreshToken = jwt.sign({ userId }, env.JWT_REFRESH_SECRET, { expiresIn: '30d' });
   return { accessToken, refreshToken };
 };
 
@@ -26,7 +26,7 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
     // Exchange authorization code for tokens
     const { tokens } = await client.getToken({
       code,
-      redirect_uri: process.env.GOOGLE_REDIRECT_URI, // Must match frontend redirect_uri
+      redirect_uri: env.GOOGLE_REDIRECT_URI,
     });
 
     const idToken = tokens.id_token;
@@ -37,7 +37,7 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
     // Verify the ID token
     const ticket = await client.verifyIdToken({
       idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: env.GOOGLE_CLIENT_ID,
     });
     const payload = ticket.getPayload();
 
@@ -52,38 +52,27 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
     }
 
     // Upsert user
-    let userResult = await pool.query('SELECT * FROM users WHERE google_id = $1', [googleId]);
-    let user;
+    let user = await UserRepository.findByGoogleId(googleId);
 
-    if (userResult.rows.length === 0) {
+    if (!user) {
       // Create new user
-      const insertResult = await pool.query(
-        `INSERT INTO users (google_id, email, name, picture) 
-         VALUES ($1, $2, $3, $4) 
-         RETURNING *`,
-        [googleId, email, name, picture]
-      );
-      user = insertResult.rows[0];
+      user = await UserRepository.create({
+        googleId,
+        email,
+        name: name || '',
+        picture: picture || '',
+      });
     } else {
       // Update existing user
-      const updateResult = await pool.query(
-        `UPDATE users 
-         SET name = $2, picture = $3, updated_at = NOW() 
-         WHERE google_id = $1 
-         RETURNING *`,
-        [googleId, name, picture]
-      );
-      user = updateResult.rows[0];
+      user = await UserRepository.update(googleId, {
+        name: name || '',
+        picture: picture || '',
+      });
     }
 
     // Store refresh token if available (for offline access like Gmail API)
     if (tokens.refresh_token) {
-      // TODO: Store tokens.refresh_token securely in DB for this user
-      // This is needed for background Gmail sync
-      await pool.query(
-        `UPDATE users SET google_refresh_token = $2 WHERE id = $1`,
-        [user.id, tokens.refresh_token]
-      );
+      await UserRepository.updateRefreshToken(user.id, tokens.refresh_token);
     }
 
     const { accessToken, refreshToken } = generateTokens(user.id);
@@ -156,10 +145,10 @@ export const refresh = async (req: Request, res: Response, next: NextFunction) =
       return res.status(400).json({ error: 'Missing refresh token' });
     }
 
-    const decoded: any = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET as string);
-    const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.userId]);
+    const decoded: any = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET);
+    const user = await UserRepository.findById(decoded.userId);
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
 

@@ -1,4 +1,4 @@
-import pool from '../index';
+import pool from '../../lib/db';
 
 export interface Transaction {
   id: string;

@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
-import pool from '../db';
+import pool from '../lib/db';
 
 const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
 

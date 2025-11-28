@@ -1,5 +1,5 @@
 import * as cardsQueries from '../db/queries/cards.queries';
-import { getCurrentBillingPeriod, getBillingPeriodForMonth } from '../lib/billingCycle';
+import { getCurrentBillingPeriod, getBillingPeriodForMonth } from '../utils/billingCycle';
 
 /**
  * Get all cards for a user with utilization

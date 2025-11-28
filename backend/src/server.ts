@@ -1,8 +1,9 @@
 import 'dotenv/config';
 import app from './app';
-import pool from './db';
+import pool from './lib/db';
+import { env } from './config/env';
 
-const PORT = process.env.PORT || 8000;
+const PORT = env.PORT || 8000;
 
 const startServer = async () => {
   try {

@@ -1,4 +1,4 @@
-import pool from '../db';
+import pool from '../lib/db';
 import * as budgetQueries from '../db/queries/budget.queries';
 import dayjs from 'dayjs';
 

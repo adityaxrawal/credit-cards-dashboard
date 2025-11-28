@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import authRoutes from './authRoutes';
+import authRoutes from './auth.routes';
 import cardsRoutes from './cards.routes';
 import transactionsRoutes from './transactions.routes';
 import budgetRoutes from './budget.routes';

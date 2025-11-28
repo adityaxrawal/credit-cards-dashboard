@@ -1,4 +1,4 @@
-import pool from '../db';
+import pool from '../lib/db';
 import * as analyticsService from '../services/analytics.service';
 
 /**

@@ -1,4 +1,4 @@
-import pool from '../db';
+import pool from '../lib/db';
 import * as gmailClient from '../lib/gmailClient';
 import * as extractionService from '../services/extraction.service';
 import * as transactionsService from '../services/transactions.service';

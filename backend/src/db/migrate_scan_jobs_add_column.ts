@@ -1,4 +1,4 @@
-import pool from './index';
+import pool from '../lib/db';
 
 const migrate = async () => {
   const client = await pool.connect();

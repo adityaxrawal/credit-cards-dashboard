@@ -1,7 +1,7 @@
-import pool from '../db';
+import pool from '../lib/db';
 import * as cardsQueries from '../db/queries/cards.queries';
 import * as alertsService from '../services/alerts.service';
-import { getCurrentBillingPeriod } from '../lib/billingCycle';
+import { getCurrentBillingPeriod } from '../utils/billingCycle';
 import dayjs from 'dayjs';
 
 /**

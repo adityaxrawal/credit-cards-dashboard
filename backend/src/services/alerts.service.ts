@@ -1,6 +1,6 @@
 import * as alertsQueries from '../db/queries/alerts.queries';
 import * as emailClient from '../lib/emailClient';
-import pool from '../db';
+import pool from '../lib/db';
 
 /**
  * Create an alert

@@ -4,8 +4,9 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
-import { errorHandler } from './middleware/errorHandler';
+import { errorHandler } from './middleware/error.middleware';
 import routes from './routes';
+import { env } from './config/env';
 
 const app = express();
 
@@ -13,7 +14,7 @@ const app = express();
 app.use(helmet());
 app.use(cookieParser());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: env.FRONTEND_URL,
   credentials: true
 }));
 app.use(morgan('dev'));

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import pool from '../db';
+import pool from '../lib/db';
+import { env } from '../config/env';
 
 interface AuthRequest extends Request {
   user?: any;
@@ -25,7 +26,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       console.log('[AuthMiddleware] No token found in header or cookies');
       return res.status(401).json({ error: 'Unauthorized: No token provided' });
     }
-    const decoded: any = jwt.verify(token, process.env.JWT_SECRET as string);
+    const decoded: any = jwt.verify(token, env.JWT_SECRET);
 
     // Verify user exists in DB
     const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.userId]);

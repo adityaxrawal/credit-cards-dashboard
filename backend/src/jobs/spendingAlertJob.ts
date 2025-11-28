@@ -1,4 +1,4 @@
-import pool from '../db';
+import pool from '../lib/db';
 import * as budgetService from '../services/budget.service';
 import * as alertsService from '../services/alerts.service';
 

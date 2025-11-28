@@ -1,4 +1,4 @@
-import pool from '../index';
+import pool from '../../lib/db';
 
 /**
  * Get all bills for a user

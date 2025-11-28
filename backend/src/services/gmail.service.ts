@@ -1,5 +1,5 @@
 import * as gmailClient from '../lib/gmailClient';
-import pool from '../db';
+import pool from '../lib/db';
 import { runHistoricalScan } from '../jobs/historicalScanner';
 
 /**
