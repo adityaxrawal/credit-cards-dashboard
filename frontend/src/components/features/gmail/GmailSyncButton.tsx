@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/primitives/Button";
 import { RefreshCw, X, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import { gmailApi, type ScanStatus } from "@/lib/api/gmail";
 

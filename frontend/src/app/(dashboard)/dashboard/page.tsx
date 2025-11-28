@@ -10,9 +10,9 @@ import {
 import { transactionApi, type Transaction } from "@/lib/api/transactions";
 import { cardApi, type Card } from "@/lib/api/cards";
 import { budgetApi, type BudgetStatus } from "@/lib/api/budget";
-import { GmailSyncButton } from "@/components/gmail/GmailSyncButton";
-import { RemindersWidget } from "@/components/dashboard/RemindersWidget";
-import { SpendingTrendChart } from "@/components/dashboard/SpendingTrendChart";
+import { GmailSyncButton } from "@/components/features/gmail/GmailSyncButton";
+import { RemindersWidget } from "@/components/features/dashboard/RemindersWidget";
+import { SpendingTrendChart } from "@/components/features/dashboard/SpendingTrendChart";
 import { AppLayout } from "@/components/layout";
 import { RefreshCw, CreditCard, TrendingUp, Calendar, Award } from "lucide-react";
 import Link from "next/link";

@@ -5,10 +5,10 @@ import { useState } from "react";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "@/lib/auth/AuthContext";
 import { LoadingProvider } from "@/lib/hooks/useApiLoader";
-import { GlobalLoadingSpinner } from "@/components/ui/GlobalLoadingSpinner";
-import { GlobalLoadingOverlay } from "@/components/ui/LoadingOverlay";
-import { ToastProvider } from "@/components/ui/Toast";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { GlobalLoadingSpinner } from "@/components/ui/feedback/GlobalLoadingSpinner";
+import { GlobalLoadingOverlay } from "@/components/ui/feedback/LoadingOverlay";
+import { ToastProvider } from "@/components/ui/feedback/Toast";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(

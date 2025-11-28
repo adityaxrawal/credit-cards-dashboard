@@ -6,10 +6,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout";
 import { Button, Input, ProgressBar } from "@/components/ui";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/primitives/label";
 import { cn, formatCurrency } from "@/lib/utils";
 import { settingsApi, type UserSettings } from "@/lib/api/settings";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/feedback/Toast";
 import { apiClient } from "@/lib/api-client";
 
 const tabs = [

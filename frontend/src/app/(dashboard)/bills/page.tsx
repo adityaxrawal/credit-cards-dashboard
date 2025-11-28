@@ -16,7 +16,7 @@ import { Button, Modal, Input, Badge } from "@/components/ui";
 import { formatCurrency, cn, formatDate } from "@/lib/utils";
 import { billsApi, type Bill, type BillFormData } from "@/lib/api/bills";
 import { cardApi } from "@/lib/api/cards";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/feedback/Toast";
 
 export default function BillsPage() {
   const queryClient = useQueryClient();

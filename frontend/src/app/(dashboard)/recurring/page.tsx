@@ -1,4 +1,4 @@
-import RecurringTransactionsList from "@/components/transactions/RecurringTransactionsList";
+import RecurringTransactionsList from "@/components/features/transactions/RecurringTransactionsList";
 
 export default function RecurringTransactionsPage() {
   return (

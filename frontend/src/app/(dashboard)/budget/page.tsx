@@ -9,10 +9,10 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/label";
+} from "@/components/ui/primitives/card";
+import { Button } from "@/components/ui/primitives/Button";
+import { Input } from "@/components/ui/primitives/Input";
+import { Label } from "@/components/ui/primitives/label";
 import {
   Select,
   SelectContent,

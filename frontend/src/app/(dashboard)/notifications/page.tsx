@@ -9,10 +9,10 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/label";
+} from "@/components/ui/primitives/card";
+import { Button } from "@/components/ui/primitives/Button";
+import { Input } from "@/components/ui/primitives/Input";
+import { Label } from "@/components/ui/primitives/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -34,7 +34,7 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/primitives/Badge";
 import { Switch } from "@/components/ui/switch";
 
 interface Alert {

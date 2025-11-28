@@ -6,10 +6,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Edit3, Trash2, Plus, Filter, Calendar } from "lucide-react";
 import { AppLayout } from "@/components/layout";
 import { Button, ProgressBar, Modal, Input, Badge, CardVisual } from "@/components/ui";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/feedback/Toast";
 import {
   CategoryBreakdownChart,
-} from "@/components/analytics";
+} from "@/components/features/analytics/Charts";
 import { formatCurrency, cn, getCardGradient, calculateUtilization } from "@/lib/utils";
 import { cardApi, type Card, type CardFormData } from "@/lib/api/cards";
 import { transactionApi, type Transaction, type TransactionFormData } from "@/lib/api/transactions";

@@ -3,7 +3,7 @@
 import React from "react";
 import { FileText, CheckCircle, XCircle, Clock, Download, Trash2 } from "lucide-react";
 import { format } from "date-fns";
-import { Badge } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/primitives/Badge";
 
 export interface Statement {
   id: string;

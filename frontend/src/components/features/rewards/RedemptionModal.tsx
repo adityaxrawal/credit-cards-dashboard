@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { Modal } from "@/components/ui/Modal";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/primitives/Modal";
+import { Button } from "@/components/ui/primitives/Button";
+import { Input } from "@/components/ui/primitives/Input";
 import { Gift, CreditCard, Plane, Check } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 

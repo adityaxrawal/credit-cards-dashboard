@@ -3,7 +3,7 @@
 import React, { Component, ReactNode } from "react";
 import { AlertTriangle, RefreshCw, Home } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/primitives/Button";
 
 interface ErrorBoundaryState {
   hasError: boolean;

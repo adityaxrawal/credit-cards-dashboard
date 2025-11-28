@@ -26,8 +26,8 @@ import {
   type Transaction,
 } from "@/lib/api/transactions";
 import { cardApi } from "@/lib/api/cards";
-import { useToast } from "@/components/ui/Toast";
-import { BulkImportModal } from "@/components/transactions/BulkImportModal";
+import { useToast } from "@/components/ui/feedback/Toast";
+import { BulkImportModal } from "@/components/features/transactions/BulkImportModal";
 
 interface TransactionModalData {
   id?: string;
