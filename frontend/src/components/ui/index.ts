@@ -10,7 +10,6 @@ export { Modal } from "./Modal";
 export { ProgressBar } from "./ProgressBar";
 export { Skeleton } from "./Skeleton";
 export { StatCard } from "./StatCard";
-export { Toggle } from "./Toggle";
 
 // Re-export types
 export type { BadgeProps } from "./Badge";
@@ -24,4 +23,3 @@ export type { ModalProps } from "./Modal";
 export type { ProgressBarProps } from "./ProgressBar";
 export type { SkeletonProps } from "./Skeleton";
 export type { StatCardProps } from "./StatCard";
-export type { ToggleProps } from "./Toggle";

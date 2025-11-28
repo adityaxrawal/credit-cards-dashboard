@@ -31,12 +31,12 @@ import { BulkImportModal } from "@/components/transactions/BulkImportModal";
 
 interface TransactionModalData {
   id?: string;
-  card_id: string;
-  transaction_date: string;
-  merchant_name: string;
-  merchant_category: string;
+  cardId: string;
+  transactionDate: string;
+  merchant: string;
+  category: string;
   amount: number;
-  transaction_type: "debit" | "credit" | "refund";
+  transactionType: "debit" | "credit" | "refund";
   description: string;
 }
 
@@ -71,43 +71,34 @@ export default function TransactionsPage() {
   // Build filters object
   const appliedFilters = useMemo(() => {
     const f: TransactionFilters = {
-      search: searchValue || undefined,
+      merchant: searchValue || undefined, // Search by merchant
       cardId: selectedCard || undefined,
-      startDate: dateRange.start || undefined,
-      endDate: dateRange.end || undefined,
+      from: dateRange.start || undefined,
+      to: dateRange.end || undefined,
       category: categoryFilter || undefined,
+      page: currentPage,
+      limit: pageSize,
     };
 
-    if (activeTab === "debit") f.type = "debit";
-    else if (activeTab === "credit") f.type = "credit";
+    if (activeTab === "debit") f.transactionType = "debit";
+    else if (activeTab === "credit") f.transactionType = "credit";
 
     return f;
-  }, [searchValue, selectedCard, dateRange, categoryFilter, activeTab]);
+  }, [searchValue, selectedCard, dateRange, categoryFilter, activeTab, currentPage, pageSize]);
 
   // Fetch transactions
   const {
-    data: transactionsData,
+    data: transactionsResponse,
     isLoading,
     error: fetchError,
   } = useQuery({
-    queryKey: ["transactions", appliedFilters, currentPage, pageSize],
-    queryFn: () =>
-      transactionApi.getTransactions(appliedFilters, {
-        page: currentPage,
-        limit: pageSize,
-        sortBy: "transaction_date",
-        sortOrder: "desc",
-      }),
+    queryKey: ["transactions", appliedFilters],
+    queryFn: () => transactionApi.getTransactions(appliedFilters),
   });
 
-  const transactions = transactionsData?.transactions || [];
-  const pagination = transactionsData?.pagination;
-
-  // Fetch statistics
-  const { data: statistics } = useQuery({
-    queryKey: ["transaction-statistics", appliedFilters],
-    queryFn: () => transactionApi.getStatistics(appliedFilters),
-  });
+  const transactions = transactionsResponse?.data || [];
+  const pagination = transactionsResponse?.pagination;
+  const aggregations = transactionsResponse?.aggregations;
 
   // Create mutation
   const createMutation = useMutation({
@@ -115,11 +106,9 @@ export default function TransactionsPage() {
       transactionApi.createTransaction(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["transaction-statistics"] });
       queryClient.invalidateQueries({ queryKey: ["cards"] });
-      queryClient.invalidateQueries({ queryKey: ["analytics"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] }); // If we had one
       window.dispatchEvent(new CustomEvent("transactions-updated"));
-      window.dispatchEvent(new CustomEvent("budget-updated"));
       success("Transaction added successfully");
       setShowModal(false);
       setEditingTransaction(null);
@@ -140,10 +129,8 @@ export default function TransactionsPage() {
     }) => transactionApi.updateTransaction(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["transaction-statistics"] });
       queryClient.invalidateQueries({ queryKey: ["cards"] });
       window.dispatchEvent(new CustomEvent("transactions-updated"));
-      window.dispatchEvent(new CustomEvent("budget-updated"));
       success("Transaction updated successfully");
       setShowModal(false);
       setEditingTransaction(null);
@@ -160,10 +147,8 @@ export default function TransactionsPage() {
     mutationFn: (id: string) => transactionApi.deleteTransaction(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["transaction-statistics"] });
       queryClient.invalidateQueries({ queryKey: ["cards"] });
       window.dispatchEvent(new CustomEvent("transactions-updated"));
-      window.dispatchEvent(new CustomEvent("budget-updated"));
       success("Transaction deleted successfully");
     },
     onError: (error: Error) => {
@@ -179,12 +164,12 @@ export default function TransactionsPage() {
     const formData = new FormData(e.currentTarget);
 
     const data: TransactionFormData = {
-      card_id: formData.get("card_id") as string,
-      transaction_date: formData.get("transaction_date") as string,
-      merchant_name: formData.get("merchant_name") as string,
-      merchant_category: formData.get("merchant_category") as string,
+      cardId: formData.get("cardId") as string,
+      transactionDate: formData.get("transactionDate") as string,
+      merchant: formData.get("merchant") as string,
+      category: formData.get("category") as string,
       amount: parseFloat(formData.get("amount") as string),
-      transaction_type: formData.get("transaction_type") as
+      transactionType: formData.get("transactionType") as
         | "debit"
         | "credit"
         | "refund",
@@ -201,12 +186,12 @@ export default function TransactionsPage() {
   const handleEdit = (transaction: Transaction) => {
     setEditingTransaction({
       id: transaction.id,
-      card_id: transaction.card_id,
-      transaction_date: transaction.transaction_date.split("T")[0],
-      merchant_name: transaction.merchant_name,
-      merchant_category: transaction.merchant_category,
+      cardId: transaction.card_id,
+      transactionDate: transaction.transaction_date.split("T")[0],
+      merchant: transaction.merchant,
+      category: transaction.category,
       amount: Math.abs(transaction.amount),
-      transaction_type: transaction.transaction_type,
+      transactionType: transaction.transaction_type,
       description: transaction.description || "",
     });
     setShowModal(true);
@@ -245,7 +230,7 @@ export default function TransactionsPage() {
       render: (value: unknown) => formatDate(value as string, "short"),
     },
     {
-      key: "merchant_name",
+      key: "merchant",
       header: "Merchant",
       render: (value: unknown, row: unknown) => (
         <div className="flex items-center space-x-2">
@@ -294,7 +279,7 @@ export default function TransactionsPage() {
       ),
     },
     {
-      key: "merchant_category",
+      key: "category",
       header: "Category",
       render: (value: unknown) => (
         <Badge
@@ -345,19 +330,10 @@ export default function TransactionsPage() {
     },
   ];
 
-  // Calculate tab counts
-  const allCount = statistics?.total_transactions || 0;
-  const debitCount = transactions.filter(
-    (t) => t.transaction_type === "debit"
-  ).length;
-  const creditCount = transactions.filter(
-    (t) => t.transaction_type === "credit"
-  ).length;
-
   const tabs = [
-    { key: "all" as const, label: "All", count: allCount },
-    { key: "debit" as const, label: "Expenses", count: debitCount },
-    { key: "credit" as const, label: "Income", count: creditCount },
+    { key: "all" as const, label: "All" },
+    { key: "debit" as const, label: "Expenses" },
+    { key: "credit" as const, label: "Income" },
   ];
 
   return (
@@ -478,42 +454,26 @@ export default function TransactionsPage() {
           </div>
         )}
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-card-bg rounded-lg p-6">
-            <div className="text-sm text-secondary-text mb-1">
-              Total Transactions
+        {/* Stats Cards - Only show if aggregations are available */}
+        {aggregations && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="bg-card-bg rounded-lg p-6">
+              <div className="text-sm text-secondary-text mb-1">
+                Total Transactions
+              </div>
+              <div className="text-2xl font-bold text-primary-text">
+                {aggregations.totalTransactions || 0}
+              </div>
             </div>
-            <div className="text-2xl font-bold text-primary-text">
-              {statistics?.total_transactions || 0}
+            <div className="bg-card-bg rounded-lg p-6">
+              <div className="text-sm text-secondary-text mb-1">Total Spent</div>
+              <div className="text-2xl font-bold text-error">
+                {formatCurrency(aggregations.totalSpent || 0)}
+              </div>
             </div>
+            {/* We don't have income/net in aggregations yet, so hiding or using placeholders */}
           </div>
-          <div className="bg-card-bg rounded-lg p-6">
-            <div className="text-sm text-secondary-text mb-1">Total Spent</div>
-            <div className="text-2xl font-bold text-error">
-              {formatCurrency(statistics?.total_debit || 0)}
-            </div>
-          </div>
-          <div className="bg-card-bg rounded-lg p-6">
-            <div className="text-sm text-secondary-text mb-1">Total Income</div>
-            <div className="text-2xl font-bold text-success">
-              {formatCurrency(statistics?.total_credit || 0)}
-            </div>
-          </div>
-          <div className="bg-card-bg rounded-lg p-6">
-            <div className="text-sm text-secondary-text mb-1">Net Amount</div>
-            <div
-              className={cn(
-                "text-2xl font-bold",
-                (statistics?.net_spending || 0) < 0
-                  ? "text-error"
-                  : "text-success"
-              )}
-            >
-              {formatCurrency(Math.abs(statistics?.net_spending || 0))}
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Tabs */}
         <div className="flex space-x-1 bg-hover-bg p-1 rounded-lg w-fit">
@@ -529,7 +489,6 @@ export default function TransactionsPage() {
               )}
             >
               <span>{tab.label}</span>
-              <Badge label={tab.count.toString()} variant="default" size="sm" />
             </button>
           ))}
         </div>
@@ -627,9 +586,9 @@ export default function TransactionsPage() {
           <div>
             <label className="block text-sm font-medium mb-2">Card *</label>
             <select
-              name="card_id"
+              name="cardId"
               required
-              defaultValue={editingTransaction?.card_id || ""}
+              defaultValue={editingTransaction?.cardId || ""}
               className="w-full px-3 py-2 border rounded-lg"
             >
               <option value="">Select a card</option>
@@ -645,10 +604,10 @@ export default function TransactionsPage() {
             <label className="block text-sm font-medium mb-2">Date *</label>
             <Input
               type="date"
-              name="transaction_date"
+              name="transactionDate"
               required
               defaultValue={
-                editingTransaction?.transaction_date ||
+                editingTransaction?.transactionDate ||
                 new Date().toISOString().split("T")[0]
               }
             />
@@ -659,20 +618,20 @@ export default function TransactionsPage() {
               Merchant Name *
             </label>
             <Input
-              name="merchant_name"
+              name="merchant"
               required
               placeholder="e.g., Amazon, Starbucks"
-              defaultValue={editingTransaction?.merchant_name || ""}
+              defaultValue={editingTransaction?.merchant || ""}
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium mb-2">Category *</label>
             <Input
-              name="merchant_category"
+              name="category"
               required
               placeholder="e.g., Shopping, Food & Dining"
-              defaultValue={editingTransaction?.merchant_category || ""}
+              defaultValue={editingTransaction?.category || ""}
             />
           </div>
 
@@ -692,9 +651,9 @@ export default function TransactionsPage() {
           <div>
             <label className="block text-sm font-medium mb-2">Type *</label>
             <select
-              name="transaction_type"
+              name="transactionType"
               required
-              defaultValue={editingTransaction?.transaction_type || "debit"}
+              defaultValue={editingTransaction?.transactionType || "debit"}
               className="w-full px-3 py-2 border rounded-lg"
             >
               <option value="debit">Debit (Expense)</option>

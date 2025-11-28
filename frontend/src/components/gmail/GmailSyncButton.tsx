@@ -1,49 +1,300 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/Button";
-import { RefreshCw } from "lucide-react";
-import { useAuth } from "@/lib/auth/AuthContext";
-import { apiPost } from "@/lib/api/client";
+import { RefreshCw, X, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { gmailApi, type ScanStatus } from "@/lib/api/gmail";
 
-interface SyncResult {
-  success: boolean;
-  summary?: {
-    emailsScanned: number;
-    transactionEmailsFound: number;
-    newTransactions: number;
-    duplicatesSkipped: number;
-    errors?: number;
-    processingTime: string;
-  };
-  error?: string;
-  message?: string;
-  retryable?: boolean;
-  errorDetails?: Array<{
-    code: string;
-    message: string;
-    emailId?: string;
-  }>;
+interface GmailSyncModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSyncComplete?: () => void;
 }
 
-// Error code constants from backend
-const GMAIL_ERROR_MESSAGES: Record<string, string> = {
-  GMAIL_NOT_CONNECTED:
-    "Gmail not connected. Click to authorize Gmail access and sync your transactions.",
-  GMAIL_TOKEN_EXPIRED: "Gmail access expired. Click to reconnect your account.",
-  GMAIL_TOKEN_INVALID:
-    "Gmail credentials invalid. Click to reconnect your account.",
-  GMAIL_PERMISSION_DENIED:
-    "Insufficient Gmail permissions. Please grant full read access when prompted.",
-  GMAIL_RATE_LIMIT:
-    "Gmail rate limit exceeded. Please try again in a few minutes.",
-  GMAIL_QUOTA_EXCEEDED:
-    "Gmail daily quota exceeded. Please try again tomorrow.",
-  GMAIL_API_ERROR: "Gmail service error. Please try again later.",
-  NETWORK_ERROR: "Network error. Please check your internet connection.",
-  DATABASE_ERROR: "Database error occurred. Please try again.",
-  UNKNOWN_ERROR: "An unexpected error occurred. Please try again.",
-};
+/**
+ * GmailSyncModal Component
+ * Modal dialog for Gmail sync with progress tracking
+ * Blocks dashboard interaction until sync is complete
+ */
+export function GmailSyncModal({
+  isOpen,
+  onClose,
+  onSyncComplete,
+}: GmailSyncModalProps) {
+  const [syncing, setSyncing] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<ScanStatus | null>(null);
+  const [completed, setCompleted] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-start sync when modal opens
+  useEffect(() => {
+    if (isOpen && !syncing && !completed && !failed) {
+      handleSync();
+    }
+  }, [isOpen]);
+
+  // Poll job status when jobId is set
+  useEffect(() => {
+    if (!jobId) return;
+
+    const pollStatus = async () => {
+      try {
+        const status = await gmailApi.getScanStatus(jobId);
+        setProgress(status);
+
+        // Check if job is complete
+        if (status.status === "completed") {
+          clearPolling();
+          handleCompletion(status);
+        } else if (status.status === "failed") {
+          clearPolling();
+          handleFailure(status);
+        }
+      } catch (error) {
+        console.error("Failed to poll job status:", error);
+      }
+    };
+
+    // Start polling every 3 seconds
+    pollIntervalRef.current = setInterval(pollStatus, 3000);
+
+    return () => {
+      clearPolling();
+    };
+  }, [jobId]);
+
+  const clearPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setProgress(null);
+    setCompleted(false);
+    setFailed(false);
+    setErrorMessage("");
+
+    try {
+      const result = await gmailApi.scanHistorical();
+
+      if (result.jobId) {
+        setJobId(result.jobId);
+      }
+    } catch (error: unknown) {
+      console.error("Sync error:", error);
+
+      const apiError = error as {
+        response?: {
+          data?: { 
+            error?: { 
+              message?: string;
+              code?: string;
+            };
+            message?: string;
+          };
+          status?: number;
+        };
+        message?: string;
+      };
+
+      const statusCode = apiError?.response?.status;
+      let errorMsg = 
+        apiError?.response?.data?.error?.message ||
+        apiError?.response?.data?.message ||
+        apiError?.message ||
+        "Failed to sync Gmail";
+
+      // Provide helpful error messages
+      if (errorMsg.includes("Gmail not connected") || errorMsg.includes("no refresh token")) {
+        errorMsg = "Gmail not connected. Please connect your Gmail account in Settings before syncing.";
+      } else if (statusCode === 400 || statusCode === 404) {
+        errorMsg = "Gmail not connected. Please set up Gmail integration in Settings first.";
+      }
+
+      setErrorMessage(errorMsg);
+      setFailed(true);
+      setSyncing(false);
+    }
+  };
+
+  const handleCompletion = (status: ScanStatus) => {
+    setSyncing(false);
+    setCompleted(true);
+    setJobId(null);
+
+    // Refresh UI
+    window.dispatchEvent(new CustomEvent("transactions-updated"));
+    window.dispatchEvent(new CustomEvent("refresh-dashboard"));
+
+    if (onSyncComplete) {
+      onSyncComplete();
+    }
+  };
+
+  const handleFailure = (status: ScanStatus) => {
+    setSyncing(false);
+    setFailed(true);
+    setJobId(null);
+    setErrorMessage(status.errorMessage || "An error occurred during scanning");
+  };
+
+  const handleClose = () => {
+    // Only allow closing if sync is complete or failed
+    if (!syncing) {
+      clearPolling();
+      setJobId(null);
+      setProgress(null);
+      setCompleted(false);
+      setFailed(false);
+      setErrorMessage("");
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  // Calculate progress percentage
+  const progressPercent =
+    progress && progress.total > 0
+      ? Math.round((progress.processed / progress.total) * 100)
+      : 0;
+
+  return (
+    <>
+      {/* Backdrop - blocks interaction */}
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={(e) => e.stopPropagation()} />
+
+      {/* Modal */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="bg-card-bg rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold text-primary-text flex items-center gap-2">
+              <RefreshCw className={syncing ? "animate-spin" : ""} size={24} />
+              Gmail Sync
+            </h2>
+            {!syncing && (
+              <button
+                onClick={handleClose}
+                className="text-secondary-text hover:text-primary-text transition-colors"
+              >
+                <X size={24} />
+              </button>
+            )}
+          </div>
+
+          {/* Status Messages */}
+          {completed && (
+            <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <CheckCircle className="text-green-600 flex-shrink-0" size={24} />
+              <div>
+                <p className="font-semibold text-green-900">Sync Complete!</p>
+                <p className="text-sm text-green-700 mt-1">
+                  Found {progress?.inserted || 0} new transaction{progress?.inserted !== 1 ? "s" : ""} 
+                  {progress?.total && ` out of ${progress.total} emails scanned`}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {failed && (
+            <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <XCircle className="text-red-600 flex-shrink-0" size={24} />
+              <div className="flex-1">
+                <p className="font-semibold text-red-900">Sync Failed</p>
+                <p className="text-sm text-red-700 mt-1">
+                  {errorMessage}
+                </p>
+                {errorMessage.includes("Gmail not connected") && (
+                  <p className="text-xs text-red-600 mt-2">
+                    💡 Tip: Go to Settings → Gmail Integration to connect your account
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Progress */}
+          {syncing && !completed && !failed && (
+            <div className="space-y-4">
+              {progress ? (
+                <>
+                  {/* Progress Bar */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm text-secondary-text">
+                      <span>
+                        {progress.processed}/{progress.total} emails processed
+                      </span>
+                      <span className="font-semibold">{progressPercent}%</span>
+                    </div>
+                    <div className="w-full bg-hover-bg rounded-full h-3 overflow-hidden">
+                      <div
+                        className="bg-primary-green h-3 transition-all duration-300 ease-out"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-hover-bg rounded-lg p-3">
+                      <p className="text-xs text-secondary-text">Transactions Found</p>
+                      <p className="text-2xl font-bold text-primary-text mt-1">
+                        {progress.inserted || 0}
+                      </p>
+                    </div>
+                    <div className="bg-hover-bg rounded-lg p-3">
+                      <p className="text-xs text-secondary-text">Errors</p>
+                      <p className="text-2xl font-bold text-primary-text mt-1">
+                        {progress.errors || 0}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-primary-green border-t-transparent mb-4" />
+                  <p className="text-secondary-text">Starting scan...</p>
+                  <p className="text-xs text-muted-text mt-1">This may take a moment</p>
+                </div>
+              )}
+
+              {/* Info */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="text-blue-600 flex-shrink-0 mt-0.5" size={16} />
+                  <p className="text-xs text-blue-900">
+                    Scanning your Gmail for credit card transaction emails. 
+                    This scans the last 3 months and typically takes 10-60 seconds.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex justify-end gap-3 pt-4 border-t border-muted-text/10">
+            {completed || failed ? (
+              <Button onClick={handleClose} variant="primary">
+                Close
+              </Button>
+            ) : syncing ? (
+              <p className="text-sm text-secondary-text py-2">
+                Syncing in progress...
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 
 interface GmailSyncButtonProps {
   onSyncComplete?: () => void;
@@ -52,267 +303,50 @@ interface GmailSyncButtonProps {
 
 /**
  * GmailSyncButton Component
- * Triggers manual Gmail sync and orchestrates downstream services
+ * Button that triggers the Gmail sync modal
  */
 export function GmailSyncButton({
   onSyncComplete,
   className,
 }: GmailSyncButtonProps) {
-  const [syncing, setSyncing] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
-  const { user } = useAuth();
 
-  const handleSync = async () => {
-    if (!user) {
-      showToast("error", "Please log in to sync Gmail");
-      return;
-    }
-
-    setSyncing(true);
-
-    try {
-      // Step 1: Trigger Gmail sync (auto-refreshes token if expired)
-      const data = await apiPost<SyncResult>("/api/gmail/sync");
-
-      if (data.success) {
-        setLastSync(new Date());
-
-        const newCount = data.summary?.newTransactions || 0;
-        showToast(
-          "success",
-          `Sync complete! ${newCount} new transaction${
-            newCount !== 1 ? "s" : ""
-          }`,
-          `Scanned ${data.summary?.emailsScanned} emails in ${data.summary?.processingTime}`
-        );
-
-        // Step 2: Trigger downstream services if new transactions found
-        if (data.summary && data.summary.newTransactions > 0) {
-          await triggerDownstreamServices();
-        }
-
-        // Step 3: Refresh UI
-        window.dispatchEvent(new CustomEvent("transactions-updated"));
-        window.dispatchEvent(new CustomEvent("refresh-dashboard"));
-
-        // Call callback if provided
-        if (onSyncComplete) {
-          onSyncComplete();
-        }
-      } else {
-        showToast("error", data.error || "Sync failed");
-      }
-    } catch (error: unknown) {
-      console.error("Sync error:", error);
-
-      // Extract error code and message from structured error response
-      const apiError = error as {
-        data?: { error?: string; message?: string; retryable?: boolean };
-        error?: string;
-        message?: string;
-      };
-      const errorCode = apiError?.data?.error || apiError?.error;
-      const errorMessage = apiError?.data?.message || apiError?.message;
-      const retryable = apiError?.data?.retryable || false;
-
-      // Map error code to user-friendly message
-      const displayMessage =
-        errorCode && GMAIL_ERROR_MESSAGES[errorCode]
-          ? GMAIL_ERROR_MESSAGES[errorCode]
-          : errorMessage || "Failed to sync Gmail. Please try again.";
-
-      // Show retry hint if error is retryable
-      const hint = retryable ? " (Retryable - please try again)" : "";
-
-      showToast("error", displayMessage + hint);
-
-      // If Gmail not connected or token issues, initiate Gmail connection
-      if (
-        errorCode === "GMAIL_NOT_CONNECTED" ||
-        errorCode === "GMAIL_TOKEN_EXPIRED" ||
-        errorCode === "GMAIL_TOKEN_INVALID"
-      ) {
-        setTimeout(async () => {
-          try {
-            showToast(
-              "info",
-              "Connecting Gmail...",
-              "Please authorize Gmail access",
-              2000
-            );
-
-            // Get Gmail OAuth URL using direct fetch (backend doesn't follow standard response format)
-            const response = await fetch(
-              `${
-                process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
-              }/api/gmail/auth`,
-              {
-                method: "POST",
-                credentials: "include",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-              }
-            );
-
-            if (!response.ok) {
-              throw new Error(
-                `HTTP ${response.status}: ${response.statusText}`
-              );
-            }
-
-            const authData = await response.json();
-
-            if (authData.success && authData.authUrl) {
-              // Redirect to Google OAuth
-              window.location.href = authData.authUrl;
-            } else {
-              showToast("error", "Failed to get Gmail authorization URL");
-            }
-          } catch (authError) {
-            console.error("Failed to initiate Gmail auth:", authError);
-            showToast(
-              "error",
-              "Failed to connect Gmail. Please try from Settings."
-            );
-          }
-        }, 2000);
-      }
-    } finally {
-      setSyncing(false);
-    }
+  const handleOpenModal = () => {
+    setIsModalOpen(true);
   };
 
-  /**
-   * Trigger all downstream services in parallel after sync
-   */
-  const triggerDownstreamServices = async () => {
-    const services = [
-      {
-        name: "update-budget",
-        endpoint: "/api/services/update-budget",
-      },
-      {
-        name: "check-alerts",
-        endpoint: "/api/services/check-alerts",
-      },
-      {
-        name: "check-reminders",
-        endpoint: "/api/services/check-reminders",
-      },
-      {
-        name: "refresh-analytics",
-        endpoint: "/api/services/refresh-analytics",
-      },
-    ];
-
-    const servicePromises = services.map((service) =>
-      apiPost(service.endpoint).catch((err) => {
-        console.error(`Service ${service.name} failed:`, err);
-        return null;
-      })
-    );
-
-    const results = await Promise.allSettled(servicePromises);
-
-    // Handle alerts and reminders
-    for (let i = 0; i < results.length; i++) {
-      if (results[i].status === "fulfilled") {
-        const result = results[i] as PromiseFulfilledResult<unknown>;
-        const data = result.value as {
-          alerts?: Array<{ message?: string; title?: string }>;
-          reminders?: Array<{ message?: string }>;
-        } | null;
-
-        if (!data) continue;
-
-        // Show alerts (service index 1)
-        if (i === 1 && Array.isArray(data.alerts) && data.alerts.length > 0) {
-          data.alerts.forEach((alert) => {
-            showToast(
-              "warning",
-              alert.message || alert.title || "Alert",
-              undefined,
-              5000
-            );
-          });
-        }
-
-        // Show reminders (service index 2)
-        if (
-          i === 2 &&
-          Array.isArray(data.reminders) &&
-          data.reminders.length > 0
-        ) {
-          const reminderCount = data.reminders.length;
-          showToast(
-            "info",
-            `${reminderCount} upcoming bill reminder${
-              reminderCount !== 1 ? "s" : ""
-            }`,
-            data.reminders[0]?.message
-          );
-        }
-      }
-    }
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setLastSync(new Date());
   };
 
-  /**
-   * Show toast notification (simple implementation)
-   * In production, use a library like react-hot-toast or sonner
-   */
-  const showToast = (
-    type: "success" | "error" | "warning" | "info",
-    message: string,
-    description?: string,
-    duration: number = 4000
-  ) => {
-    // Simple console logging for now
-    // Replace with actual toast library
-    const icon = {
-      success: "✓",
-      error: "✗",
-      warning: "⚠",
-      info: "ℹ",
-    }[type];
-
-    console.log(
-      `[${icon}] ${message}${description ? ` - ${description}` : ""}`
-    );
-
-    // Dispatch custom event for toast (can be picked up by a toast provider)
-    window.dispatchEvent(
-      new CustomEvent("show-toast", {
-        detail: { type, message, description, duration },
-      })
-    );
+  const handleSyncComplete = () => {
+    if (onSyncComplete) {
+      onSyncComplete();
+    }
   };
 
   return (
-    <div className={`flex items-center gap-4 ${className || ""}`}>
-      <Button
-        onClick={handleSync}
-        disabled={syncing}
-        variant="primary"
-        size="md"
-      >
-        <RefreshCw
-          className={`mr-2 h-4 w-4 ${syncing ? "animate-spin" : ""}`}
-        />
-        {syncing ? "Syncing Gmail..." : "Sync Gmail"}
-      </Button>
+    <>
+      <div className={`flex items-center gap-4 ${className || ""}`}>
+        <Button onClick={handleOpenModal} variant="primary" size="md">
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Sync Gmail
+        </Button>
 
-      {lastSync && (
-        <span className="text-sm text-gray-500">
-          Last synced: {lastSync.toLocaleTimeString()}
-        </span>
-      )}
+        {lastSync && (
+          <span className="text-sm text-gray-500">
+            Last synced: {lastSync.toLocaleTimeString()}
+          </span>
+        )}
+      </div>
 
-      {syncing && (
-        <span className="text-sm text-gray-400 animate-pulse">
-          This may take 10-30 seconds...
-        </span>
-      )}
-    </div>
+      <GmailSyncModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onSyncComplete={handleSyncComplete}
+      />
+    </>
   );
 }

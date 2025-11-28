@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 interface BulkImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  cards: { id: string; card_name: string; last_four_digits: string }[];
+  cards: { id: string; card_name: string; card_number_last4: string }[];
 }
 
 interface ParsedTransaction {
@@ -121,12 +121,12 @@ export function BulkImportModal({ isOpen, onClose, cards }: BulkImportModalProps
       for (const t of transactions) {
         try {
           const formData: TransactionFormData = {
-            card_id: selectedCardId,
-            transaction_date: t.date,
-            merchant_name: t.merchant,
-            merchant_category: t.category,
+            cardId: selectedCardId,
+            transactionDate: t.date,
+            merchant: t.merchant,
+            category: t.category,
             amount: t.amount,
-            transaction_type: t.type,
+            transactionType: t.type,
             description: t.description
           };
           
@@ -146,7 +146,6 @@ export function BulkImportModal({ isOpen, onClose, cards }: BulkImportModalProps
       const failCount = results.filter(r => !r.success).length;
       
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["transaction-statistics"] });
       queryClient.invalidateQueries({ queryKey: ["cards"] });
       
       success(`Imported ${successCount} transactions successfully.`);
@@ -229,7 +228,7 @@ export function BulkImportModal({ isOpen, onClose, cards }: BulkImportModalProps
                 <option value="">Choose a card...</option>
                 {cards.map((card) => (
                   <option key={card.id} value={card.id}>
-                    {card.card_name} ({card.last_four_digits})
+                    {card.card_name} ({card.card_number_last4})
                   </option>
                 ))}
               </select>

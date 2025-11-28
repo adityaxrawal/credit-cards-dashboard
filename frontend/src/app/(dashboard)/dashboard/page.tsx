@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/lib/auth/AuthContext";
 import {
   analyticsApi,
   type DashboardOverview,
-  type UpcomingBill,
   type SpendingTrendItem,
 } from "@/lib/api/analytics";
 import { transactionApi, type Transaction } from "@/lib/api/transactions";
+import { cardApi, type Card } from "@/lib/api/cards";
+import { budgetApi, type BudgetStatus } from "@/lib/api/budget";
 import { GmailSyncButton } from "@/components/gmail/GmailSyncButton";
 import { RemindersWidget } from "@/components/dashboard/RemindersWidget";
 import { SpendingTrendChart } from "@/components/dashboard/SpendingTrendChart";
@@ -20,6 +20,15 @@ import { apiClient } from "@/lib/api-client";
 import { formatCurrency, cn } from "@/lib/utils";
 import { Button } from "@/components/ui";
 
+interface UpcomingBill {
+  card_id: string;
+  card_name: string;
+  bank_name: string;
+  due_date: string; // ISO date
+  outstanding: number;
+  days_until_due: number;
+}
+
 /**
  * Dashboard Page
  * Main dashboard view showing overview of cards, transactions, and analytics
@@ -27,9 +36,13 @@ import { Button } from "@/components/ui";
 export default function DashboardPage() {
   const { user } = useAuth();
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [budgetStatus, setBudgetStatus] = useState<BudgetStatus | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [upcomingBills, setUpcomingBills] = useState<UpcomingBill[]>([]);
   const [spendingTrend, setSpendingTrend] = useState<SpendingTrendItem[]>([]);
+  const [totalBalance, setTotalBalance] = useState(0);
+  const [totalCards, setTotalCards] = useState(0);
+  
   const [loading, setLoading] = useState(true);
   const [autoSyncChecked, setAutoSyncChecked] = useState(false);
   const [isAutoSyncing, setIsAutoSyncing] = useState(false);
@@ -55,21 +68,68 @@ export default function DashboardPage() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [overviewData, transactionsData, billsData, trendData] = await Promise.all([
-        analyticsApi.getDashboardOverview(),
-        transactionApi.getRecentTransactions(5),
-        analyticsApi.getUpcomingBills(30),
-        analyticsApi.getSpendingTrend("month", 6),
+      
+      // Fetch all required data in parallel
+      const [
+        overviewData, 
+        transactionsData, 
+        cardsData, 
+        budgetData,
+        trendData
+      ] = await Promise.all([
+        analyticsApi.getOverview(),
+        transactionApi.getTransactions({ limit: 5 }),
+        cardApi.getCards(),
+        budgetApi.getCurrentBudget().catch(() => null), // Handle 404 if no budget set
+        analyticsApi.getTrends("6m"),
       ]);
+
       setOverview(overviewData);
-      setRecentTransactions(transactionsData);
-      setUpcomingBills(billsData);
+      setRecentTransactions(transactionsData.data);
+      setBudgetStatus(budgetData);
       setSpendingTrend(trendData);
+      
+      // Process Cards Data
+      setTotalCards(cardsData.length);
+      const balance = cardsData.reduce((sum, card) => sum + (card.current_balance || 0), 0);
+      setTotalBalance(balance);
+      
+      // Calculate Upcoming Bills
+      const bills = calculateUpcomingBills(cardsData);
+      setUpcomingBills(bills);
+
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const calculateUpcomingBills = (cards: Card[]): UpcomingBill[] => {
+    const today = new Date();
+    const bills: UpcomingBill[] = [];
+
+    cards.forEach(card => {
+      if (!card.nextDueDate || !card.current_balance) return;
+      
+      const dueDate = new Date(card.nextDueDate);
+      const diffTime = dueDate.getTime() - today.getTime();
+      const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      // Only show bills due in next 30 days
+      if (daysUntil >= 0 && daysUntil <= 30 && card.current_balance > 0) {
+        bills.push({
+          card_id: card.id,
+          card_name: card.card_name,
+          bank_name: card.bank_name,
+          due_date: card.nextDueDate,
+          outstanding: card.current_balance,
+          days_until_due: daysUntil
+        });
+      }
+    });
+
+    return bills.sort((a, b) => a.days_until_due - b.days_until_due);
   };
 
   const checkAndAutoSync = async () => {
@@ -85,20 +145,9 @@ export default function DashboardPage() {
 
       if (!response.data?.connected) return;
 
-      const lastSync = response.data.lastSync ? new Date(response.data.lastSync) : null;
-      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-
-      if (!lastSync || lastSync < thirtyMinutesAgo) {
-        setIsAutoSyncing(true);
-        apiClient.post("/api/gmail/sync", {})
-          .then((result: any) => {
-            setIsAutoSyncing(false);
-            if (result.data?.summary?.newTransactions > 0) {
-              window.dispatchEvent(new CustomEvent("transactions-updated"));
-            }
-          })
-          .catch(() => setIsAutoSyncing(false));
-      }
+      // In the new backend, sync is handled via Pub/Sub or manual trigger
+      // We can check if we need to trigger a historical scan or just let it be
+      // For now, we'll just check status
     } catch (error) {
       console.error("Auto-sync check failed:", error);
     }
@@ -137,14 +186,14 @@ export default function DashboardPage() {
               <div>
                 <p className="text-sm text-secondary-text font-medium">Total Balance</p>
                 <h3 className="text-2xl font-bold text-primary-text mt-2">
-                  {formatCurrency(overview?.total_outstanding || 0)}
+                  {formatCurrency(totalBalance)}
                 </h3>
               </div>
               <div className="p-2 bg-blue-500/10 rounded-lg">
                 <CreditCard className="w-5 h-5 text-blue-500" />
               </div>
             </div>
-            <p className="text-xs text-secondary-text mt-4">Across {overview?.total_cards} cards</p>
+            <p className="text-xs text-secondary-text mt-4">Across {totalCards} cards</p>
           </div>
 
           <div className="bg-card-bg rounded-xl p-6 border border-muted-text/10 shadow-sm">
@@ -152,27 +201,27 @@ export default function DashboardPage() {
               <div>
                 <p className="text-sm text-secondary-text font-medium">Monthly Spending</p>
                 <h3 className="text-2xl font-bold text-primary-text mt-2">
-                  {formatCurrency(overview?.monthly_spending || 0)}
+                  {formatCurrency(overview?.currentMonth.totalSpent || 0)}
                 </h3>
               </div>
               <div className="p-2 bg-warning/10 rounded-lg">
                 <TrendingUp className="w-5 h-5 text-warning" />
               </div>
             </div>
-            {overview?.monthly_budget && (
+            {budgetStatus && (
               <div className="mt-4">
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-secondary-text">Budget</span>
                   <span className={cn(
-                    (overview.budget_utilization || 0) > 90 ? "text-error" : "text-success"
+                    budgetStatus.ratio > 0.9 ? "text-error" : "text-success"
                   )}>
-                    {overview.budget_utilization?.toFixed(0)}%
+                    {(budgetStatus.ratio * 100).toFixed(0)}%
                   </span>
                 </div>
                 <div className="w-full bg-hover-bg rounded-full h-1.5">
                   <div 
-                    className={cn("h-1.5 rounded-full", (overview.budget_utilization || 0) > 90 ? "bg-error" : "bg-success")}
-                    style={{ width: `${Math.min(overview.budget_utilization || 0, 100)}%` }}
+                    className={cn("h-1.5 rounded-full", budgetStatus.ratio > 0.9 ? "bg-error" : "bg-success")}
+                    style={{ width: `${Math.min(budgetStatus.ratio * 100, 100)}%` }}
                   />
                 </div>
               </div>
@@ -203,7 +252,7 @@ export default function DashboardPage() {
               <div>
                 <p className="text-sm text-secondary-text font-medium">Total Rewards</p>
                 <h3 className="text-2xl font-bold text-primary-text mt-2">
-                  {/* Placeholder for rewards points, assuming it comes from overview or separate API */}
+                  {/* Placeholder for rewards points */}
                   24,500
                 </h3>
               </div>
@@ -238,10 +287,10 @@ export default function DashboardPage() {
                     <div key={t.id} className="flex justify-between items-center">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-hover-bg flex items-center justify-center text-xs font-medium text-secondary-text">
-                          {t.merchant_name.charAt(0)}
+                          {t.merchant.charAt(0)}
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-primary-text truncate max-w-[120px]">{t.merchant_name}</p>
+                          <p className="text-sm font-medium text-primary-text truncate max-w-[120px]">{t.merchant}</p>
                           <p className="text-xs text-secondary-text">{new Date(t.transaction_date).toLocaleDateString()}</p>
                         </div>
                       </div>

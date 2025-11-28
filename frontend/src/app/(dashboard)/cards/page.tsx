@@ -105,7 +105,7 @@ export default function CardsPage() {
 
   const handleViewTransactions = (e: React.MouseEvent, card: Card) => {
     e.stopPropagation();
-    router.push(`/transactions?card_id=${card.id}`);
+    router.push(`/transactions?cardId=${card.id}`);
   };
 
   const handleSubmitCard = (data: CardFormData) => {
@@ -246,7 +246,7 @@ function CardItem({
   onViewTransactions,
 }: CardItemProps) {
   const utilization = card.credit_limit
-    ? calculateUtilization(card.current_outstanding, card.credit_limit)
+    ? calculateUtilization(card.current_balance, card.credit_limit)
     : 0;
 
   return (
@@ -258,7 +258,7 @@ function CardItem({
       <div className="mb-4">
         <CardVisual
           cardName={card.card_name}
-          cardNumber={card.last_four_digits}
+          cardNumber={card.card_number_last4}
           gradient={gradient}
           className="w-full"
         />
@@ -275,7 +275,7 @@ function CardItem({
           <div>
             <p className="text-secondary-text">Outstanding</p>
             <p className="font-semibold text-primary-text">
-              {formatCurrency(card.current_outstanding)}
+              {formatCurrency(card.current_balance)}
             </p>
           </div>
           {card.credit_limit && (
@@ -381,35 +381,32 @@ function AddCardModal({
   isSubmitting,
 }: AddCardModalProps) {
   const [formData, setFormData] = React.useState<CardFormData>({
-    card_name: "",
-    bank_name: "",
-    card_type: "credit",
-    last_four_digits: "",
-    bill_date: 1,
-    due_date: 5,
-    credit_limit: 0,
+    cardName: "",
+    bankName: "",
+    lastFour: "",
+    billDate: 1,
+    dueDate: 5,
+    creditLimit: 0,
   });
 
   React.useEffect(() => {
     if (card) {
       setFormData({
-        card_name: card.card_name,
-        bank_name: card.bank_name,
-        card_type: card.card_type,
-        last_four_digits: card.last_four_digits,
-        bill_date: card.bill_date,
-        due_date: card.due_date,
-        credit_limit: card.credit_limit,
+        cardName: card.card_name,
+        bankName: card.bank_name,
+        lastFour: card.card_number_last4,
+        billDate: card.bill_date,
+        dueDate: card.due_date,
+        creditLimit: card.credit_limit,
       });
     } else {
       setFormData({
-        card_name: "",
-        bank_name: "",
-        card_type: "credit",
-        last_four_digits: "",
-        bill_date: 1,
-        due_date: 5,
-        credit_limit: 0,
+        cardName: "",
+        bankName: "",
+        lastFour: "",
+        billDate: 1,
+        dueDate: 5,
+        creditLimit: 0,
       });
     }
   }, [card, isOpen]);
@@ -422,10 +419,10 @@ function AddCardModal({
     if (preset) {
       setFormData((prev) => ({
         ...prev,
-        card_name: preset.name,
-        bank_name: preset.bank,
-        bill_date: preset.billDate,
-        due_date: preset.dueDate,
+        cardName: preset.name,
+        bankName: preset.bank,
+        billDate: preset.billDate,
+        dueDate: preset.dueDate,
       }));
     }
   };
@@ -466,9 +463,9 @@ function AddCardModal({
         <Input
           label="Card Name"
           required
-          value={formData.card_name}
+          value={formData.cardName}
           onChange={(e) =>
-            setFormData({ ...formData, card_name: e.target.value })
+            setFormData({ ...formData, cardName: e.target.value })
           }
           placeholder="e.g., Primary Credit Card"
         />
@@ -476,9 +473,9 @@ function AddCardModal({
         <Input
           label="Bank Name"
           required
-          value={formData.bank_name}
+          value={formData.bankName}
           onChange={(e) =>
-            setFormData({ ...formData, bank_name: e.target.value })
+            setFormData({ ...formData, bankName: e.target.value })
           }
           placeholder="e.g., Chase Bank"
         />
@@ -486,9 +483,9 @@ function AddCardModal({
         <Input
           label="Last 4 Digits"
           required
-          value={formData.last_four_digits}
+          value={formData.lastFour}
           onChange={(e) =>
-            setFormData({ ...formData, last_four_digits: e.target.value })
+            setFormData({ ...formData, lastFour: e.target.value })
           }
           placeholder="1234"
           maxLength={4}
@@ -499,9 +496,9 @@ function AddCardModal({
             label="Bill Date"
             type="number"
             required
-            value={formData.bill_date.toString()}
+            value={formData.billDate.toString()}
             onChange={(e) =>
-              setFormData({ ...formData, bill_date: parseInt(e.target.value) })
+              setFormData({ ...formData, billDate: parseInt(e.target.value) })
             }
             placeholder="15"
             min="1"
@@ -512,9 +509,9 @@ function AddCardModal({
             label="Due Date"
             type="number"
             required
-            value={formData.due_date.toString()}
+            value={formData.dueDate.toString()}
             onChange={(e) =>
-              setFormData({ ...formData, due_date: parseInt(e.target.value) })
+              setFormData({ ...formData, dueDate: parseInt(e.target.value) })
             }
             placeholder="5"
             min="1"
@@ -526,11 +523,11 @@ function AddCardModal({
           label="Credit Limit"
           type="number"
           required
-          value={formData.credit_limit.toString()}
+          value={formData.creditLimit.toString()}
           onChange={(e) =>
             setFormData({
               ...formData,
-              credit_limit: parseFloat(e.target.value),
+              creditLimit: parseFloat(e.target.value),
             })
           }
           placeholder="10000"

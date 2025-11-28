@@ -4,23 +4,39 @@ import jwt from 'jsonwebtoken';
 import pool from '../db';
 import { z } from 'zod';
 
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const client = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
+);
 
 const generateTokens = (userId: string) => {
   const accessToken = jwt.sign({ userId }, process.env.JWT_SECRET as string, { expiresIn: '1h' });
-  const refreshToken = jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET as string, { expiresIn: '7d' });
+  const refreshToken = jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET as string, { expiresIn: '30d' });
   return { accessToken, refreshToken };
 };
 
 export const googleLogin = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { credential } = req.body;
-    if (!credential) {
-      return res.status(400).json({ error: 'Missing credential' });
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ error: 'Missing authorization code' });
     }
 
+    // Exchange authorization code for tokens
+    const { tokens } = await client.getToken({
+      code,
+      redirect_uri: process.env.GOOGLE_REDIRECT_URI, // Must match frontend redirect_uri
+    });
+
+    const idToken = tokens.id_token;
+    if (!idToken) {
+      return res.status(400).json({ error: 'No ID token returned from Google' });
+    }
+
+    // Verify the ID token
     const ticket = await client.verifyIdToken({
-      idToken: credential,
+      idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
     const payload = ticket.getPayload();
@@ -60,14 +76,61 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
       user = updateResult.rows[0];
     }
 
+    // Store refresh token if available (for offline access like Gmail API)
+    if (tokens.refresh_token) {
+      // TODO: Store tokens.refresh_token securely in DB for this user
+      // This is needed for background Gmail sync
+      await pool.query(
+        `UPDATE users SET google_refresh_token = $2 WHERE id = $1`,
+        [user.id, tokens.refresh_token]
+      );
+    }
+
     const { accessToken, refreshToken } = generateTokens(user.id);
 
-    res.json({
-      user,
-      accessToken,
-      refreshToken
+    // Debug logs for cookie generation
+    console.log('[AuthController] Generating tokens for user:', user.id);
+    console.log('[AuthController] Access Token Options:', {
+      httpOnly: true,
+      secure: false, // Forced false for debugging
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 1000
     });
+
+    // Set cookies
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: false, // Forced false for debugging
+      sameSite: 'lax',
+      path: '/', // Explicitly set path to root
+      maxAge: 60 * 60 * 1000 // 1 hour
+    });
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: false, // Forced false for debugging
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    });
+
+    res.json({
+      success: true,
+      data: {
+        user,
+        accessToken, // Optional: return if client needs it for non-cookie usage
+      }
+    });
+
+    // Trigger background Gmail sync
+    // We check if we have a refresh token either from the new login or existing in DB
+    const hasRefreshToken = !!tokens.refresh_token || !!user.google_refresh_token;
+    
+    console.log(`[Auth] User ${user.id} login successful. Has refresh token: ${hasRefreshToken}`);
+
   } catch (error) {
+    console.error('Google login error:', error);
     next(error);
   }
 };
@@ -82,7 +145,13 @@ export const getMe = async (req: any, res: Response, next: NextFunction) => {
 
 export const refresh = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { refreshToken } = req.body;
+    let { refreshToken } = req.body;
+    
+    // Also check cookies if not in body
+    if (!refreshToken && req.cookies && req.cookies.refreshToken) {
+      refreshToken = req.cookies.refreshToken;
+    }
+
     if (!refreshToken) {
       return res.status(400).json({ error: 'Missing refresh token' });
     }
@@ -95,6 +164,24 @@ export const refresh = async (req: Request, res: Response, next: NextFunction) =
     }
 
     const tokens = generateTokens(decoded.userId);
+
+    // Set cookies
+    res.cookie('accessToken', tokens.accessToken, {
+      httpOnly: true,
+      secure: false, // Forced false for debugging
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 1000 // 1 hour
+    });
+
+    res.cookie('refreshToken', tokens.refreshToken, {
+      httpOnly: true,
+      secure: false, // Forced false for debugging
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    });
+
     res.json(tokens);
   } catch (error) {
     return res.status(401).json({ error: 'Invalid refresh token' });

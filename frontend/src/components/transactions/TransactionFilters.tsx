@@ -1,245 +1,138 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { type TransactionFilters as TxFilters } from "@/lib/api/transactions";
-import { type Card } from "@/lib/api/cards";
+import React from "react";
+import { Search, Filter, X } from "lucide-react";
+import { Button, Input } from "@/components/ui";
+import { Card } from "@/lib/api/cards";
+import { TransactionFilters as FilterType } from "@/lib/api/transactions";
 
 interface TransactionFiltersProps {
-  filters: TxFilters;
-  onFilterChange: (filters: TxFilters) => void;
+  filters: FilterType;
+  onFilterChange: (filters: FilterType) => void;
   cards: Card[];
 }
 
-export default function TransactionFilters({
+export function TransactionFilters({
   filters,
   onFilterChange,
   cards,
 }: TransactionFiltersProps) {
-  const [localFilters, setLocalFilters] = useState<TxFilters>(filters);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isOpen, setIsOpen] = React.useState(false);
 
-  useEffect(() => {
-    setLocalFilters(filters);
-  }, [filters]);
-
-  const handleChange = (name: string, value: string | number | undefined) => {
-    const newFilters = { ...localFilters };
-    if (value === "" || value === undefined) {
-      delete newFilters[name as keyof TxFilters];
-    } else {
-      newFilters[name as keyof TxFilters] = value as never;
-    }
-    setLocalFilters(newFilters);
+  const handleChange = (key: keyof FilterType, value: any) => {
+    onFilterChange({ ...filters, [key]: value });
   };
 
-  const handleApply = () => {
-    onFilterChange(localFilters);
-  };
-
-  const handleClear = () => {
-    setLocalFilters({});
+  const clearFilters = () => {
     onFilterChange({});
   };
 
-  const hasActiveFilters = Object.keys(filters).length > 0;
+  const activeFiltersCount = Object.keys(filters).filter(
+    (key) => filters[key as keyof FilterType] !== undefined && filters[key as keyof FilterType] !== ""
+  ).length;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="font-semibold text-gray-800">
-          Filters{" "}
-          {hasActiveFilters && `(${Object.keys(filters).length} active)`}
-        </h3>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="text-blue-600 hover:text-blue-700 text-sm"
-        >
-          {isExpanded ? "Hide" : "Show"} Filters
-        </button>
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-text" />
+          <Input
+            placeholder="Search by merchant..."
+            value={filters.merchant || ""}
+            onChange={(e) => handleChange("merchant", e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant={isOpen ? "primary" : "secondary"}
+            onClick={() => setIsOpen(!isOpen)}
+            className="whitespace-nowrap"
+          >
+            <Filter className="w-4 h-4 mr-2" />
+            Filters
+            {activeFiltersCount > 0 && (
+              <span className="ml-2 bg-primary-bg text-primary-text text-xs px-2 py-0.5 rounded-full">
+                {activeFiltersCount}
+              </span>
+            )}
+          </Button>
+          {activeFiltersCount > 0 && (
+            <Button variant="ghost" onClick={clearFilters}>
+              <X className="w-4 h-4 mr-2" />
+              Clear
+            </Button>
+          )}
+        </div>
       </div>
 
-      {isExpanded && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Card Filter */}
-            <div>
-              <label
-                htmlFor="cardId"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Card
-              </label>
-              <select
-                id="cardId"
-                value={localFilters.cardId || ""}
-                onChange={(e) => handleChange("cardId", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              >
-                <option value="">All Cards</option>
-                {cards.map((card) => (
-                  <option key={card.id} value={card.id}>
-                    {card.card_name} (••{card.last_four_digits})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Start Date */}
-            <div>
-              <label
-                htmlFor="startDate"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Start Date
-              </label>
-              <input
-                type="date"
-                id="startDate"
-                value={localFilters.startDate || ""}
-                onChange={(e) => handleChange("startDate", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              />
-            </div>
-
-            {/* End Date */}
-            <div>
-              <label
-                htmlFor="endDate"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                End Date
-              </label>
-              <input
-                type="date"
-                id="endDate"
-                value={localFilters.endDate || ""}
-                onChange={(e) => handleChange("endDate", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              />
-            </div>
-
-            {/* Transaction Type */}
-            <div>
-              <label
-                htmlFor="type"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Type
-              </label>
-              <select
-                id="type"
-                value={localFilters.type || ""}
-                onChange={(e) => handleChange("type", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              >
-                <option value="">All Types</option>
-                <option value="debit">Debit</option>
-                <option value="credit">Credit</option>
-                <option value="refund">Refund</option>
-              </select>
-            </div>
-
-            {/* Category */}
-            <div>
-              <label
-                htmlFor="category"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Category
-              </label>
-              <input
-                type="text"
-                id="category"
-                value={localFilters.category || ""}
-                onChange={(e) => handleChange("category", e.target.value)}
-                placeholder="e.g., Groceries"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              />
-            </div>
-
-            {/* Search */}
-            <div>
-              <label
-                htmlFor="search"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Search Merchant
-              </label>
-              <input
-                type="text"
-                id="search"
-                value={localFilters.search || ""}
-                onChange={(e) => handleChange("search", e.target.value)}
-                placeholder="Search by name..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              />
-            </div>
-
-            {/* Min Amount */}
-            <div>
-              <label
-                htmlFor="minAmount"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Min Amount
-              </label>
-              <input
-                type="number"
-                id="minAmount"
-                value={localFilters.minAmount || ""}
-                onChange={(e) =>
-                  handleChange(
-                    "minAmount",
-                    e.target.value ? parseFloat(e.target.value) : undefined
-                  )
-                }
-                placeholder="0"
-                min="0"
-                step="100"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              />
-            </div>
-
-            {/* Max Amount */}
-            <div>
-              <label
-                htmlFor="maxAmount"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Max Amount
-              </label>
-              <input
-                type="number"
-                id="maxAmount"
-                value={localFilters.maxAmount || ""}
-                onChange={(e) =>
-                  handleChange(
-                    "maxAmount",
-                    e.target.value ? parseFloat(e.target.value) : undefined
-                  )
-                }
-                placeholder="No limit"
-                min="0"
-                step="100"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              />
-            </div>
+      {isOpen && (
+        <div className="bg-card-bg p-4 rounded-lg border border-border grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <label className="text-sm font-medium text-secondary-text mb-1 block">
+              Card
+            </label>
+            <select
+              className="w-full p-2 rounded-lg border border-border bg-input-bg text-primary-text focus:ring-2 focus:ring-primary-green focus:border-transparent outline-none transition-all"
+              value={filters.cardId || ""}
+              onChange={(e) => handleChange("cardId", e.target.value)}
+            >
+              <option value="">All Cards</option>
+              {cards.map((card) => (
+                <option key={card.id} value={card.id}>
+                  {card.card_name} (••{card.card_number_last4})
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 pt-2">
-            <button
-              onClick={handleApply}
-              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          <div>
+            <label className="text-sm font-medium text-secondary-text mb-1 block">
+              Type
+            </label>
+            <select
+              className="w-full p-2 rounded-lg border border-border bg-input-bg text-primary-text focus:ring-2 focus:ring-primary-green focus:border-transparent outline-none transition-all"
+              value={filters.transactionType || ""}
+              onChange={(e) => handleChange("transactionType", e.target.value)}
             >
-              Apply Filters
-            </button>
-            <button
-              onClick={handleClear}
-              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Clear All
-            </button>
+              <option value="">All Types</option>
+              <option value="debit">Debit</option>
+              <option value="credit">Credit</option>
+              <option value="refund">Refund</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-secondary-text mb-1 block">
+              From Date
+            </label>
+            <Input
+              type="date"
+              value={filters.from || ""}
+              onChange={(e) => handleChange("from", e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-secondary-text mb-1 block">
+              To Date
+            </label>
+            <Input
+              type="date"
+              value={filters.to || ""}
+              onChange={(e) => handleChange("to", e.target.value)}
+            />
+          </div>
+          
+          <div>
+            <label className="text-sm font-medium text-secondary-text mb-1 block">
+              Category
+            </label>
+            <Input
+              placeholder="e.g. Food"
+              value={filters.category || ""}
+              onChange={(e) => handleChange("category", e.target.value)}
+            />
           </div>
         </div>
       )}

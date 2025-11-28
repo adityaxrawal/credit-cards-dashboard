@@ -20,15 +20,15 @@ export const getGmailClient = async (userId: string) => {
     // I need to check the users table schema again or add the column if missing.
     
     // Let's assume for now we need to fetch it.
-    const res = await client.query('SELECT refresh_token FROM users WHERE id = $1', [userId]);
+    const res = await client.query('SELECT google_refresh_token FROM users WHERE id = $1', [userId]);
     
-    if (res.rows.length === 0 || !res.rows[0].refresh_token) {
+    if (res.rows.length === 0 || !res.rows[0].google_refresh_token) {
       throw new Error('User not connected to Gmail');
     }
 
     const oAuth2Client = getOAuthClient();
     oAuth2Client.setCredentials({
-      refresh_token: res.rows[0].refresh_token
+      refresh_token: res.rows[0].google_refresh_token
     });
 
     return google.gmail({ version: 'v1', auth: oAuth2Client as any });

@@ -5,35 +5,48 @@ export interface Card {
   user_id: string;
   card_name: string;
   bank_name: string;
-  card_type: "credit" | "debit";
-  last_four_digits: string;
+  card_number_last4: string; // Changed from last_four_digits
   credit_limit: number;
-  current_outstanding: number;
+  current_balance: number; // Changed from current_outstanding
   bill_date: number;
   due_date: number;
+  activation_date?: string;
+  is_active: boolean;
+  notes?: string;
   created_at: string;
   updated_at: string;
+  // Computed fields from backend
+  utilization?: number;
+  nextBillDate?: string;
+  nextDueDate?: string;
 }
 
 export interface CardFormData {
-  card_name: string;
-  bank_name: string;
-  card_type: "credit" | "debit";
-  last_four_digits: string;
-  credit_limit: number;
-  bill_date: number;
-  due_date: number;
+  cardName: string; // Changed to camelCase to match backend controller expectation if needed, or keep snake_case if backend handles it. 
+  // Checking backend controller: it expects camelCase in req.body (cardName, bankName, etc.)
+  bankName: string;
+  lastFour: string;
+  billDate: number;
+  dueDate: number;
+  creditLimit: number;
+  activationDate?: string;
+  notes?: string;
 }
 
-export interface CardStatistics {
-  total_transactions: number;
-  total_spent: number;
-  current_month_spent: number;
-  average_transaction: number;
-  category_breakdown: {
-    category: string;
-    total: number;
-  }[];
+export interface CardStatement {
+  card: Card;
+  billingPeriod: {
+    start: string;
+    end: string;
+    dueDate: string;
+  };
+  transactions: any[]; // We can type this properly later
+  summary: {
+    totalDebits: number;
+    totalCredits: number;
+    netAmount: number;
+    transactionCount: number;
+  };
 }
 
 export const cardApi = {
@@ -54,11 +67,15 @@ export const cardApi = {
   },
 
   /**
-   * Get statistics for a card
+   * Get card statement for a specific month/year
    */
-  getCardStatistics: async (cardId: string): Promise<CardStatistics> => {
-    return apiGet<{ data: CardStatistics }>(
-      `/api/cards/${cardId}/statistics`
+  getCardStatement: async (
+    cardId: string, 
+    month: number, 
+    year: number
+  ): Promise<CardStatement> => {
+    return apiGet<{ data: CardStatement }>(
+      `/api/cards/${cardId}/statements?month=${month}&year=${year}`
     ).then((res) => res.data);
   },
 

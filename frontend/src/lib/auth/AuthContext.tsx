@@ -90,13 +90,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function checkAuth() {
     try {
       console.log("📡 Making /api/auth/me request");
-      const data = await apiClient.get<{ user: User }>("/api/auth/me");
+      // apiClient.get<User>() returns ApiResponse<User> = { success, data: User, error, timestamp }
+      const response = await apiClient.get<User>("/api/auth/me");
 
-      if (data.success && data.data?.user) {
-        console.log("✅ Auth check successful:", data.data.user.email);
-        setUser(data.data.user);
+      if (response.data && response.data.id && response.data.email) {
+        console.log("✅ Auth check successful:", response.data.email);
+        setUser(response.data);
       } else {
-        console.log("❌ Auth check failed: Invalid response");
+        console.log("❌ Auth check failed: Invalid response", response);
         setUser(null);
       }
     } catch (error: unknown) {
@@ -140,9 +141,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(data.data.user);
 
       console.log("✅ Login successful, redirecting to dashboard");
-
-      // Redirect to dashboard
-      router.push("/dashboard");
+      
+      // Force a hard redirect to ensure cookies are properly sent to the server
+      // and middleware/layout re-runs with the new auth state
+      window.location.href = "/dashboard";
     } catch (error) {
       console.error("❌ Login failed:", error);
       throw error;

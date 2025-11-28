@@ -33,11 +33,12 @@ async function fetchUser(): Promise<User | null> {
 
     const data = await response.json();
 
-    if (!data.success || !data.data?.user) {
+    // Backend returns user object directly
+    if (!data || !data.id || !data.email) {
       return null;
     }
 
-    const apiUser = data.data.user;
+    const apiUser = data;
 
     return {
       id: apiUser.id,

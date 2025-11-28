@@ -4,7 +4,9 @@ import React from "react";
 import { Save, Mail, CreditCard, Smartphone, Check, AlertTriangle, RefreshCw } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout";
-import { Button, Input, Toggle, ProgressBar } from "@/components/ui";
+import { Button, Input, ProgressBar } from "@/components/ui";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { cn, formatCurrency } from "@/lib/utils";
 import { settingsApi, type UserSettings } from "@/lib/api/settings";
 import { useToast } from "@/components/ui/Toast";
@@ -163,13 +165,16 @@ function SpendingLimitsSettings() {
           </p>
         </div>
 
-        <Toggle
-          checked={settings.isActive}
-          onChange={(checked) =>
-            setSettings({ ...settings, isActive: checked })
-          }
-          label="Enable spending limit alerts"
-        />
+        <div className="flex items-center justify-between">
+          <Label htmlFor="spending-limit-alerts">Enable spending limit alerts</Label>
+          <Switch
+            id="spending-limit-alerts"
+            checked={settings.isActive}
+            onCheckedChange={(checked) =>
+              setSettings({ ...settings, isActive: checked })
+            }
+          />
+        </div>
       </div>
 
       {/* Current Progress */}
@@ -281,33 +286,42 @@ function EmailPreferencesSettings() {
       </div>
 
       <div className="space-y-4">
-        <Toggle
-          checked={preferences.emailNotifications}
-          onChange={(checked) =>
-            setPreferences({ ...preferences, emailNotifications: checked })
-          }
-          label="Enable email notifications"
-        />
+        <div className="flex items-center justify-between">
+          <Label htmlFor="email-notifications">Enable email notifications</Label>
+          <Switch
+            id="email-notifications"
+            checked={preferences.emailNotifications}
+            onCheckedChange={(checked) =>
+              setPreferences({ ...preferences, emailNotifications: checked })
+            }
+          />
+        </div>
 
         <div className="ml-6 space-y-4 border-l-2 border-muted-text/10 pl-4">
-          <Toggle
-            checked={preferences.spendingAlerts}
-            onChange={(checked) =>
-              setPreferences({ ...preferences, spendingAlerts: checked })
-            }
-            label="Spending limit alerts"
-            disabled={!preferences.emailNotifications}
-          />
-
-          <div>
-            <Toggle
-              checked={preferences.billReminders}
-              onChange={(checked) =>
-                setPreferences({ ...preferences, billReminders: checked })
+          <div className="flex items-center justify-between">
+            <Label htmlFor="spending-alerts" className={!preferences.emailNotifications ? "opacity-50" : ""}>Spending limit alerts</Label>
+            <Switch
+              id="spending-alerts"
+              checked={preferences.spendingAlerts}
+              onCheckedChange={(checked) =>
+                setPreferences({ ...preferences, spendingAlerts: checked })
               }
-              label="Bill due date reminders"
               disabled={!preferences.emailNotifications}
             />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="bill-reminders" className={!preferences.emailNotifications ? "opacity-50" : ""}>Bill due date reminders</Label>
+              <Switch
+                id="bill-reminders"
+                checked={preferences.billReminders}
+                onCheckedChange={(checked) =>
+                  setPreferences({ ...preferences, billReminders: checked })
+                }
+                disabled={!preferences.emailNotifications}
+              />
+            </div>
             {preferences.billReminders && (
               <div className="mt-2 ml-6">
                 <Input
@@ -328,14 +342,17 @@ function EmailPreferencesSettings() {
             )}
           </div>
 
-          <Toggle
-            checked={preferences.weeklySummary}
-            onChange={(checked) =>
-              setPreferences({ ...preferences, weeklySummary: checked })
-            }
-            label="Weekly spending summary"
-            disabled={!preferences.emailNotifications}
-          />
+          <div className="flex items-center justify-between">
+            <Label htmlFor="weekly-summary" className={!preferences.emailNotifications ? "opacity-50" : ""}>Weekly spending summary</Label>
+            <Switch
+              id="weekly-summary"
+              checked={preferences.weeklySummary}
+              onCheckedChange={(checked) =>
+                setPreferences({ ...preferences, weeklySummary: checked })
+              }
+              disabled={!preferences.emailNotifications}
+            />
+          </div>
         </div>
       </div>
 

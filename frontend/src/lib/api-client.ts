@@ -15,7 +15,7 @@ export async function apiRequest(
   try {
     const response = await fetch(
       `${
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+        process.env.NEXT_PUBLIC_API_URL || ""
       }${endpoint}`,
       {
         ...options,
@@ -45,7 +45,7 @@ class ApiClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001",
+      baseURL: process.env.NEXT_PUBLIC_API_URL,
       headers: {
         "Content-Type": "application/json",
       },

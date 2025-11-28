@@ -1,28 +1,30 @@
 import { Router } from 'express';
 import authRoutes from './authRoutes';
-import cardRoutes from './cardRoutes';
-import transactionRoutes from './transactionRoutes';
-import billRoutes from './billRoutes';
-import statementRoutes from './statementRoutes';
-import rewardsRoutes from './rewardsRoutes';
-import analyticsRoutes from './analyticsRoutes';
-import gmailRoutes from './gmailRoutes';
-import settingsRoutes from './settingsRoutes';
+import cardsRoutes from './cards.routes';
+import transactionsRoutes from './transactions.routes';
+import budgetRoutes from './budget.routes';
+import analyticsRoutes from './analytics.routes';
+import alertsRoutes from './alerts.routes';
+import gmailRoutes from './gmail.routes';
+import billsRoutes from './bills.routes';
+import statementsRoutes from './statements.routes';
+import rewardsRoutes from './rewards.routes';
 
 const router = Router();
 
+// Auth routes (no /api prefix needed, it's added in app.ts)
 router.use('/auth', authRoutes);
-router.use('/cards', cardRoutes);
-router.use('/transactions', transactionRoutes);
-router.use('/bills', billRoutes);
-router.use('/statements', statementRoutes);
-router.use('/rewards', rewardsRoutes);
-router.use('/analytics', analyticsRoutes);
-router.use('/gmail', gmailRoutes);
-router.use('/settings', settingsRoutes);
 
-router.get('/', (req, res) => {
-  res.json({ message: 'Welcome to Credit Card Dashboard API' });
-});
+// Domain routes
+router.use('/cards', cardsRoutes);
+router.use('/transactions', transactionsRoutes);
+router.use('/budget', budgetRoutes);
+router.use('/analytics', analyticsRoutes);
+router.use('/alerts', alertsRoutes);
+router.use('/gmail', gmailRoutes);
+router.use('/bills', billsRoutes);
+router.use('/statements', statementsRoutes);
+router.use('/rewards', rewardsRoutes);
 
 export default router;
+

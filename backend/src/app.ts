@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import { errorHandler } from './middleware/errorHandler';
 import routes from './routes';
 
@@ -10,6 +11,7 @@ const app = express();
 
 // Middleware
 app.use(helmet());
+app.use(cookieParser());
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true

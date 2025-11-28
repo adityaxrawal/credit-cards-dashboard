@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Progress } from "./progress";
 
 export interface ProgressBarProps {
   value: number;
@@ -27,6 +28,11 @@ export function ProgressBar({
     lg: "h-4",
   };
 
+  // Map legacy color props to tailwind classes if needed, or rely on default
+  // For now, we'll use a specific class for the indicator based on the color prop
+  // assuming 'primary-green' maps to 'bg-primary-green'
+  const indicatorColorClass = color === "primary-green" ? "bg-primary-green" : `bg-${color}`;
+
   return (
     <div className={cn("w-full", className)}>
       {label && (
@@ -37,12 +43,11 @@ export function ProgressBar({
           )}
         </div>
       )}
-      <div className={cn("progress-bar", sizeClasses[size])}>
-        <div
-          className={cn("progress-fill", `bg-${color}`)}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
+      <Progress 
+        value={percentage} 
+        className={sizeClasses[size]} 
+        indicatorClassName={indicatorColorClass}
+      />
     </div>
   );
 }

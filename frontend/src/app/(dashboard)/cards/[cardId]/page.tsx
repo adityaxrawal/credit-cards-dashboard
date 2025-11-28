@@ -8,9 +8,7 @@ import { AppLayout } from "@/components/layout";
 import { Button, ProgressBar, Modal, Input, Badge, CardVisual } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import {
-  SpendingTrendChart,
   CategoryBreakdownChart,
-  WeeklySpendingChart,
 } from "@/components/analytics";
 import { formatCurrency, cn, getCardGradient, calculateUtilization } from "@/lib/utils";
 import { cardApi, type Card, type CardFormData } from "@/lib/api/cards";
@@ -42,15 +40,20 @@ export default function CardDetailPage() {
   });
 
   // Fetch Transactions
-  const { data: transactionData, isLoading: isTransactionsLoading } = useQuery({
+  const { data: transactionResponse, isLoading: isTransactionsLoading } = useQuery({
     queryKey: ["transactions", cardId],
-    queryFn: () => transactionApi.getTransactions({ cardId }),
+    queryFn: () => transactionApi.getTransactions({ cardId, limit: 50 }),
   });
 
-  // Fetch Statistics
-  const { data: stats, isLoading: isStatsLoading } = useQuery({
-    queryKey: ["card-stats", cardId],
-    queryFn: () => cardApi.getCardStatistics(cardId),
+  const transactions = transactionResponse?.data || [];
+
+  // Fetch Current Statement (replaces statistics)
+  const currentMonth = new Date().getMonth() + 1;
+  const currentYear = new Date().getFullYear();
+  
+  const { data: statement, isLoading: isStatsLoading } = useQuery({
+    queryKey: ["card-statement", cardId, currentMonth, currentYear],
+    queryFn: () => cardApi.getCardStatement(cardId, currentMonth, currentYear),
   });
 
   // Delete Card Mutation
@@ -86,7 +89,7 @@ export default function CardDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions", cardId] });
       queryClient.invalidateQueries({ queryKey: ["card", cardId] }); // Balance might change
-      queryClient.invalidateQueries({ queryKey: ["card-stats", cardId] });
+      queryClient.invalidateQueries({ queryKey: ["card-statement", cardId] });
       success("Transaction added successfully");
       setShowAddTransaction(false);
     },
@@ -117,8 +120,9 @@ export default function CardDetailPage() {
   }
 
   const creditLimit = card.credit_limit || 0;
-  const availableCredit = creditLimit - card.current_outstanding;
-  const utilization = calculateUtilization(card.current_outstanding, creditLimit);
+  const currentBalance = card.current_balance || 0;
+  const availableCredit = creditLimit - currentBalance;
+  const utilization = calculateUtilization(currentBalance, creditLimit);
   const gradient = getCardGradient(card.card_name || card.bank_name || "default");
 
   const handleDelete = () => {
@@ -167,7 +171,7 @@ export default function CardDetailPage() {
             <div className="flex justify-center lg:justify-start">
                <CardVisual
                   cardName={card.card_name}
-                  cardNumber={card.last_four_digits}
+                  cardNumber={card.card_number_last4}
                   gradient={gradient}
                   className="w-full max-w-md aspect-[1.586/1]"
                 />
@@ -178,7 +182,7 @@ export default function CardDetailPage() {
               <div className="space-y-1">
                 <p className="text-sm text-secondary-text">Current Balance</p>
                 <p className="text-2xl font-bold text-primary-text">
-                  {formatCurrency(card.current_outstanding)}
+                  {formatCurrency(currentBalance)}
                 </p>
               </div>
               <div className="space-y-1">
@@ -196,7 +200,7 @@ export default function CardDetailPage() {
               <div className="space-y-1">
                 <p className="text-sm text-secondary-text">Utilization</p>
                 <ProgressBar
-                  value={card.current_outstanding}
+                  value={currentBalance}
                   max={creditLimit}
                   showPercentage={true}
                   className="mt-2"
@@ -230,14 +234,14 @@ export default function CardDetailPage() {
         <div className="min-h-[500px]">
           {activeTab === "transactions" && (
             <TransactionsTab
-              transactions={transactionData?.transactions || []}
+              transactions={transactions}
               isLoading={isTransactionsLoading}
               onAddTransaction={() => setShowAddTransaction(true)}
             />
           )}
           {activeTab === "insights" && (
             <InsightsTab
-              stats={stats}
+              statement={statement}
               isLoading={isStatsLoading}
             />
           )}
@@ -329,11 +333,11 @@ function TransactionsTab({
                   {new Date(item.transaction_date).toLocaleDateString()}
                 </td>
                 <td className="p-4 text-primary-text">
-                    <div className="font-medium">{item.merchant_name}</div>
+                    <div className="font-medium">{item.merchant}</div>
                     <div className="text-xs text-secondary-text">{item.description}</div>
                 </td>
                 <td className="p-4">
-                  <Badge label={item.merchant_category || "Uncategorized"} variant="default" />
+                  <Badge label={item.category || "Uncategorized"} variant="default" />
                 </td>
                 <td className="p-4">
                   <span
@@ -347,7 +351,7 @@ function TransactionsTab({
                   </span>
                 </td>
                 <td className="p-4 text-primary-text">
-                  {item.billing_cycle}
+                  {item.bill_month}/{item.bill_year}
                 </td>
               </tr>
             ))}
@@ -361,71 +365,62 @@ function TransactionsTab({
 
 // Insights Tab Component
 interface InsightsTabProps {
-  stats?: any; // Replace with proper type
+  statement?: any; // Replace with proper type
   isLoading: boolean;
 }
 
 function InsightsTab({
-  stats,
+  statement,
   isLoading,
 }: InsightsTabProps) {
     if (isLoading) {
         return <div className="text-center py-8">Loading insights...</div>;
     }
 
-    if (!stats) {
+    if (!statement) {
         return <div className="text-center py-8">No data available for insights.</div>;
     }
 
     // Transform stats for charts
-    // Assuming stats matches CardStatistics interface
-    const categoryData = stats.category_breakdown?.map((c: any) => ({
-        category: c.category,
-        amount: c.total,
-        percentage: (c.total / stats.total_spent) * 100
-    })) || [];
+    // Using statement summary
+    const categoryData: any[] = []; // Statement doesn't have category breakdown yet, would need to aggregate transactions
 
-    // Mock trend data if not available in stats (API might need update)
-    const spendingTrend = [
-        { month: "Current", spending: stats.current_month_spent || 0 }
-    ];
-
-  return (
+    return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-primary-text">Card Insights</h2>
+      <h2 className="text-xl font-semibold text-primary-text">Current Statement Insights</h2>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Charts would go here - using placeholders if data structure doesn't match exactly */}
-        <CategoryBreakdownChart data={categoryData} height={250} />
+        {/* Charts would go here */}
+        {/* <CategoryBreakdownChart data={categoryData} height={250} /> */}
         
         {/* Key Metrics */}
         <div className="bg-card-bg rounded-lg p-6">
           <h3 className="text-lg font-semibold text-primary-text mb-4">
-            Key Metrics
+            Statement Summary
           </h3>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-secondary-text">Total Spent</span>
+              <span className="text-secondary-text">Total Debits</span>
               <span className="font-semibold text-primary-text">
-                {formatCurrency(stats.total_spent || 0)}
+                {formatCurrency(statement.summary.totalDebits || 0)}
               </span>
             </div>
              <div className="flex justify-between items-center">
-              <span className="text-secondary-text">This Month</span>
-              <span className="font-semibold text-primary-text">
-                {formatCurrency(stats.current_month_spent || 0)}
+              <span className="text-secondary-text">Total Credits</span>
+              <span className="font-semibold text-success">
+                {formatCurrency(statement.summary.totalCredits || 0)}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-secondary-text">Average Transaction</span>
+              <span className="text-secondary-text">Net Amount</span>
               <span className="font-semibold text-primary-text">
-                {formatCurrency(stats.average_transaction || 0)}
+                {formatCurrency(statement.summary.netAmount || 0)}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-secondary-text">Total Transactions</span>
+              <span className="text-secondary-text">Transaction Count</span>
               <span className="font-semibold text-primary-text">
-                {stats.total_transactions || 0}
+                {statement.summary.transactionCount || 0}
               </span>
             </div>
           </div>
@@ -452,12 +447,12 @@ function AddTransactionModal({
   isSubmitting,
 }: AddTransactionModalProps) {
   const [formData, setFormData] = useState<TransactionFormData>({
-    card_id: cardId,
+    cardId: cardId,
     amount: 0,
-    transaction_date: new Date().toISOString().split('T')[0],
-    merchant_name: "",
-    merchant_category: "",
-    transaction_type: "debit",
+    transactionDate: new Date().toISOString().split('T')[0],
+    merchant: "",
+    category: "",
+    transactionType: "debit",
     description: "",
   });
 
@@ -480,23 +475,23 @@ function AddTransactionModal({
         <Input
           label="Date"
           type="date"
-          value={formData.transaction_date}
-          onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
+          value={formData.transactionDate}
+          onChange={(e) => setFormData({ ...formData, transactionDate: e.target.value })}
           required
         />
         <Input
           label="Merchant"
-          value={formData.merchant_name}
+          value={formData.merchant}
           onChange={(e) =>
-            setFormData({ ...formData, merchant_name: e.target.value })
+            setFormData({ ...formData, merchant: e.target.value })
           }
           required
         />
         <Input
           label="Category"
-          value={formData.merchant_category}
+          value={formData.category}
           onChange={(e) =>
-            setFormData({ ...formData, merchant_category: e.target.value })
+            setFormData({ ...formData, category: e.target.value })
           }
           placeholder="e.g. Food, Travel"
           required
@@ -532,21 +527,21 @@ interface EditCardModalProps {
 
 function EditCardModal({ isOpen, onClose, card, onSubmit, isSubmitting }: EditCardModalProps) {
   const [formData, setFormData] = useState({
-    card_name: card.card_name,
-    bank_name: card.bank_name,
-    credit_limit: (card.credit_limit || 0).toString(),
-    bill_date: card.bill_date.toString(),
-    due_date: card.due_date.toString(),
+    cardName: card.card_name,
+    bankName: card.bank_name,
+    creditLimit: (card.credit_limit || 0).toString(),
+    billDate: card.bill_date.toString(),
+    dueDate: card.due_date.toString(),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
-        card_name: formData.card_name,
-        bank_name: formData.bank_name,
-        credit_limit: parseFloat(formData.credit_limit),
-        bill_date: parseInt(formData.bill_date),
-        due_date: parseInt(formData.due_date),
+        cardName: formData.cardName,
+        bankName: formData.bankName,
+        creditLimit: parseFloat(formData.creditLimit),
+        billDate: parseInt(formData.billDate),
+        dueDate: parseInt(formData.dueDate),
     });
   };
 
@@ -555,25 +550,25 @@ function EditCardModal({ isOpen, onClose, card, onSubmit, isSubmitting }: EditCa
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           label="Card Name"
-          value={formData.card_name}
+          value={formData.cardName}
           onChange={(e) =>
-            setFormData({ ...formData, card_name: e.target.value })
+            setFormData({ ...formData, cardName: e.target.value })
           }
           required
         />
         <Input
           label="Bank Name"
-          value={formData.bank_name}
+          value={formData.bankName}
           onChange={(e) =>
-            setFormData({ ...formData, bank_name: e.target.value })
+            setFormData({ ...formData, bankName: e.target.value })
           }
         />
         <Input
           label="Credit Limit"
           type="number"
-          value={formData.credit_limit}
+          value={formData.creditLimit}
           onChange={(e) =>
-            setFormData({ ...formData, credit_limit: e.target.value })
+            setFormData({ ...formData, creditLimit: e.target.value })
           }
         />
         <div className="grid grid-cols-2 gap-4">
@@ -582,9 +577,9 @@ function EditCardModal({ isOpen, onClose, card, onSubmit, isSubmitting }: EditCa
             type="number"
             min="1"
             max="31"
-            value={formData.bill_date}
+            value={formData.billDate}
             onChange={(e) =>
-              setFormData({ ...formData, bill_date: e.target.value })
+              setFormData({ ...formData, billDate: e.target.value })
             }
           />
           <Input
@@ -592,9 +587,9 @@ function EditCardModal({ isOpen, onClose, card, onSubmit, isSubmitting }: EditCa
             type="number"
             min="1"
             max="31"
-            value={formData.due_date}
+            value={formData.dueDate}
             onChange={(e) =>
-              setFormData({ ...formData, due_date: e.target.value })
+              setFormData({ ...formData, dueDate: e.target.value })
             }
           />
         </div>

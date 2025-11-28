@@ -25,8 +25,8 @@ export interface UserSecurityContext {
  * Maps pathname patterns to required security levels
  */
 export const ROUTE_SECURITY_MAP: Record<string, SecurityLevel> = {
-  // Public routes (no auth required)
-  "/": "public",
+  // Root redirects to dashboard (requires auth)
+  "/": "authenticated",
   "/login": "public",
   "/auth/callback": "public",
   "/error": "public",
@@ -39,14 +39,14 @@ export const ROUTE_SECURITY_MAP: Record<string, SecurityLevel> = {
   "/profile": "authenticated",
 
   // Gmail-connected routes (requires Gmail connection)
-  "/transactions": "gmailConnected",
-  "/analytics": "gmailConnected",
-  "/budget": "gmailConnected",
-  "/bills": "gmailConnected",
-  "/reports": "gmailConnected",
-  "/rewards": "gmailConnected",
-  "/recurring": "gmailConnected",
-  "/notifications": "gmailConnected",
+  "/transactions": "authenticated",
+  "/analytics": "authenticated",
+  "/budget": "authenticated",
+  "/bills": "authenticated",
+  "/reports": "authenticated",
+  "/rewards": "authenticated",
+  "/recurring": "authenticated",
+  "/notifications": "authenticated",
 
   // Admin routes
   "/admin": "admin",

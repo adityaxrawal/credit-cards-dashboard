@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, Mail, MessageCircle, Wallet, User, LogOut } from "lucide-react";
+import { Search, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "./NotificationBell";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -41,10 +41,14 @@ export function Header({ title, className }: HeaderProps) {
       <div className="flex items-center space-x-4">
         {/* Action Icons */}
         <div className="flex items-center space-x-3">
-          <HeaderAction icon={Mail} />
-          <HeaderAction icon={MessageCircle} />
-          <HeaderAction icon={Wallet} />
-          <HeaderAction icon={LogOut} onClick={logout} className="text-error hover:text-error/80" />
+          {/* Logout Button */}
+          <button
+            onClick={logout}
+            className="w-8 h-8 flex items-center justify-center text-error hover:text-error/80 transition-colors"
+            title="Logout"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
 
           {/* Notifications with dynamic badge */}
           <NotificationBell />
@@ -58,25 +62,5 @@ export function Header({ title, className }: HeaderProps) {
         </div>
       </div>
     </div>
-  );
-}
-
-interface HeaderActionProps {
-  icon: React.ElementType;
-  onClick?: () => void;
-  className?: string;
-}
-
-function HeaderAction({ icon: Icon, onClick, className }: HeaderActionProps) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "w-8 h-8 flex items-center justify-center text-secondary-text hover:text-primary-text transition-colors",
-        className
-      )}
-    >
-      <Icon className="w-5 h-5" />
-    </button>
   );
 }
