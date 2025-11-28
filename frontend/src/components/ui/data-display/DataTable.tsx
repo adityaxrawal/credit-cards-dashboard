@@ -1,7 +1,7 @@
 import React from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Skeleton } from "./Skeleton";
+import { Skeleton } from "@/components/ui";
 
 export interface Column<T = unknown> {
   key: string;

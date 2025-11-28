@@ -1,25 +1,34 @@
-// Export all UI components
-export { Badge } from "./Badge";
-export { Button } from "./Button";
-export { CardVisual } from "./CardVisual";
-export { DataTable } from "./DataTable";
-export { DatePicker } from "./DatePicker";
-export { Dropdown } from "./Dropdown";
-export { Input } from "./Input";
-export { Modal } from "./Modal";
-export { ProgressBar } from "./ProgressBar";
-export { Skeleton } from "./Skeleton";
-export { StatCard } from "./StatCard";
+/**
+ * UI Components Index
+ * Central export for all UI components
+ */
 
-// Re-export types
-export type { BadgeProps } from "./Badge";
-export type { ButtonProps } from "./Button";
-export type { CardVisualProps } from "./CardVisual";
-export type { DataTableProps, Column } from "./DataTable";
-export type { DatePickerProps } from "./DatePicker";
-export type { DropdownProps } from "./Dropdown";
-export type { InputProps } from "./Input";
-export type { ModalProps } from "./Modal";
-export type { ProgressBarProps } from "./ProgressBar";
-export type { SkeletonProps } from "./Skeleton";
-export type { StatCardProps } from "./StatCard";
+// Primitives (from subdirectory)
+export * from './primitives/Button';
+export * from './primitives/Input';
+export * from './primitives/Modal';
+export * from './primitives/Dropdown';
+export * from './primitives/Badge';
+export * from './primitives/card';
+export * from './primitives/label';
+
+// Feedback components (from subdirectory)
+export * from './feedback/Toast';
+export * from './feedback/LoadingOverlay';
+export * from './feedback/GlobalLoadingSpinner';
+export * from './feedback/Skeleton';
+export * from './feedback/ProgressBar';
+
+// Data display components (from subdirectory)
+export * from './data-display/DataTable';
+export * from './data-display/StatCard';
+export * from './data-display/CardVisual';
+
+// Form components (from subdirectory)
+export { default as DatePicker } from './forms/DatePicker';
+
+// Legacy exports from root (backward compatibility)
+export * from './select';
+export * from './switch';
+export * from './tabs';
+export * from './progress';

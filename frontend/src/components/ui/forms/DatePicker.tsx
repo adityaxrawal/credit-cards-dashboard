@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
-import { Button } from "./Button";
+import { Button } from "@/components/ui";
 
 export interface DatePickerProps {
   value?: Date | null;

@@ -106,4 +106,20 @@ export const toastService = {
   },
 };
 
+/**
+ * React hook for toast notifications
+ * Provides a consistent API for showing toasts in components
+ */
+export function useToast() {
+  return {
+    success: toastService.success,
+    error: toastService.error,
+    warning: toastService.warning,
+    info: toastService.info,
+    promise: toastService.promise,
+    dismiss: toastService.dismiss,
+    handleApiError: toastService.handleApiError,
+  };
+}
+
 export default toastService;
