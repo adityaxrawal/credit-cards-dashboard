@@ -1,4 +1,4 @@
-import { google } from 'googleapis';
+import { google, gmail_v1 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 
 const oauth2Client = new OAuth2Client(
@@ -33,12 +33,12 @@ function getGmailClient(refreshToken: string) {
 }
 
 /**
- * Fetch a single Gmail message
+ * Fetch raw Gmail message (for CreditCardMailDetector)
  */
-export async function getMessage(
+export async function getRawMessage(
   refreshToken: string,
   messageId: string
-): Promise<GmailMessage | null> {
+): Promise<gmail_v1.Schema$Message | null> {
   try {
     const gmail = getGmailClient(refreshToken);
     
@@ -48,8 +48,25 @@ export async function getMessage(
       format: 'full',
     });
 
-    const message = response.data;
-    const headers = message.payload?.headers || [];
+    return response.data;
+  } catch (error) {
+    console.error('[GmailClient] Error fetching raw message:', error);
+    return null;
+  }
+}
+
+/**
+ * Fetch a single Gmail message
+ */
+export async function getMessage(
+  refreshToken: string,
+  messageId: string
+): Promise<GmailMessage | null> {
+  try {
+    const rawMessage = await getRawMessage(refreshToken, messageId);
+    if (!rawMessage) return null;
+
+    const headers = rawMessage.payload?.headers || [];
     
     const getHeader = (name: string) => 
       headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
@@ -58,10 +75,10 @@ export async function getMessage(
     let bodyText = '';
     let bodyHtml = '';
     
-    if (message.payload?.body?.data) {
-      bodyText = Buffer.from(message.payload.body.data, 'base64').toString('utf-8');
-    } else if (message.payload?.parts) {
-      for (const part of message.payload.parts) {
+    if (rawMessage.payload?.body?.data) {
+      bodyText = Buffer.from(rawMessage.payload.body.data, 'base64').toString('utf-8');
+    } else if (rawMessage.payload?.parts) {
+      for (const part of rawMessage.payload.parts) {
         if (part.mimeType === 'text/plain' && part.body?.data) {
           bodyText = Buffer.from(part.body.data, 'base64').toString('utf-8');
         }
@@ -72,19 +89,37 @@ export async function getMessage(
     }
 
     return {
-      id: message.id!,
-      threadId: message.threadId!,
+      id: rawMessage.id!,
+      threadId: rawMessage.threadId!,
       subject: getHeader('Subject'),
       from: getHeader('From'),
-      date: new Date(parseInt(message.internalDate || '0')),
+      date: new Date(parseInt(rawMessage.internalDate || '0')),
       bodyText,
       bodyHtml,
-      snippet: message.snippet || '',
+      snippet: rawMessage.snippet || '',
     };
   } catch (error) {
     console.error('[GmailClient] Error fetching message:', error);
     return null;
   }
+}
+
+/**
+ * Batch fetch Gmail messages (simulated with parallel requests)
+ * Note: The Google Node.js client no longer supports multipart batch requests natively.
+ * We use high-concurrency parallel fetching which is efficient over HTTP/2.
+ */
+export async function batchGetMessages(
+  refreshToken: string,
+  messageIds: string[],
+  concurrency: number = 10
+): Promise<Array<gmail_v1.Schema$Message | null>> {
+  // Dynamic import p-limit because it is an ESM module
+  const { default: pLimit } = await import('p-limit');
+  const limit = pLimit(concurrency);
+  
+  const tasks = messageIds.map(id => limit(() => getRawMessage(refreshToken, id)));
+  return Promise.all(tasks);
 }
 
 /**
@@ -137,7 +172,7 @@ export async function listMessages(
   query: string,
   maxResults: number = 100,
   pageToken?: string
-): Promise<{ messages: Array<{ id: string; threadId: string }>; nextPageToken?: string }> {
+): Promise<{ messages: Array<{ id: string; threadId: string }>; nextPageToken?: string; resultSizeEstimate?: number }> {
   try {
     const gmail = getGmailClient(refreshToken);
     
@@ -155,11 +190,12 @@ export async function listMessages(
       
     return {
       messages,
-      nextPageToken: response.data.nextPageToken || undefined
+      nextPageToken: response.data.nextPageToken || undefined,
+      resultSizeEstimate: response.data.resultSizeEstimate || undefined
     };
   } catch (error) {
     console.error('[GmailClient] Error listing messages:', error);
-    return { messages: [] };
+    throw error;
   }
 }
 

@@ -92,3 +92,43 @@ export async function getHistoricalScanStatus(req: Request, res: Response, next:
     next(error);
   }
 }
+
+/**
+ * Get latest job status
+ */
+export async function getLatestJob(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = (req as any).user.id;
+    
+    const job = await gmailService.getLatestJob(userId);
+    
+    res.json({ data: job });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Manual map message
+ */
+export async function manualMap(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = (req as any).user.id;
+    const { messageId, cardInfo } = req.body;
+    
+    if (!messageId || !cardInfo || !cardInfo.last4 || !cardInfo.bankName) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'messageId and cardInfo (last4, bankName) are required',
+        },
+      });
+    }
+    
+    const result = await gmailService.manualMap(userId, messageId, cardInfo);
+    
+    res.json({ data: result });
+  } catch (error) {
+    next(error);
+  }
+}

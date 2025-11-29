@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/primitives/Button";
 import { RefreshCw, X, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import { gmailApi, type ScanStatus } from "@/lib/api/gmail";
+import { ManualCardMappingModal } from "./ManualCardMappingModal";
 
 interface GmailSyncModalProps {
   isOpen: boolean;
@@ -11,11 +12,6 @@ interface GmailSyncModalProps {
   onSyncComplete?: () => void;
 }
 
-/**
- * GmailSyncModal Component
- * Modal dialog for Gmail sync with progress tracking
- * Blocks dashboard interaction until sync is complete
- */
 export function GmailSyncModal({
   isOpen,
   onClose,
@@ -27,6 +23,7 @@ export function GmailSyncModal({
   const [completed, setCompleted] = useState(false);
   const [failed, setFailed] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [mappingMessageId, setMappingMessageId] = useState<string | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Auto-start sync when modal opens
@@ -145,7 +142,6 @@ export function GmailSyncModal({
   };
 
   const handleClose = () => {
-    // Only allow closing if sync is complete or failed
     if (!syncing) {
       clearPolling();
       setJobId(null);
@@ -159,7 +155,6 @@ export function GmailSyncModal({
 
   if (!isOpen) return null;
 
-  // Calculate progress percentage
   const progressPercent =
     progress && progress.total > 0
       ? Math.round((progress.processed / progress.total) * 100)
@@ -167,13 +162,10 @@ export function GmailSyncModal({
 
   return (
     <>
-      {/* Backdrop - blocks interaction */}
       <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={(e) => e.stopPropagation()} />
 
-      {/* Modal */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-card-bg rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-6">
-          {/* Header */}
+        <div className="bg-card-bg rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-6 max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-primary-text flex items-center gap-2">
               <RefreshCw className={syncing ? "animate-spin" : ""} size={24} />
@@ -189,7 +181,7 @@ export function GmailSyncModal({
             )}
           </div>
 
-          {/* Status Messages */}
+          {/* Status Messages (Completed/Failed) ... same as before ... */}
           {completed && (
             <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
               <CheckCircle className="text-green-600 flex-shrink-0" size={24} />
@@ -225,7 +217,6 @@ export function GmailSyncModal({
             <div className="space-y-4">
               {progress ? (
                 <>
-                  {/* Progress Bar */}
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm text-secondary-text">
                       <span>
@@ -239,9 +230,20 @@ export function GmailSyncModal({
                         style={{ width: `${progressPercent}%` }}
                       />
                     </div>
+                    <div className="flex justify-between items-center">
+                      <p className="text-xs text-secondary-text">
+                        {progress.currentStep === 'FETCHING_BATCH' ? `Fetching Batch ${progress.currentBatch || 1}...` : 
+                         progress.currentStep === 'PROCESSING_BATCH' ? `Processing Batch ${progress.currentBatch || 1}...` : 
+                         progress.currentStep}
+                      </p>
+                      {progress.currentBatch && (
+                        <p className="text-xs font-medium text-primary-text">
+                          Batch {progress.currentBatch} {progress.totalBatches ? `of ${progress.totalBatches}` : ''}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Stats */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-hover-bg rounded-lg p-3">
                       <p className="text-xs text-secondary-text">Transactions Found</p>
@@ -265,20 +267,42 @@ export function GmailSyncModal({
                 </div>
               )}
 
-              {/* Info */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="text-blue-600 flex-shrink-0 mt-0.5" size={16} />
                   <p className="text-xs text-blue-900">
                     Scanning your Gmail for credit card transaction emails. 
-                    This scans the last 3 months and typically takes 10-60 seconds.
+                    This scans from Oct 2023 onwards.
                   </p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Actions */}
+          {/* Error List & Manual Mapping */}
+          {progress?.errorList && progress.errorList.length > 0 && (
+            <div className="mt-4 border-t border-border-color pt-4">
+              <h3 className="text-sm font-semibold text-primary-text mb-2">Failed Items</h3>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {progress.errorList.map((err: any, idx: number) => (
+                  <div key={idx} className="flex items-center justify-between bg-hover-bg p-2 rounded text-xs">
+                    <span className="truncate flex-1 mr-2 text-red-500" title={err.error}>
+                      {err.error || "Unknown error"}
+                    </span>
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      className="h-6 text-[10px]"
+                      onClick={() => setMappingMessageId(err.messageId)}
+                    >
+                      Map Card
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-4 border-t border-muted-text/10">
             {completed || failed ? (
               <Button onClick={handleClose} variant="primary">
@@ -292,9 +316,24 @@ export function GmailSyncModal({
           </div>
         </div>
       </div>
+
+      {mappingMessageId && (
+        <ManualCardMappingModal
+          isOpen={true}
+          onClose={() => setMappingMessageId(null)}
+          messageId={mappingMessageId}
+          onSuccess={() => {
+            // Maybe trigger a refresh or just show success
+            // Ideally we should update the error list but that's hard without re-fetching
+            // For now just close
+          }}
+        />
+      )}
     </>
   );
 }
+
+// ... (GmailSyncButton component same as before)
 
 interface GmailSyncButtonProps {
   onSyncComplete?: () => void;

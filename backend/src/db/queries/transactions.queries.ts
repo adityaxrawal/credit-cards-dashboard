@@ -140,15 +140,17 @@ export async function createTransaction(data: {
   billMonth?: number;
   billYear?: number;
   emailMessageId?: string;
+  txnFingerprint?: string;
   isManuallyAdded?: boolean;
   metadata?: any;
-}): Promise<Transaction> {
+}): Promise<Transaction | null> {
   const { rows } = await pool.query(
     `INSERT INTO transactions (
       user_id, card_id, transaction_date, merchant, category,
       amount, transaction_type, description, bill_month, bill_year,
-      email_message_id, is_manually_added, metadata
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      email_message_id, txn_fingerprint, is_manually_added, metadata
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    ON CONFLICT (email_message_id, txn_fingerprint) DO NOTHING
     RETURNING *`,
     [
       data.userId,
@@ -162,11 +164,12 @@ export async function createTransaction(data: {
       data.billMonth || null,
       data.billYear || null,
       data.emailMessageId || null,
+      data.txnFingerprint || null,
       data.isManuallyAdded || false,
       data.metadata || null,
     ]
   );
-  return rows[0];
+  return rows[0] || null;
 }
 
 /**

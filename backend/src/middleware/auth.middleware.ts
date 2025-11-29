@@ -11,11 +11,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
   try {
     const authHeader = req.headers.authorization;
     let token;
-    
-    // Debug logs
-    console.log('[AuthMiddleware] Headers:', JSON.stringify(req.headers));
-    console.log('[AuthMiddleware] Cookies:', JSON.stringify(req.cookies));
-
+   
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1];
     } else if (req.cookies && req.cookies.accessToken) {
@@ -23,7 +19,6 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     }
 
     if (!token) {
-      console.log('[AuthMiddleware] No token found in header or cookies');
       return res.status(401).json({ error: 'Unauthorized: No token provided' });
     }
     const decoded: any = jwt.verify(token, env.JWT_SECRET);

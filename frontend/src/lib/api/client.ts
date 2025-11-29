@@ -143,7 +143,9 @@ async function makeRequest<T>(
     // Parse response
     const data: ApiResponse<T> = await response.json();
 
-    if (!data.success) {
+    // If response doesn't have a success field, assume it's successful if we got here
+    // This handles both new format { data: ... } and old format { success: true, data: ... }
+    if (data.success === false) {
       throw new ApiError(
         response.status,
         data.error || data.message || "Request failed",
@@ -151,7 +153,8 @@ async function makeRequest<T>(
       );
     }
 
-    return data.data as T;
+    // Return data.data if it exists, otherwise return the whole response
+    return (data.data !== undefined ? data.data : data) as T;
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;

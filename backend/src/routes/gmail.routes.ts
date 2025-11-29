@@ -12,5 +12,8 @@ router.post('/connect', gmailController.connect);
 router.post('/disconnect', gmailController.disconnect);
 router.post('/scan-historical', gmailController.triggerHistoricalScan);
 router.get('/scan-historical/:jobId', gmailController.getHistoricalScanStatus);
+router.get('/jobs/latest', gmailController.getLatestJob);
+router.get('/jobs/:jobId', gmailController.getHistoricalScanStatus);
+router.post('/manual-map', gmailController.manualMap);
 
 export default router;

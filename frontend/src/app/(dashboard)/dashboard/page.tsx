@@ -65,11 +65,13 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (refresh = false) => {
     try {
-      setLoading(true);
+      if (!refresh) {
+        setLoading(true);
+      }
       
-      // Fetch all required data in parallel
+      // Fetch all required data in parallel with individual error handling
       const [
         overviewData, 
         transactionsData, 
@@ -77,31 +79,35 @@ export default function DashboardPage() {
         budgetData,
         trendData
       ] = await Promise.all([
-        analyticsApi.getOverview(),
-        transactionApi.getTransactions({ limit: 5 }),
-        cardApi.getCards(),
+        analyticsApi.getOverview().catch((err) => { console.error('Overview error:', err); return null; }),
+        transactionApi.getTransactions({ limit: 5 }).catch((err) => { console.error('Transactions error:', err); return { data: [], pagination: { page: 1, limit: 5, total: 0, totalPages: 0 } }; }),
+        cardApi.getCards().catch((err) => { console.error('Cards error:', err); return []; }),
         budgetApi.getCurrentBudget().catch(() => null), // Handle 404 if no budget set
-        analyticsApi.getTrends("6m"),
+        analyticsApi.getTrends("6m").catch((err) => { console.error('Trends error:', err); return []; }),
       ]);
 
-      setOverview(overviewData);
-      setRecentTransactions(transactionsData.data);
-      setBudgetStatus(budgetData);
-      setSpendingTrend(trendData);
+      if (overviewData) setOverview(overviewData);
+      if (transactionsData?.data) setRecentTransactions(transactionsData.data);
+      if (budgetData) setBudgetStatus(budgetData);
+      if (trendData) setSpendingTrend(trendData);
       
       // Process Cards Data
-      setTotalCards(cardsData.length);
-      const balance = cardsData.reduce((sum, card) => sum + (card.current_balance || 0), 0);
-      setTotalBalance(balance);
-      
-      // Calculate Upcoming Bills
-      const bills = calculateUpcomingBills(cardsData);
-      setUpcomingBills(bills);
+      if (cardsData) {
+        setTotalCards(cardsData.length);
+        const balance = cardsData.reduce((sum, card) => sum + (card.current_balance || 0), 0);
+        setTotalBalance(balance);
+        
+        // Calculate Upcoming Bills
+        const bills = calculateUpcomingBills(cardsData);
+        setUpcomingBills(bills);
+      }
 
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
     } finally {
-      setLoading(false);
+      if (!refresh) {
+        setLoading(false);
+      }
     }
   };
 
@@ -175,7 +181,7 @@ export default function DashboardPage() {
                 <span>Syncing...</span>
               </div>
             )}
-            <GmailSyncButton onSyncComplete={loadDashboardData} />
+            <GmailSyncButton onSyncComplete={() => loadDashboardData(true)} />
           </div>
         </div>
 
@@ -280,7 +286,7 @@ export default function DashboardPage() {
                 <Link href="/transactions" className="text-xs text-primary-green hover:underline">View All</Link>
               </div>
               <div className="space-y-4">
-                {recentTransactions.length === 0 ? (
+                {!recentTransactions || recentTransactions.length === 0 ? (
                   <p className="text-sm text-secondary-text text-center py-4">No recent transactions</p>
                 ) : (
                   recentTransactions.map((t) => (

@@ -140,13 +140,11 @@ export async function insertFromEmail(
     metadata?: any;
   }
 ) {
-  // Check for duplicate
-  const isDuplicate = await transactionsQueries.isDuplicateEmail(userId, data.emailMessageId);
-  if (isDuplicate) {
-    console.log(`[TransactionService] Duplicate email ${data.emailMessageId}, skipping`);
-    return null;
-  }
-  
+  // Create fingerprint for deduplication
+  const fingerprintData = `${data.emailMessageId}-${data.transactionDate.toISOString()}-${data.amount}-${data.merchant}`;
+  const crypto = require('crypto');
+  const txnFingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');
+
   const txDate = dayjs(data.transactionDate);
   const billMonth = txDate.month() + 1;
   const billYear = txDate.year();
@@ -162,6 +160,7 @@ export async function insertFromEmail(
     billMonth,
     billYear,
     emailMessageId: data.emailMessageId,
+    txnFingerprint,
     isManuallyAdded: false,
     metadata: data.metadata,
   });

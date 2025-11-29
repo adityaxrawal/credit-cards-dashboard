@@ -12,7 +12,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
+} from "@/components/ui/primitives/card";
 import { apiClient } from "@/lib/api-client";
 
 interface HealthStatus {

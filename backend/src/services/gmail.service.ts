@@ -1,6 +1,10 @@
 import * as gmailClient from '../lib/gmailClient';
 import pool from '../lib/db';
 import { runHistoricalScan } from '../jobs/historicalScanner';
+import * as cardsQueries from '../db/queries/cards.queries';
+import * as extractionService from '../services/extraction.service';
+import * as transactionsService from '../services/transactions.service';
+import { randomUUID } from 'crypto';
 
 /**
  * Get Gmail connection status
@@ -92,13 +96,13 @@ export async function disconnectGmail(userId: string) {
  * Trigger historical scan
  */
 export async function triggerHistoricalScan(userId: string, fromDate?: Date, toDate?: Date) {
-  const jobId = `scan-${userId}-${Date.now()}`;
+  const jobId = randomUUID();
   
   // Create job record in database
   await pool.query(
-    `INSERT INTO scan_jobs (id, user_id, status, current_step, from_date, to_date, started_at)
-     VALUES ($1, $2, 'pending', 'INITIALIZING', $3, $4, NOW())`,
-    [jobId, userId, fromDate || null, toDate || null]
+    `INSERT INTO gmail_sync_jobs (id, user_id, status, current_step, started_at)
+     VALUES ($1, $2, 'pending', 'INITIALIZING', NOW())`,
+    [jobId, userId]
   );
   
   // Start scan asynchronously (don't await)
@@ -110,10 +114,10 @@ export async function triggerHistoricalScan(userId: string, fromDate?: Date, toD
       console.error(`[GmailService] Scan ${jobId} failed:`, error);
       // Update job status to failed
       pool.query(
-        `UPDATE scan_jobs 
-         SET status = 'failed', error_message = $1, completed_at = NOW(), updated_at = NOW()
+        `UPDATE gmail_sync_jobs 
+         SET status = 'failed', errors = $1, completed_at = NOW(), last_update_at = NOW()
          WHERE id = $2`,
-        [error.message, jobId]
+        [JSON.stringify([{ error: error.message }]), jobId]
       ).catch(dbError => {
         console.error(`[GmailService] Failed to update job status:`, dbError);
       });
@@ -132,9 +136,9 @@ export async function triggerHistoricalScan(userId: string, fromDate?: Date, toD
  */
 export async function getHistoricalScanStatus(userId: string, jobId: string) {
   const { rows } = await pool.query(
-    `SELECT id, status, current_step, total, processed, inserted, errors, 
-            from_date, to_date, started_at, completed_at, error_message, created_at
-     FROM scan_jobs
+    `SELECT id, status, current_step, total_messages, processed_count, saved_count, error_count, errors,
+            started_at, completed_at, last_update_at, metadata
+     FROM gmail_sync_jobs
      WHERE id = $1 AND user_id = $2`,
     [jobId, userId]
   );
@@ -149,67 +153,129 @@ export async function getHistoricalScanStatus(userId: string, jobId: string) {
     jobId: job.id,
     status: job.status,
     currentStep: job.current_step,
-    total: job.total || 0,
-    processed: job.processed || 0,
-    inserted: job.inserted || 0,
-    errors: job.errors || 0,
+    total: job.total_messages || 0,
+    processed: job.processed_count || 0,
+    inserted: job.saved_count || 0,
+    errors: job.error_count || 0,
+    errorList: job.errors,
     startedAt: job.started_at,
     completedAt: job.completed_at,
-    errorMessage: job.error_message,
+    lastUpdateAt: job.last_update_at,
+    currentBatch: job.metadata?.currentBatch,
+    totalBatches: job.metadata?.totalBatches,
   };
 }
 
 /**
- * Update scan job progress (called from historical scanner)
+ * Get latest scan job
  */
-export async function updateScanJobProgress(
-  jobId: string,
-  data: {
-    status?: string;
-    currentStep?: string;
-    total?: number;
-    processed?: number;
-    inserted?: number;
-    errors?: number;
-  }
-) {
-  const updates: string[] = [];
-  const values: any[] = [];
-  let paramIndex = 1;
+export async function getLatestJob(userId: string) {
+  const { rows } = await pool.query(
+    `SELECT id, status, current_step, total_messages, processed_count, saved_count, error_count, errors,
+            started_at, completed_at, last_update_at
+     FROM gmail_sync_jobs
+     WHERE user_id = $1
+     ORDER BY started_at DESC
+     LIMIT 1`,
+    [userId]
+  );
   
-  if (data.status !== undefined) {
-    updates.push(`status = $${paramIndex++}`);
-    values.push(data.status);
-  }
-  if (data.currentStep !== undefined) {
-    updates.push(`current_step = $${paramIndex++}`);
-    values.push(data.currentStep);
-  }
-  if (data.total !== undefined) {
-    updates.push(`total = $${paramIndex++}`);
-    values.push(data.total);
-  }
-  if (data.processed !== undefined) {
-    updates.push(`processed = $${paramIndex++}`);
-    values.push(data.processed);
-  }
-  if (data.inserted !== undefined) {
-    updates.push(`inserted = $${paramIndex++}`);
-    values.push(data.inserted);
-  }
-  if (data.errors !== undefined) {
-    updates.push(`errors = $${paramIndex++}`);
-    values.push(data.errors);
+  if (rows.length === 0) {
+    return null;
   }
   
-  if (data.status === 'completed' || data.status === 'failed') {
-    updates.push(`completed_at = NOW()`);
-  }
+  const job = rows[0];
   
-  updates.push(`updated_at = NOW()`);
-  values.push(jobId);
+  return {
+    jobId: job.id,
+    status: job.status,
+    currentStep: job.current_step,
+    total: job.total_messages || 0,
+    processed: job.processed_count || 0,
+    inserted: job.saved_count || 0,
+    errors: job.error_count || 0,
+    errorList: job.errors,
+    startedAt: job.started_at,
+    completedAt: job.completed_at,
+    lastUpdateAt: job.last_update_at,
+  };
+}
+
+/**
+ * Manual map a message to a card
+ */
+export async function manualMap(userId: string, messageId: string, cardInfo: {
+  last4: string;
+  bankName: string;
+  cardType?: string;
+}) {
+  const jobId = randomUUID();
   
-  const query = `UPDATE scan_jobs SET ${updates.join(', ')} WHERE id = $${paramIndex}`;
+  // Create job record
+  await pool.query(
+    `INSERT INTO gmail_sync_jobs (id, user_id, status, current_step, started_at, metadata)
+     VALUES ($1, $2, 'running', 'MANUAL_MAPPING', NOW(), $3)`,
+    [jobId, userId, JSON.stringify({ messageId, cardInfo })]
+  );
   
-  await pool.query(query, values);
+  // Run async
+  (async () => {
+    try {
+      // 1. Ensure card exists
+      let card = await cardsQueries.findCardByBankAndLastFour(userId, cardInfo.bankName, cardInfo.last4);
+      if (!card) {
+        card = await cardsQueries.createCard({
+          userId,
+          bankName: cardInfo.bankName,
+          lastFour: cardInfo.last4,
+          cardName: `${cardInfo.bankName} ${cardInfo.last4}`,
+          billDate: 1, // Default
+          dueDate: 10, // Default
+          creditLimit: 0 // Default
+        });
+      }
+      
+      // 2. Fetch message
+      const { rows } = await pool.query('SELECT google_refresh_token FROM users WHERE id = $1', [userId]);
+      const refreshToken = rows[0]?.google_refresh_token;
+      if (!refreshToken) throw new Error('Gmail not connected');
+      
+      const message = await gmailClient.getMessage(refreshToken, messageId);
+      if (!message) throw new Error('Message not found');
+      
+      // 3. Extract (forcing the card context if possible, but our extractor is generic)
+      const result = await extractionService.extractTransactionFromEmail(userId, message);
+      
+      if (result.status === 'success' && result.transaction) {
+         await transactionsService.insertFromEmail(userId, {
+          cardId: card.id,
+          amount: result.transaction.amount,
+          transactionDate: result.transaction.transactionDate,
+          merchant: result.transaction.merchant,
+          category: result.transaction.category,
+          emailMessageId: messageId,
+        });
+        
+        await pool.query(
+          `UPDATE gmail_sync_jobs 
+           SET status = 'completed', current_step = 'COMPLETED', processed_count = 1, saved_count = 1, completed_at = NOW()
+           WHERE id = $1`,
+          [jobId]
+        );
+      } else {
+        throw new Error('Could not extract transaction details even with manual trigger');
+      }
+      
+    } catch (error) {
+      console.error('Manual map failed:', error);
+      await pool.query(
+        `UPDATE gmail_sync_jobs 
+         SET status = 'failed', errors = $1, completed_at = NOW()
+         WHERE id = $2`,
+        [JSON.stringify([{ error: error instanceof Error ? error.message : String(error) }]), jobId]
+      );
+    }
+  })();
+  
+  return { jobId };
 }

@@ -3,7 +3,11 @@ import * as gmailClient from '../lib/gmailClient';
 import * as extractionService from '../services/extraction.service';
 import * as transactionsService from '../services/transactions.service';
 import * as cardsQueries from '../db/queries/cards.queries';
+import * as scannedEmailQueries from '../db/queries/scanned_emails.queries';
+import { CreditCardMailDetector } from '../services/CreditCardMailDetector';
 import dayjs from 'dayjs';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Historical Email Scanner
@@ -16,6 +20,9 @@ export async function runHistoricalScan(
   toDate?: Date
 ) {
   console.log(`[HistoricalScanner] Starting scan ${jobId} for user:`, userId);
+  
+  // Dynamic import p-limit
+  const { default: pLimit } = await import('p-limit');
   
   try {
     // Get user's refresh token
@@ -34,127 +41,290 @@ export async function runHistoricalScan(
     
     const user = users[0];
     
+    // Get last scanned date for incremental syncing
+    const lastScannedDate = await scannedEmailQueries.getLastScannedDate(userId);
+    
     // Build Gmail query
-    const from = fromDate ? dayjs(fromDate).format('YYYY/MM/DD') : dayjs().subtract(3, 'month').format('YYYY/MM/DD');
+    const fixedStartDate = dayjs('2023-09-30');
+    let fromDateToUse: dayjs.Dayjs;
+    
+    if (fromDate) {
+      fromDateToUse = dayjs(fromDate);
+    } else if (lastScannedDate) {
+      fromDateToUse = dayjs(lastScannedDate).subtract(1, 'day');
+      console.log(`[HistoricalScanner] Incremental scan from ${fromDateToUse.format('YYYY-MM-DD')} (last scan: ${dayjs(lastScannedDate).format('YYYY-MM-DD')})`);
+    } else {
+      fromDateToUse = fixedStartDate;
+      console.log('[HistoricalScanner] First scan, starting from 2023-10-01');
+    }
+    
+    const from = fromDateToUse.format('YYYY/MM/DD');
     const to = toDate ? dayjs(toDate).format('YYYY/MM/DD') : dayjs().format('YYYY/MM/DD');
     
-    const query = `(from:sbi OR from:hdfc OR from:icici OR from:axis OR from:idfc OR from:indusind) (transaction OR spent OR purchase) after:${from} before:${to}`;
+    const query = `after:${from} before:${to}`;
+    
+    // Setup local logging with WriteStream (Async)
+    const logsDir = path.join(__dirname, '../../logs/scanned_emails');
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    const logFile = path.join(logsDir, `user_${userId}_job_${jobId}.jsonl`);
+    const logStream = fs.createWriteStream(logFile, { flags: 'a' });
     
     console.log(`[HistoricalScanner] Query:`, query);
     
     // Initial job update
     await pool.query(
-      `UPDATE scan_jobs 
-       SET status = 'processing', current_step = 'FETCHING', total = 0, updated_at = NOW()
+      `UPDATE gmail_sync_jobs 
+       SET status = 'running', current_step = 'FETCHING', total_messages = 0, last_update_at = NOW()
        WHERE id = $1`,
       [jobId]
     );
 
+    const CHUNK_SIZE = 100; // Fetch 100 IDs at a time
+    const CONCURRENCY = 20; // Process 20 emails in parallel
+    const limit = pLimit(CONCURRENCY);
+    
     let pageToken: string | undefined = undefined;
     let totalMessages = 0;
     let processed = 0;
     let inserted = 0;
     let errors = 0;
-    let batchCount = 0;
+    let currentBatchNumber = 0;
+    const errorList: any[] = [];
 
-    // Fetch and process loop
-    do {
-      // Fetch batch of messages
-      const response = await gmailClient.listMessages(
-        user.google_refresh_token, 
-        query, 
-        50, // Fetch 50 at a time
-        pageToken
-      );
+    let hasMore = true;
+    
+    // Pipeline: We need to fetch the first chunk to start the loop
+    let nextChunkPromise = gmailClient.listMessages(user.google_refresh_token, query, CHUNK_SIZE, pageToken);
+    
+    while (hasMore) {
+      currentBatchNumber++;
+      
+      // Await the fetch of the current chunk
+      let response;
+      try {
+        response = await nextChunkPromise;
+      } catch (err) {
+        console.error(`[HistoricalScanner] Error listing messages for batch ${currentBatchNumber}:`, err);
+        throw err;
+      }
       
       const messages = response.messages;
       pageToken = response.nextPageToken;
       
-      if (messages.length === 0) {
-        break;
+      // Start fetching the NEXT chunk immediately (Pipeline)
+      if (pageToken) {
+        nextChunkPromise = gmailClient.listMessages(user.google_refresh_token, query, CHUNK_SIZE, pageToken);
+      } else {
+        hasMore = false;
+        // No more pages, so nextChunkPromise is not needed or can be resolved to empty
+        nextChunkPromise = Promise.resolve({ messages: [] }); 
+      }
+      
+      if (!messages || messages.length === 0) {
+        if (!hasMore) break;
+        continue;
       }
 
-      totalMessages += messages.length;
-      console.log(`[HistoricalScanner] Batch ${++batchCount}: Found ${messages.length} messages. Total so far: ${totalMessages}`);
-
-      // Update total count
+      const batchCount = messages.length;
+      totalMessages += batchCount;
+      
+      console.log(`[HistoricalScanner] Batch ${currentBatchNumber}: Processing ${batchCount} messages...`);
+      
+      // Update job status
       await pool.query(
-        `UPDATE scan_jobs SET total = $1, current_step = 'PROCESSING', updated_at = NOW() WHERE id = $2`,
-        [totalMessages, jobId]
+        `UPDATE gmail_sync_jobs 
+         SET total_messages = $1, current_step = 'PROCESSING_BATCH', 
+             metadata = jsonb_set(COALESCE(metadata, '{}'), '{currentBatch}', $2::jsonb),
+             last_update_at = NOW() 
+         WHERE id = $3`,
+        [totalMessages, JSON.stringify(currentBatchNumber), jobId]
       );
 
-      // Process this batch
-      for (const msgRef of messages) {
+      // 1. Batch Fetch Raw Messages (Parallel)
+      // Use our new batchGetMessages which uses p-limit internally
+      const messageIds = messages.map(m => m.id);
+      const rawMessages = await gmailClient.batchGetMessages(user.google_refresh_token, messageIds, CONCURRENCY);
+      
+      // 2. Process Messages in Memory
+      const scannedDataList: any[] = [];
+      const logEntries: any[] = [];
+      const transactionMessages: any[] = []; // To process for transactions
+      
+      for (let i = 0; i < rawMessages.length; i++) {
+        const rawMessage = rawMessages[i];
+        if (!rawMessage) {
+          errors++;
+          continue;
+        }
+        
         try {
-          // Fetch full message
-          const message = await gmailClient.getMessage(user.google_refresh_token, msgRef.id);
+          const headers = rawMessage.payload?.headers || [];
+          const subject = headers.find((h: any) => h.name === 'Subject')?.value || '';
+          const sender = headers.find((h: any) => h.name === 'From')?.value || '';
+          const snippet = rawMessage.snippet || '';
+          const internalDate = parseInt(rawMessage.internalDate || '0');
           
-          if (!message) {
-            console.log(`[HistoricalScanner] Could not fetch message ${msgRef.id}`);
-            errors++;
-            continue;
+          // Detect
+          const detection = CreditCardMailDetector.detect(rawMessage);
+          
+          // Prepare for Bulk Insert
+          scannedDataList.push({
+            userId: user.id,
+            messageId: rawMessage.id || '',
+            internalDate,
+            subject,
+            sender,
+            snippet,
+            isTransaction: detection.isTransaction,
+            detectionConfidence: detection.confidence,
+            detectionReason: detection.reason || '',
+            scanJobId: jobId
+          });
+          
+          // Prepare Log Entry
+          logEntries.push({
+            messageId: rawMessage.id,
+            internalDate,
+            from: sender,
+            subject,
+            snippet: snippet.substring(0, 100),
+            detection: {
+              isTransaction: detection.isTransaction,
+              confidence: detection.confidence,
+              reason: detection.reason
+            },
+            processed: false,
+            transactionId: null
+          });
+          
+          if (detection.isTransaction) {
+            transactionMessages.push({ rawMessage, index: i });
+          } else {
+            processed++;
           }
           
-          // Extract transaction
-          const result = await extractionService.extractTransactionFromEmail(user.id, message);
+        } catch (err) {
+          console.error(`[HistoricalScanner] Error parsing message ${rawMessage.id}:`, err);
+          errors++;
+        }
+      }
+      
+      // 3. Bulk Insert Scanned Emails
+      if (scannedDataList.length > 0) {
+        await scannedEmailQueries.insertScannedEmailsBulk(scannedDataList);
+      }
+      
+      // 4. Process Transactions (Parallel)
+      // We need to fetch the simplified message (or just reuse raw if we can, but extractionService expects GmailMessage)
+      // extractionService expects GmailMessage which is what getMessage returns. 
+      // We can reconstruct GmailMessage from rawMessage to avoid another API call!
+      // Optimization: Avoid calling gmailClient.getMessage again.
+      
+      const transactionTasks = transactionMessages.map(({ rawMessage, index }) => limit(async () => {
+        try {
+          // Construct GmailMessage from rawMessage locally
+          const headers = rawMessage.payload?.headers || [];
+          const getHeader = (name: string) => headers.find((h: any) => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
           
-          processed++;
+          let bodyText = '';
+          let bodyHtml = '';
+          if (rawMessage.payload?.body?.data) {
+            bodyText = Buffer.from(rawMessage.payload.body.data, 'base64').toString('utf-8');
+          } else if (rawMessage.payload?.parts) {
+            for (const part of rawMessage.payload.parts) {
+              if (part.mimeType === 'text/plain' && part.body?.data) {
+                bodyText = Buffer.from(part.body.data, 'base64').toString('utf-8');
+              }
+              if (part.mimeType === 'text/html' && part.body?.data) {
+                bodyHtml = Buffer.from(part.body.data, 'base64').toString('utf-8');
+              }
+            }
+          }
+          
+          const simplifiedMessage = {
+            id: rawMessage.id!,
+            threadId: rawMessage.threadId!,
+            subject: getHeader('Subject'),
+            from: getHeader('From'),
+            date: new Date(parseInt(rawMessage.internalDate || '0')),
+            bodyText,
+            bodyHtml,
+            snippet: rawMessage.snippet || '',
+          };
+          
+          const result = await extractionService.extractTransactionFromEmail(user.id, simplifiedMessage);
+          
+          let transactionId: string | undefined;
           
           if (result.status === 'success' && result.transaction) {
-            // Find matching card
-            const card = await cardsQueries.findCardByBankAndLastFour(
+             const card = await cardsQueries.findCardByBankAndLastFour(
               user.id,
               result.transaction.bankName,
               result.transaction.lastFourDigits
             );
             
             if (card) {
-              // Insert transaction
               const tx = await transactionsService.insertFromEmail(user.id, {
                 cardId: card.id,
                 amount: result.transaction.amount,
                 transactionDate: result.transaction.transactionDate,
                 merchant: result.transaction.merchant,
                 category: result.transaction.category,
-                emailMessageId: message.id,
+                emailMessageId: rawMessage.id || '',
               });
               
               if (tx) {
                 inserted++;
-                // console.log(`[HistoricalScanner] Inserted transaction ${tx.id}`);
+                transactionId = tx.id;
               }
-            } else {
-              console.warn(`[HistoricalScanner] No card found for ${result.transaction.bankName} ${result.transaction.lastFourDigits}. User ID: ${user.id}`);
             }
-          } else {
-            // Log why extraction failed or was skipped
-            // console.log(`[HistoricalScanner] Skipped message ${msgRef.id}: ${result.status} - ${result.error || 'No transaction found'}`);
           }
           
-          // Update progress every 5 messages to keep UI responsive
-          if (processed % 5 === 0) {
-            await pool.query(
-              `UPDATE scan_jobs 
-               SET processed = $1, inserted = $2, errors = $3, updated_at = NOW()
-               WHERE id = $4`,
-              [processed, inserted, errors, jobId]
-            );
+          // Update processed status
+          await scannedEmailQueries.updateScannedEmailProcessed(user.id, rawMessage.id || '', transactionId);
+          
+          // Update log entry
+          if (logEntries[index]) {
+            logEntries[index].processed = true;
+            logEntries[index].transactionId = transactionId;
           }
-        } catch (error) {
-          console.error(`[HistoricalScanner] Error processing message ${msgRef.id}:`, error);
+          
+          processed++;
+          
+        } catch (err) {
+          console.error(`[HistoricalScanner] Error processing transaction for ${rawMessage.id}:`, err);
           errors++;
+          errorList.push({ messageId: rawMessage.id, error: String(err) });
         }
-      }
-
-    } while (pageToken);
+      }));
+      
+      await Promise.all(transactionTasks);
+      
+      // 5. Write Logs (Buffered)
+      const logChunk = logEntries.map(e => JSON.stringify(e)).join('\n') + '\n';
+      logStream.write(logChunk);
+      
+      // Update job progress
+      await pool.query(
+        `UPDATE gmail_sync_jobs 
+         SET processed_count = $1, saved_count = $2, error_count = $3, last_update_at = NOW()
+         WHERE id = $4`,
+        [processed, inserted, errors, jobId]
+      );
+      
+    } // End while
+    
+    logStream.end();
     
     // Mark job as completed
     await pool.query(
-      `UPDATE scan_jobs 
-       SET status = 'completed', current_step = 'COMPLETED', processed = $1, inserted = $2, errors = $3, 
-           completed_at = NOW(), updated_at = NOW()
-       WHERE id = $4`,
-      [processed, inserted, errors, jobId]
+      `UPDATE gmail_sync_jobs 
+       SET status = 'completed', current_step = 'COMPLETED', processed_count = $1, saved_count = $2, error_count = $3, 
+           errors = $4, completed_at = NOW(), last_update_at = NOW()
+       WHERE id = $5`,
+      [processed, inserted, errors, JSON.stringify(errorList.slice(-50)), jobId]
     );
     
     console.log(`[HistoricalScanner] Completed: ${processed} processed, ${inserted} inserted, ${errors} errors`);
@@ -165,17 +335,15 @@ export async function runHistoricalScan(
       inserted,
       errors,
     };
+    
   } catch (error) {
     console.error(`[HistoricalScanner] Scan ${jobId} failed:`, error);
-    
-    // Mark job as failed
     await pool.query(
-      `UPDATE scan_jobs 
-       SET status = 'failed', error_message = $1, completed_at = NOW(), updated_at = NOW()
+      `UPDATE gmail_sync_jobs 
+       SET status = 'failed', errors = $1, completed_at = NOW(), last_update_at = NOW()
        WHERE id = $2`,
-      [error instanceof Error ? error.message : 'Unknown error', jobId]
+      [JSON.stringify([{ error: error instanceof Error ? error.message : 'Unknown error' }]), jobId]
     );
-    
     throw error;
   }
 }
