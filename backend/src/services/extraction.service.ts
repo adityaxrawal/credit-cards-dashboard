@@ -66,7 +66,7 @@ export async function extractTransactionFromEmail(
     textToParse = PdfParser.cleanText(textToParse);
 
     // 3. Try Parsing Body
-    let parsed: ParsedTransaction | null = parser.parse(textToParse, message.subject, message.from);
+    let parsed: ParsedTransaction | null = parser.parse(textToParse, message.subject, message.from, message.date);
 
     // 4. If failed, try PDF Attachments
     if (!parsed && message.attachments && message.attachments.length > 0 && fetchAttachment) {
@@ -78,7 +78,7 @@ export async function extractTransactionFromEmail(
           if (buffer) {
             const pdfText = await PdfParser.extractText(buffer);
             const cleanPdfText = PdfParser.cleanText(pdfText);
-            parsed = parser.parse(cleanPdfText, message.subject, message.from);
+            parsed = parser.parse(cleanPdfText, message.subject, message.from, message.date);
             if (parsed) {
               console.log(`[ExtractionService] Successfully parsed PDF attachment: ${att.filename}`);
               break;
