@@ -1,5 +1,5 @@
 steps:
-  # Build the container image  
+  # Build the container image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -8,7 +8,38 @@ steps:
       - '-t'
       - 'gcr.io/$PROJECT_ID/backend:latest'
       - '.'
-<truncated 1130 characters>
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/backend:$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/backend:latest'
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'backend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/backend:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--update-secrets'
+      - 'SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,DATABASE_URL=DATABASE_URL:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,GOOGLE_REDIRECT_URI=GOOGLE_REDIRECT_URI:latest,UPSTASH_REDIS_REST_URL=UPSTASH_REDIS_REST_URL:latest,UPSTASH_REDIS_REST_TOKEN=UPSTASH_REDIS_REST_TOKEN:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest,JWT_SECRET=JWT_SECRET:latest,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:latest,FRONTEND_URL=FRONTEND_URL:latest'
+      - '--set-env-vars'
+      - 'NODE_ENV=production,ENABLE_GMAIL_SYNC=true,ENABLE_AUTO_EXTRACTION=true,ENABLE_BUDGET_ALERTS=true'
+
+images:
   - 'gcr.io/$PROJECT_ID/backend:$COMMIT_SHA'
   - 'gcr.io/$PROJECT_ID/backend:latest'
 
