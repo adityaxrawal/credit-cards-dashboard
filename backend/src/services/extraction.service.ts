@@ -1,6 +1,19 @@
-import * as gmailClient from '../lib/gmailClient';
+import * as cheerio from 'cheerio';
 import * as cardsQueries from '../db/queries/cards.queries';
-import { GmailMessage } from '../lib/gmailClient';
+import { BankParsers, ParsedTransaction } from './extraction/BankParsers';
+import { PdfParser } from './extraction/PdfParser';
+
+export interface ExtractionInput {
+  id: string;
+  subject: string;
+  from: string;
+  bodyText: string;
+  bodyHtml?: string;
+  date: Date;
+  attachments?: { id: string; filename: string; mimeType: string }[];
+}
+
+export type AttachmentFetcher = (messageId: string, attachmentId: string) => Promise<Buffer | null>;
 
 interface ExtractionResult {
   status: 'success' | 'error' | 'unknown_format';
@@ -16,78 +29,93 @@ interface ExtractionResult {
 }
 
 /**
- * Bank email patterns and parsers
- */
-const bankTemplates = [
-  {
-    name: 'SBI',
-    fromPattern: /sbi|state bank/i,
-    subjectPattern: /transaction|spent|purchase/i,
-    parser: (message: GmailMessage) => parseSBIEmail(message),
-  },
-  {
-    name: 'HDFC',
-    fromPattern: /hdfc/i,
-    subjectPattern: /transaction|card.*used/i,
-    parser: (message: GmailMessage) => parseHDFCEmail(message),
-  },
-  {
-    name: 'ICICI',
-    fromPattern: /icici/i,
-    subjectPattern: /transaction|purchase/i,
-    parser: (message: GmailMessage) => parseICICIEmail(message),
-  },
-  {
-    name: 'Axis',
-    fromPattern: /axis/i,
-    subjectPattern: /transaction|spent/i,
-    parser: (message: GmailMessage) => parseAxisEmail(message),
-  },
-  // Add more bank templates as needed
-];
-
-/**
  * Extract transaction from email
  */
 export async function extractTransactionFromEmail(
   userId: string,
-  message: GmailMessage
+  message: ExtractionInput,
+  fetchAttachment?: AttachmentFetcher
 ): Promise<ExtractionResult> {
   try {
-    // Find matching template
-    const template = bankTemplates.find(t =>
-      t.fromPattern.test(message.from) && t.subjectPattern.test(message.subject)
+    // 1. Identify Bank Parser
+    const parser = BankParsers.find(p => 
+      p.identifiers.some(id => 
+        message.from.toLowerCase().includes(id) || 
+        message.subject.toLowerCase().includes(id)
+      )
     );
-    
-    if (!template) {
-      return {
-        status: 'unknown_format',
-        error: 'No matching bank template found',
-      };
+
+    if (!parser) {
+      console.log(`[ExtractionService] No parser found for: ${message.subject} from ${message.from}`);
+      return { status: 'unknown_format', error: 'No matching bank parser found' };
+    }
+
+    // 2. Prepare Text Content
+    let textToParse = message.bodyText;
+
+    // If bodyText is empty or weak, try HTML
+    if ((!textToParse || textToParse.length < 50) && message.bodyHtml) {
+      const $ = cheerio.load(message.bodyHtml);
+      // Remove scripts and styles
+      $('script').remove();
+      $('style').remove();
+      textToParse = $('body').text();
     }
     
-    // Parse email
-    const parsed = template.parser(message);
-    
+    // Clean text
+    textToParse = PdfParser.cleanText(textToParse);
+
+    // 3. Try Parsing Body
+    let parsed: ParsedTransaction | null = parser.parse(textToParse, message.subject, message.from);
+
+    // 4. If failed, try PDF Attachments
+    if (!parsed && message.attachments && message.attachments.length > 0 && fetchAttachment) {
+      console.log(`[ExtractionService] Body parse failed, checking ${message.attachments.length} attachments...`);
+      
+      for (const att of message.attachments) {
+        if (att.mimeType === 'application/pdf' || att.filename.toLowerCase().endsWith('.pdf')) {
+          const buffer = await fetchAttachment(message.id, att.id);
+          if (buffer) {
+            const pdfText = await PdfParser.extractText(buffer);
+            const cleanPdfText = PdfParser.cleanText(pdfText);
+            parsed = parser.parse(cleanPdfText, message.subject, message.from);
+            if (parsed) {
+              console.log(`[ExtractionService] Successfully parsed PDF attachment: ${att.filename}`);
+              break;
+            }
+          }
+        }
+      }
+    }
+
     if (!parsed) {
-      return {
-        status: 'error',
-        error: 'Failed to parse email content',
-      };
+      return { status: 'error', error: 'Failed to parse email content and attachments' };
     }
-    
-    // Find matching card
-    const card = await cardsQueries.findCardByBankAndLastFour(
+
+    // 5. Find or Create Card
+    let card = await cardsQueries.findCardByBankAndLastFour(
       userId,
       parsed.bankName,
       parsed.lastFourDigits
     );
-    
+
     if (!card) {
-      console.warn(`[ExtractionService] No card found for ${parsed.bankName} ending in ${parsed.lastFourDigits}`);
-      // Still return success but log warning
+      console.log(`[ExtractionService] Auto-creating card: ${parsed.cardName || parsed.bankName} ${parsed.lastFourDigits}`);
+      try {
+        card = await cardsQueries.createCard({
+          userId,
+          cardName: parsed.cardName || `${parsed.bankName} ${parsed.lastFourDigits}`,
+          bankName: parsed.bankName,
+          lastFour: parsed.lastFourDigits,
+          billDate: 1, // Default
+          dueDate: 10, // Default
+          creditLimit: 0,
+        });
+      } catch (err) {
+        console.error(`[ExtractionService] Failed to create card:`, err);
+      }
     }
-    
+
     return {
       status: 'success',
       transaction: {
@@ -96,9 +124,10 @@ export async function extractTransactionFromEmail(
         merchant: parsed.merchant,
         bankName: parsed.bankName,
         lastFourDigits: parsed.lastFourDigits,
-        category: parsed.category || 'Others',
+        category: parsed.category,
       },
     };
+
   } catch (error) {
     console.error('[ExtractionService] Error extracting transaction:', error);
     return {
@@ -106,103 +135,4 @@ export async function extractTransactionFromEmail(
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
-}
-
-/**
- * Parse SBI email
- */
-function parseSBIEmail(message: GmailMessage) {
-  const text = message.bodyText;
-  
-  // Example patterns - adjust based on actual email format
-  const amountMatch = text.match(/(?:INR|Rs\.?)\s*([0-9,]+\.?[0-9]*)/i);
-  const merchantMatch = text.match(/at\s+([A-Z0-9\s]+)/i);
-  const cardMatch = text.match(/card\s+(?:ending\s+)?(\d{4})/i);
-  const dateMatch = text.match(/on\s+(\d{2}[-\/]\d{2}[-\/]\d{4})/i);
-  
-  if (!amountMatch || !cardMatch) {
-    return null;
-  }
-  
-  return {
-    amount: parseFloat(amountMatch[1].replace(/,/g, '')),
-    merchant: merchantMatch ? merchantMatch[1].trim() : 'Unknown Merchant',
-    lastFourDigits: cardMatch[1],
-    bankName: 'SBI',
-    transactionDate: dateMatch ? new Date(dateMatch[1]) : new Date(),
-    category: 'Others',
-  };
-}
-
-/**
- * Parse HDFC email
- */
-function parseHDFCEmail(message: GmailMessage) {
-  const text = message.bodyText;
-  
-  const amountMatch = text.match(/(?:INR|Rs\.?)\s*([0-9,]+\.?[0-9]*)/i);
-  const merchantMatch = text.match(/at\s+([A-Z0-9\s]+)/i);
-  const cardMatch = text.match(/card\s+(?:ending\s+)?(\d{4})/i);
-  const dateMatch = text.match(/on\s+(\d{2}[-\/]\d{2}[-\/]\d{4})/i);
-  
-  if (!amountMatch || !cardMatch) {
-    return null;
-  }
-  
-  return {
-    amount: parseFloat(amountMatch[1].replace(/,/g, '')),
-    merchant: merchantMatch ? merchantMatch[1].trim() : 'Unknown Merchant',
-    lastFourDigits: cardMatch[1],
-    bankName: 'HDFC',
-    transactionDate: dateMatch ? new Date(dateMatch[1]) : new Date(),
-    category: 'Others',
-  };
-}
-
-/**
- * Parse ICICI email
- */
-function parseICICIEmail(message: GmailMessage) {
-  const text = message.bodyText;
-  
-  const amountMatch = text.match(/(?:INR|Rs\.?)\s*([0-9,]+\.?[0-9]*)/i);
-  const merchantMatch = text.match(/at\s+([A-Z0-9\s]+)/i);
-  const cardMatch = text.match(/card\s+(?:ending\s+)?(\d{4})/i);
-  
-  if (!amountMatch || !cardMatch) {
-    return null;
-  }
-  
-  return {
-    amount: parseFloat(amountMatch[1].replace(/,/g, '')),
-    merchant: merchantMatch ? merchantMatch[1].trim() : 'Unknown Merchant',
-    lastFourDigits: cardMatch[1],
-    bankName: 'ICICI',
-    transactionDate: new Date(),
-    category: 'Others',
-  };
-}
-
-/**
- * Parse Axis email
- */
-function parseAxisEmail(message: GmailMessage) {
-  const text = message.bodyText;
-  
-  const amountMatch = text.match(/(?:INR|Rs\.?)\s*([0-9,]+\.?[0-9]*)/i);
-  const merchantMatch = text.match(/at\s+([A-Z0-9\s]+)/i);
-  const cardMatch = text.match(/card\s+(?:ending\s+)?(\d{4})/i);
-  
-  if (!amountMatch || !cardMatch) {
-    return null;
-  }
-  
-  return {
-    amount: parseFloat(amountMatch[1].replace(/,/g, '')),
-    merchant: merchantMatch ? merchantMatch[1].trim() : 'Unknown Merchant',
-    lastFourDigits: cardMatch[1],
-    bankName: 'Axis',
-    transactionDate: new Date(),
-    category: 'Others',
-  };
 }

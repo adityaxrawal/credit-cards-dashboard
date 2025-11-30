@@ -10,9 +10,20 @@ export interface DetectionResult {
 export class CreditCardMailDetector {
   // Configurable rules
   private static readonly SENDER_DOMAINS = [
-    'hdfcbank.net', 'sbi.co.in', 'icicibank.com', 'axisbank.com', 
-    'idfcfirstbank.com', 'indusind.com', 'citibank.com', 'amex.com',
-    'hsbc.co.in', 'kotak.com', 'rblbank.com', 'sc.com'
+    'hdfcbank.net', 'hdfcbank.com', 
+    'sbi.co.in', 'sbicard.com', 'state bank of india',
+    'icicibank.com', 
+    'axisbank.com', 'axisbank.co.in',
+    'idfcfirstbank.com', 
+    'indusind.com', 
+    'citibank.com', 
+    'amex.com', 'americanexpress.com',
+    'hsbc.co.in', 
+    'kotak.com', 
+    'rblbank.com', 
+    'sc.com',
+    'yesbank.in',
+    'jupiter.money', 'federalbank.co.in'
   ];
 
   private static readonly SUBJECT_KEYWORDS = [
@@ -24,7 +35,13 @@ export class CreditCardMailDetector {
     /debited/i,
     /charged/i,
     /e-statement/i,
-    /transaction notification/i
+    /transaction notification/i,
+    /bill/i,
+    /due/i,
+    /refund/i,
+    /reversal/i,
+    /reversed/i,
+    /credited/i
   ];
 
   private static readonly BODY_KEYWORDS = [
@@ -34,7 +51,9 @@ export class CreditCardMailDetector {
     /transaction of/i,
     /spent on/i,
     /merchant/i,
-    /otp/i // Sometimes OTP emails contain txn details, but we might want to be careful
+    /otp/i,
+    /total amount due/i,
+    /payment due date/i
   ];
 
   /**

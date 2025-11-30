@@ -54,20 +54,24 @@ export const gmailApi = {
     fromDate?: Date,
     toDate?: Date
   ): Promise<{ jobId: string; status: string }> => {
-    return apiPost<{ jobId: string; status: string }>(
+    const response = await apiPost<{ data: { jobId: string; status: string } }>(
       "/api/gmail/scan-historical",
       {
         fromDate,
         toDate,
       }
     );
+    // Backend returns { data: { jobId, status, ... } }
+    return response.data || response as any;
   },
 
   /**
    * Get scan job status
    */
   getScanStatus: async (jobId: string): Promise<ScanStatus> => {
-    return apiGet<ScanStatus>(`/api/gmail/jobs/${jobId}`);
+    const response = await apiGet<{ data: ScanStatus }>(`/api/gmail/jobs/${jobId}`);
+    // Backend returns { data: {...} }, so we need to unwrap it
+    return response.data || response as any;
   },
 
   /**

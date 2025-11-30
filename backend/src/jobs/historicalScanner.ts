@@ -230,6 +230,24 @@ export async function runHistoricalScan(
           
           let bodyText = '';
           let bodyHtml = '';
+          
+          const getAttachments = (parts: any[]): any[] => {
+            let attachments: any[] = [];
+            for (const part of parts) {
+              if (part.filename && part.body?.attachmentId) {
+                attachments.push({
+                  id: part.body.attachmentId,
+                  filename: part.filename,
+                  mimeType: part.mimeType,
+                });
+              }
+              if (part.parts) {
+                attachments = attachments.concat(getAttachments(part.parts));
+              }
+            }
+            return attachments;
+          };
+
           if (rawMessage.payload?.body?.data) {
             bodyText = Buffer.from(rawMessage.payload.body.data, 'base64').toString('utf-8');
           } else if (rawMessage.payload?.parts) {
@@ -243,6 +261,8 @@ export async function runHistoricalScan(
             }
           }
           
+          const attachments = rawMessage.payload?.parts ? getAttachments(rawMessage.payload.parts) : [];
+
           const simplifiedMessage = {
             id: rawMessage.id!,
             threadId: rawMessage.threadId!,
@@ -252,19 +272,42 @@ export async function runHistoricalScan(
             bodyText,
             bodyHtml,
             snippet: rawMessage.snippet || '',
+            attachments
           };
           
-          const result = await extractionService.extractTransactionFromEmail(user.id, simplifiedMessage);
+          const fetchAttachment = async (msgId: string, attId: string) => {
+             return await gmailClient.getAttachment(user.google_refresh_token, msgId, attId);
+          };
+
+          const result = await extractionService.extractTransactionFromEmail(user.id, simplifiedMessage, fetchAttachment);
           
           let transactionId: string | undefined;
           
           if (result.status === 'success' && result.transaction) {
-             const card = await cardsQueries.findCardByBankAndLastFour(
+             let card = await cardsQueries.findCardByBankAndLastFour(
               user.id,
               result.transaction.bankName,
               result.transaction.lastFourDigits
             );
             
+            // If card not found, auto-create it
+            if (!card) {
+              console.log(`[HistoricalScanner] Card not found for ${result.transaction.bankName} ${result.transaction.lastFourDigits}, creating new card...`);
+              try {
+                card = await cardsQueries.createCard({
+                  userId: user.id,
+                  cardName: `${result.transaction.bankName} ${result.transaction.lastFourDigits}`,
+                  bankName: result.transaction.bankName,
+                  lastFour: result.transaction.lastFourDigits,
+                  billDate: 1, // Default
+                  dueDate: 10, // Default
+                  creditLimit: 0, // Default/Unknown
+                });
+              } catch (createErr) {
+                console.error(`[HistoricalScanner] Failed to auto-create card:`, createErr);
+              }
+            }
+
             if (card) {
               const tx = await transactionsService.insertFromEmail(user.id, {
                 cardId: card.id,
@@ -301,6 +344,8 @@ export async function runHistoricalScan(
       }));
       
       await Promise.all(transactionTasks);
+
+      console.log(`[HistoricalScanner] Batch ${currentBatchNumber} Summary: Processed=${processed}, Inserted=${inserted}, Errors=${errors}`);
       
       // 5. Write Logs (Buffered)
       const logChunk = logEntries.map(e => JSON.stringify(e)).join('\n') + '\n';

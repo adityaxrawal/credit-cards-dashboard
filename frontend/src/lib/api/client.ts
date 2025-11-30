@@ -153,8 +153,12 @@ async function makeRequest<T>(
       );
     }
 
-    // Return data.data if it exists, otherwise return the whole response
-    return (data.data !== undefined ? data.data : data) as T;
+    // Return data.data if it exists AND success is defined (standard envelope), 
+    // otherwise return the whole response (custom format like TransactionListResponse)
+    if (data.success !== undefined && data.data !== undefined) {
+      return data.data as T;
+    }
+    return data as T;
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;

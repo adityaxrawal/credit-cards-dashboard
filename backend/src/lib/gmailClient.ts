@@ -71,21 +71,31 @@ export async function getMessage(
     const getHeader = (name: string) => 
       headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
 
-    // Extract body text
+    // Extract body text recursively
     let bodyText = '';
     let bodyHtml = '';
-    
+
+    const extractBody = (parts: gmail_v1.Schema$MessagePart[]) => {
+      for (const part of parts) {
+        if (part.mimeType === 'text/plain' && part.body?.data) {
+          bodyText = Buffer.from(part.body.data, 'base64').toString('utf-8');
+        } else if (part.mimeType === 'text/html' && part.body?.data) {
+          bodyHtml = Buffer.from(part.body.data, 'base64').toString('utf-8');
+        } else if (part.parts) {
+          extractBody(part.parts);
+        }
+      }
+    };
+
     if (rawMessage.payload?.body?.data) {
       bodyText = Buffer.from(rawMessage.payload.body.data, 'base64').toString('utf-8');
     } else if (rawMessage.payload?.parts) {
-      for (const part of rawMessage.payload.parts) {
-        if (part.mimeType === 'text/plain' && part.body?.data) {
-          bodyText = Buffer.from(part.body.data, 'base64').toString('utf-8');
-        }
-        if (part.mimeType === 'text/html' && part.body?.data) {
-          bodyHtml = Buffer.from(part.body.data, 'base64').toString('utf-8');
-        }
-      }
+      extractBody(rawMessage.payload.parts);
+    }
+
+    // Fallback: If no plain text, use HTML stripped of tags
+    if (!bodyText && bodyHtml) {
+      bodyText = bodyHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
     return {
@@ -238,5 +248,31 @@ export async function stopWatch(refreshToken: string): Promise<boolean> {
   } catch (error) {
     console.error('[GmailClient] Error stopping watch:', error);
     return false;
+  }
+}
+
+/**
+ * Get attachment data
+ */
+export async function getAttachment(
+  refreshToken: string,
+  messageId: string,
+  attachmentId: string
+): Promise<Buffer | null> {
+  try {
+    const gmail = getGmailClient(refreshToken);
+    const response = await gmail.users.messages.attachments.get({
+      userId: 'me',
+      messageId,
+      id: attachmentId,
+    });
+
+    if (response.data.data) {
+      return Buffer.from(response.data.data, 'base64');
+    }
+    return null;
+  } catch (error) {
+    console.error('[GmailClient] Error fetching attachment:', error);
+    return null;
   }
 }

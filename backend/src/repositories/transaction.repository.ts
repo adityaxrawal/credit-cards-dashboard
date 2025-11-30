@@ -38,6 +38,8 @@ export class TransactionRepository {
     userId: string,
     filters: TransactionFilters
   ): Promise<{ data: Transaction[]; total: number }> {
+    console.log('[TransactionRepository] listTransactions called', { userId, filters });
+
     const where: string[] = ['user_id = $1'];
     const params: any[] = [userId];
     let paramIndex = 2;
@@ -83,6 +85,8 @@ export class TransactionRepository {
     }
 
     const whereClause = where.join(' AND ');
+    console.log('[TransactionRepository] Query WHERE clause:', whereClause);
+    console.log('[TransactionRepository] Query Params:', params);
 
     // Get total count
     const countResult = await query(
@@ -90,6 +94,7 @@ export class TransactionRepository {
       params
     );
     const total = parseInt(countResult.rows[0].total);
+    console.log('[TransactionRepository] Total count found:', total);
 
     // Get paginated data
     const limit = filters.limit || 50;
@@ -102,6 +107,11 @@ export class TransactionRepository {
        LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
       [...params, limit, offset]
     );
+
+    console.log('[TransactionRepository] Data rows returned:', dataResult.rows.length);
+    if (dataResult.rows.length > 0) {
+      console.log('[TransactionRepository] Sample row:', dataResult.rows[0]);
+    }
 
     return {
       data: dataResult.rows,
@@ -134,13 +144,26 @@ export class TransactionRepository {
     emailMessageId?: string;
     isManuallyAdded?: boolean;
     metadata?: any;
+    txnFingerprint?: string;
   }): Promise<Transaction> {
+    // Deduplication check
+    if (data.txnFingerprint) {
+      const existing = await query(
+        'SELECT * FROM transactions WHERE txn_fingerprint = $1 AND user_id = $2',
+        [data.txnFingerprint, data.userId]
+      );
+      if (existing.rows.length > 0) {
+        console.log(`[TransactionRepository] Duplicate transaction skipped: ${data.txnFingerprint}`);
+        return existing.rows[0];
+      }
+    }
+
     const result = await query(
       `INSERT INTO transactions (
         user_id, card_id, transaction_date, merchant, category,
         amount, transaction_type, description, bill_month, bill_year,
-        email_message_id, is_manually_added, metadata
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        email_message_id, is_manually_added, metadata, txn_fingerprint
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *`,
       [
         data.userId,
@@ -156,6 +179,7 @@ export class TransactionRepository {
         data.emailMessageId || null,
         data.isManuallyAdded || false,
         data.metadata || null,
+        data.txnFingerprint || null
       ]
     );
     return result.rows[0];
