@@ -4,7 +4,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/backend:$COMMIT_SHA'
+      - 'gcr.io/$PROJECT_ID/backend:${SHORT_SHA}'
       - '-t'
       - 'gcr.io/$PROJECT_ID/backend:latest'
       - '.'
@@ -13,7 +13,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/backend:$COMMIT_SHA'
+      - 'gcr.io/$PROJECT_ID/backend:${SHORT_SHA}'
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
@@ -28,7 +28,7 @@ steps:
       - 'deploy'
       - 'backend'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/backend:$COMMIT_SHA'
+      - 'gcr.io/$PROJECT_ID/backend:${SHORT_SHA}'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -40,7 +40,7 @@ steps:
       - 'NODE_ENV=production,ENABLE_GMAIL_SYNC=true,ENABLE_AUTO_EXTRACTION=true,ENABLE_BUDGET_ALERTS=true'
 
 images:
-  - 'gcr.io/$PROJECT_ID/backend:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/backend:${SHORT_SHA}'
   - 'gcr.io/$PROJECT_ID/backend:latest'
 
 options:
