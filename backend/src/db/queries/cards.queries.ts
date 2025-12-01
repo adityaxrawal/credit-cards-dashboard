@@ -56,25 +56,37 @@ export async function createCard(data: {
   activationDate?: Date;
   notes?: string;
 }): Promise<Card> {
-  const { rows } = await pool.query(
-    `INSERT INTO credit_cards (
-      user_id, card_name, bank_name, card_number_last4, 
-      bill_date, due_date, credit_limit, card_activation_date, notes
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-    RETURNING *`,
-    [
-      data.userId,
-      data.cardName,
-      data.bankName,
-      data.lastFour,
-      data.billDate,
-      data.dueDate,
-      data.creditLimit,
-      data.activationDate || null,
-      data.notes || null,
-    ]
-  );
-  return rows[0];
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO credit_cards (
+        user_id, card_name, bank_name, card_number_last4, 
+        bill_date, due_date, credit_limit, card_activation_date, notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *`,
+      [
+        data.userId,
+        data.cardName,
+        data.bankName,
+        data.lastFour,
+        data.billDate,
+        data.dueDate,
+        data.creditLimit,
+        data.activationDate || null,
+        data.notes || null,
+      ]
+    );
+    return rows[0];
+  } catch (error: any) {
+    // Handle unique constraint violation (duplicate card)
+    if (error.code === '23505') { // Postgres unique violation code
+      console.log(`[CardQueries] Duplicate card detected for ${data.bankName} ${data.lastFour}, returning existing card.`);
+      const existingCard = await findCardByBankAndLastFour(data.userId, data.bankName, data.lastFour);
+      if (existingCard) {
+        return existingCard;
+      }
+    }
+    throw error;
+  }
 }
 
 /**
