@@ -32,6 +32,11 @@ function getGmailClient(refreshToken: string) {
   return google.gmail({ version: 'v1', auth: client as any });
 }
 
+// Simple in-memory cache for raw messages to avoid duplicate fetches
+const messageCache = new Map<string, { data: gmail_v1.Schema$Message | null; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MAX_CACHE_SIZE = 1000;
+
 /**
  * Fetch raw Gmail message (for CreditCardMailDetector)
  */
@@ -39,6 +44,12 @@ export async function getRawMessage(
   refreshToken: string,
   messageId: string
 ): Promise<gmail_v1.Schema$Message | null> {
+  // Check cache first
+  const cached = messageCache.get(messageId);
+  if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+    return cached.data;
+  }
+
   try {
     const gmail = getGmailClient(refreshToken);
     
@@ -46,6 +57,17 @@ export async function getRawMessage(
       userId: 'me',
       id: messageId,
       format: 'full',
+    });
+
+    // Cache the result
+    if (messageCache.size >= MAX_CACHE_SIZE) {
+      const firstKey = messageCache.keys().next().value;
+      if (firstKey) messageCache.delete(firstKey);
+    }
+    
+    messageCache.set(messageId, {
+      data: response.data,
+      timestamp: Date.now()
     });
 
     return response.data;

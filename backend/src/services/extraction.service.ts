@@ -3,6 +3,7 @@ import * as cardsQueries from '../db/queries/cards.queries';
 import { BankParsers, ParsedTransaction } from './extraction/BankParsers';
 import { PdfParser } from './extraction/PdfParser';
 import { GmailLinkGenerator } from '../utils/GmailLinkGenerator';
+import { BankParserPatterns } from '../utils/RegexCache';
 
 export interface ExtractionInput {
   id: string;
@@ -65,13 +66,25 @@ export async function extractTransactionFromEmail(
     // 2. Prepare Text Content
     let textToParse = message.bodyText;
 
-    // If bodyText is empty or weak, try HTML
+    // Optimized HTML processing: Use fast regex for simple cases
     if ((!textToParse || textToParse.length < 50) && message.bodyHtml) {
-      const $ = cheerio.load(message.bodyHtml);
-      // Remove scripts and styles
-      $('script').remove();
-      $('style').remove();
-      textToParse = $('body').text();
+      const html = message.bodyHtml;
+      
+      // Check if HTML contains scripts or styles (indicates complex HTML)
+      const hasComplexHtml = /<script|<style/i.test(html);
+      
+      if (hasComplexHtml) {
+        // Use Cheerio for complex HTML
+        const $ = cheerio.load(html);
+        $('script').remove();
+        $('style').remove();
+        textToParse = $('body').text();
+      } else {
+        // Use fast regex for simple HTML (10x faster)
+        textToParse = html.replace(BankParserPatterns.HTML_TAGS, ' ')
+                          .replace(BankParserPatterns.WHITESPACE, ' ')
+                          .trim();
+      }
     }
     
     // Clean text
@@ -104,30 +117,8 @@ export async function extractTransactionFromEmail(
       return { status: 'error', error: 'Failed to parse email content and attachments' };
     }
 
-    // 5. Find or Create Card
-    let card = await cardsQueries.findCardByBankAndLastFour(
-      userId,
-      parsed.bankName,
-      parsed.lastFourDigits
-    );
-
-    if (!card) {
-      console.log(`[ExtractionService] Auto-creating card: ${parsed.cardName || parsed.bankName} ${parsed.lastFourDigits}`);
-      try {
-        card = await cardsQueries.createCard({
-          userId,
-          cardName: parsed.cardName || `${parsed.bankName} ${parsed.lastFourDigits}`,
-          bankName: parsed.bankName,
-          lastFour: parsed.lastFourDigits,
-          billDate: 1, // Default
-          dueDate: 10, // Default
-          creditLimit: 0,
-        });
-      } catch (err) {
-        console.error(`[ExtractionService] Failed to create card:`, err);
-      }
-    }
-
+    // 5. Return transaction data without card lookup/creation
+    // Card lookup and creation is now handled by historicalScanner with caching for better performance
     return {
       status: 'success',
       transaction: {

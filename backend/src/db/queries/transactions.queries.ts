@@ -199,6 +199,100 @@ export async function createTransaction(data: {
 }
 
 /**
+ * Bulk create transactions - optimized for high performance
+ * Inserts multiple transactions in a single query
+ */
+export async function createTransactionsBulk(dataList: Array<{
+  userId: string;
+  cardId: string;
+  transactionDate: Date;
+  merchant: string;
+  category: string;
+  amount: number;
+  transactionType: string;
+  description?: string;
+  billMonth?: number;
+  billYear?: number;
+  emailMessageId?: string;
+  txnFingerprint?: string;
+  isManuallyAdded?: boolean;
+  metadata?: any;
+  exactTimestamp?: Date;
+  emailSubject?: string;
+  gmailThreadId?: string;
+  gmailAccountIndex?: number;
+  currencyCode?: string;
+  originalAmount?: number;
+  referenceNumber?: string;
+  transactionSubtype?: string;
+}>): Promise<Transaction[]> {
+  if (dataList.length === 0) return [];
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const values: any[] = [];
+    const placeholders: string[] = [];
+    let paramIndex = 1;
+
+    for (const data of dataList) {
+      placeholders.push(
+        `($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4}, $${paramIndex+5}, $${paramIndex+6}, $${paramIndex+7}, $${paramIndex+8}, $${paramIndex+9}, $${paramIndex+10}, $${paramIndex+11}, $${paramIndex+12}, $${paramIndex+13}, $${paramIndex+14}, $${paramIndex+15}, $${paramIndex+16}, $${paramIndex+17}, $${paramIndex+18}, $${paramIndex+19}, $${paramIndex+20}, $${paramIndex+21})`
+      );
+      values.push(
+        data.userId,
+        data.cardId,
+        data.transactionDate,
+        data.merchant,
+        data.category,
+        data.amount,
+        data.transactionType,
+        data.description || null,
+        data.billMonth || null,
+        data.billYear || null,
+        data.emailMessageId || null,
+        data.txnFingerprint || null,
+        data.isManuallyAdded || false,
+        data.metadata || null,
+        data.exactTimestamp || null,
+        data.emailSubject || null,
+        data.gmailThreadId || null,
+        data.gmailAccountIndex || 0,
+        data.currencyCode || null,
+        data.originalAmount || null,
+        data.referenceNumber || null,
+        data.transactionSubtype || null
+      );
+      paramIndex += 22;
+    }
+
+    const query = `
+      INSERT INTO transactions (
+        user_id, card_id, transaction_date, merchant, category,
+        amount, transaction_type, description, bill_month, bill_year,
+        email_message_id, txn_fingerprint, is_manually_added, metadata,
+        exact_timestamp, email_subject, gmail_thread_id, gmail_account_index,
+        currency_code, original_amount, reference_number, transaction_subtype
+      ) VALUES ${placeholders.join(', ')}
+      ON CONFLICT (email_message_id, txn_fingerprint) DO NOTHING
+      RETURNING *
+    `;
+
+    const result = await client.query(query, values);
+    await client.query('COMMIT');
+    
+    return result.rows;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+
+/**
  * Update a transaction
  */
 export async function updateTransaction(

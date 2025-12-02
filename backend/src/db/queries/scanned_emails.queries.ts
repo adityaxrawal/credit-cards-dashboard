@@ -147,6 +147,47 @@ export async function updateScannedEmailProcessed(
 }
 
 /**
+ * Bulk update scanned emails as processed
+ */
+export async function updateScannedEmailsProcessedBulk(
+  updates: Array<{
+    userId: string;
+    messageId: string;
+    transactionId?: string;
+  }>
+): Promise<void> {
+  if (updates.length === 0) return;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Build a CASE statement for efficient bulk updates
+    const messageIds = updates.map(u => u.messageId);
+    const transactionIdCase = updates.map((u, idx) => 
+      `WHEN message_id = $${idx + 2} THEN ${u.transactionId ? `'${u.transactionId}'` : 'NULL'}`
+    ).join(' ');
+
+    const query = `
+      UPDATE gmail_scanned_emails
+      SET processed = true, 
+          processed_at = NOW(),
+          created_transaction_id = (CASE ${transactionIdCase} END)::uuid
+      WHERE user_id = $1 AND message_id = ANY($${updates.length + 2})
+    `;
+
+    await client.query(query, [updates[0].userId, ...messageIds, messageIds]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+
+/**
  * Get scan statistics for a user
  */
 export async function getScannedEmailStats(userId: string): Promise<ScanStats> {
