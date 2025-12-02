@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import * as cardsQueries from '../db/queries/cards.queries';
 import { BankParsers, ParsedTransaction } from './extraction/BankParsers';
 import { PdfParser } from './extraction/PdfParser';
+import { GmailLinkGenerator } from '../utils/GmailLinkGenerator';
 
 export interface ExtractionInput {
   id: string;
@@ -10,6 +11,7 @@ export interface ExtractionInput {
   bodyText: string;
   bodyHtml?: string;
   date: Date;
+  threadId?: string;
   attachments?: { id: string; filename: string; mimeType: string }[];
 }
 
@@ -24,6 +26,16 @@ interface ExtractionResult {
     bankName: string;
     lastFourDigits: string;
     category: string;
+    exactTimestamp?: Date;
+    transactionType?: string;
+    currencyCode?: string;
+    originalAmount?: number;
+    referenceNumber?: string;
+    emailSubject?: string;
+    gmailMessageId?: string;
+    gmailThreadId?: string;
+    gmailLink?: string;
+    gmailThreadLink?: string;
   };
   error?: string;
 }
@@ -125,6 +137,16 @@ export async function extractTransactionFromEmail(
         bankName: parsed.bankName,
         lastFourDigits: parsed.lastFourDigits,
         category: parsed.category,
+        exactTimestamp: parsed.exactTimestamp,
+        transactionType: parsed.transactionType,
+        currencyCode: parsed.currencyCode,
+        originalAmount: parsed.originalAmount,
+        referenceNumber: parsed.referenceNumber,
+        emailSubject: message.subject,
+        gmailMessageId: message.id,
+        gmailThreadId: message.threadId,
+        gmailLink: GmailLinkGenerator.generateLink(message.id),
+        gmailThreadLink: message.threadId ? GmailLinkGenerator.generateThreadLink(message.threadId) : undefined,
       },
     };
 

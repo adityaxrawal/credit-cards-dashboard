@@ -10,6 +10,10 @@ export interface ParsedTransaction {
   cardName?: string; // Optional specific card name hint
   transactionType?: 'purchase' | 'reversal' | 'refund' | 'emi' | 'international' | 'contactless';
   isInternational?: boolean;
+  exactTimestamp?: Date;
+  currencyCode?: string;
+  originalAmount?: number;
+  referenceNumber?: string;
 }
 
 export interface BankParser {
@@ -28,13 +32,13 @@ const extractMerchant = (text: string): string => {
   // Try multiple merchant patterns in order of specificity
   const patterns = [
     // Pattern 1: "at MERCHANT_NAME on"
-    /(?:at|@)\s+([A-Za-z0-9\s*&.\-\/()]+?)(?:\s+on\s+\d|\s+dated|\s+for\s+Rs|\.|,|\n|$)/i,
+    /(?:at|@)\s+([A-Za-z0-9\s*&.\-\/()]+?)(?:\s+on\s+(?:\d|[A-Za-z]{3})|\s+dated|\s+for\s+Rs|\.|,|\n|$)/i,
     // Pattern 2: "to MERCHANT_NAME on"
-    /(?:to|towards)\s+([A-Za-z0-9\s*&.\-\/()]+?)(?:\s+on\s+\d|\s+dated|\s+for\s+Rs|\.|,|\n|$)/i,
+    /(?:to|towards)\s+([A-Za-z0-9\s*&.\-\/()]+?)(?:\s+on\s+(?:\d|[A-Za-z]{3})|\s+dated|\s+for\s+Rs|\.|,|\n|$)/i,
     // Pattern 3: "with MERCHANT_NAME"
-    /(?:with)\s+([A-Za-z0-9\s*&.\-\/()]+?)(?:\s+on\s+\d|\s+dated|\.|,|\n|$)/i,
+    /(?:with)\s+([A-Za-z0-9\s*&.\-\/()]+?)(?:\s+on\s+(?:\d|[A-Za-z]{3})|\s+dated|\.|,|\n|$)/i,
     // Pattern 4: "from MERCHANT_NAME"
-    /(?:from)\s+([A-Za-z0-9\s*&.\-\/()]+?)(?:\s+on\s+\d|\s+dated|\.|,|\n|$)/i,
+    /(?:from)\s+([A-Za-z0-9\s*&.\-\/()]+?)(?:\s+on\s+(?:\d|[A-Za-z]{3})|\s+dated|\.|,|\n|$)/i,
   ];
 
   for (const pattern of patterns) {
@@ -111,6 +115,43 @@ const isInternationalTransaction = (text: string, subject: string): boolean => {
          combined.includes('abroad');
 };
 
+/**
+ * Extract reference number
+ */
+const extractReferenceNumber = (text: string): string | undefined => {
+  const patterns = [
+    /(?:Ref No|Reference No|Txn Ref|Transaction ID|Ref|Txn ID)\b[:\s]*([A-Za-z0-9]+)/i,
+    /(?:Ref\. No\.|Reference Number)[:\s]*([A-Za-z0-9]+)/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) return match[1];
+  }
+  return undefined;
+};
+
+/**
+ * Extract currency code
+ */
+const extractCurrency = (text: string): string => {
+  if (/USD|\$|Dollar/i.test(text)) return 'USD';
+  if (/EUR|€|Euro/i.test(text)) return 'EUR';
+  if (/GBP|£|Pound/i.test(text)) return 'GBP';
+  return 'INR';
+};
+
+/**
+ * Extract original amount for international transactions
+ */
+const extractOriginalAmount = (text: string): number | undefined => {
+  const match = text.match(/(?:USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
+  if (match && match[1]) {
+    return cleanAmount(match[1]);
+  }
+  return undefined;
+};
+
 export const BankParsers: BankParser[] = [
   // ============================================================
   // SBI - State Bank of India
@@ -122,7 +163,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
       
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -137,6 +178,10 @@ export const BankParsers: BankParser[] = [
           cardName: 'SBI Cashback',
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -153,7 +198,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -180,6 +225,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -196,7 +245,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -221,6 +270,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -237,7 +290,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -263,6 +316,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -279,7 +336,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -303,6 +360,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -319,7 +380,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -341,6 +402,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -357,7 +422,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -379,6 +444,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -395,7 +464,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -416,6 +485,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -432,7 +505,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -454,6 +527,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -492,6 +569,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -531,6 +612,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -547,7 +632,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -568,6 +653,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -584,7 +673,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -605,6 +694,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -621,7 +714,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -641,6 +734,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -657,7 +754,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -672,6 +769,10 @@ export const BankParsers: BankParser[] = [
           cardName: 'Canara Bank Credit Card',
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -688,7 +789,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -708,6 +809,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -724,7 +829,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -739,6 +844,10 @@ export const BankParsers: BankParser[] = [
           cardName: 'Jupiter Edge+',
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -775,6 +884,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -791,7 +904,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -806,6 +919,10 @@ export const BankParsers: BankParser[] = [
           cardName: 'Union Bank Credit Card',
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -822,7 +939,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -837,6 +954,10 @@ export const BankParsers: BankParser[] = [
           cardName: 'Bank of India Credit Card',
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -853,7 +974,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -873,6 +994,10 @@ export const BankParsers: BankParser[] = [
           cardName: cardNameHint,
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -889,7 +1014,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -904,6 +1029,10 @@ export const BankParsers: BankParser[] = [
           cardName: 'OneCard',
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -920,7 +1049,7 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
-      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹)\s*([0-9,]+\.?[0-9]*)/i);
+      const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
 
@@ -935,6 +1064,10 @@ export const BankParsers: BankParser[] = [
           cardName: 'Slice Credit Card',
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;
@@ -966,6 +1099,10 @@ export const BankParsers: BankParser[] = [
           cardName: 'Fi Credit Card',
           transactionType: detectTransactionType(text, subject),
           isInternational: isInternationalTransaction(text, subject),
+          exactTimestamp: DateParser.extractDateTime(text) || emailDate,
+          referenceNumber: extractReferenceNumber(text),
+          currencyCode: extractCurrency(text),
+          originalAmount: extractOriginalAmount(text),
         };
       }
       return null;

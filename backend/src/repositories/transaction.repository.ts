@@ -18,6 +18,14 @@ export interface Transaction {
   metadata: any;
   created_at: Date;
   updated_at: Date;
+  exact_timestamp?: Date;
+  email_subject?: string;
+  gmail_thread_id?: string;
+  gmail_account_index?: number;
+  currency_code?: string;
+  original_amount?: number;
+  reference_number?: string;
+  transaction_subtype?: string;
 }
 
 export interface TransactionFilters {

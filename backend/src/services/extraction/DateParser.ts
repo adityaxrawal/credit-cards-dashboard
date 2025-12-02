@@ -70,4 +70,31 @@ export class DateParser {
 
     return null;
   }
+  /**
+   * Extract date and time from text
+   */
+  static extractDateTime(text: string): Date | null {
+    if (!text) return null;
+
+    // Common patterns with time
+    const patterns = [
+      // DD/MM/YYYY HH:mm:ss
+      /\b(\d{1,2}[-\/]\d{1,2}[-\/]\d{4}\s+\d{1,2}:\d{2}(?::\d{2})?)\b/,
+      // DD MMM YYYY HH:mm:ss
+      /\b(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9},?\s+\d{4}\s+(?:at\s+)?\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AaPp][Mm])?)\b/,
+      // YYYY-MM-DD HH:mm:ss
+      /\b(\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)\b/
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        // Try parsing with dayjs
+        const d = dayjs(match[1]);
+        if (d.isValid()) return d.toDate();
+      }
+    }
+
+    return this.extract(text); // Fallback to just date
+  }
 }

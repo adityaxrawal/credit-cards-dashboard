@@ -16,10 +16,20 @@ export interface Transaction {
   email_message_id?: string;
   created_at: string;
   updated_at: string;
+  exact_timestamp?: string;
+  email_subject?: string;
+  gmail_message_id?: string;
+  gmail_thread_id?: string;
+  gmail_account_index?: number;
+  currency_code?: string;
+  original_amount?: number;
+  reference_number?: string;
+  transaction_subtype?: string;
   card?: {
     card_name: string;
     bank_name: string;
     card_number_last4: string;
+    last_four?: string;
   };
 }
 

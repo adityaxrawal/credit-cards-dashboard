@@ -316,6 +316,14 @@ export async function runHistoricalScan(
                 merchant: result.transaction.merchant,
                 category: result.transaction.category,
                 emailMessageId: rawMessage.id || '',
+                exactTimestamp: result.transaction.exactTimestamp,
+                emailSubject: result.transaction.emailSubject,
+                gmailThreadId: result.transaction.gmailThreadId,
+                gmailAccountIndex: 0,
+                currencyCode: result.transaction.currencyCode,
+                originalAmount: result.transaction.originalAmount,
+                referenceNumber: result.transaction.referenceNumber,
+                transactionSubtype: result.transaction.transactionType,
               });
               
               if (tx) {

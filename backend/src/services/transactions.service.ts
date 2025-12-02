@@ -138,6 +138,14 @@ export async function insertFromEmail(
     category: string;
     emailMessageId: string;
     metadata?: any;
+    exactTimestamp?: Date;
+    emailSubject?: string;
+    gmailThreadId?: string;
+    gmailAccountIndex?: number;
+    currencyCode?: string;
+    originalAmount?: number;
+    referenceNumber?: string;
+    transactionSubtype?: string;
   }
 ) {
   // Create fingerprint for deduplication
@@ -163,5 +171,13 @@ export async function insertFromEmail(
     txnFingerprint,
     isManuallyAdded: false,
     metadata: data.metadata,
+    exactTimestamp: data.exactTimestamp,
+    emailSubject: data.emailSubject,
+    gmailThreadId: data.gmailThreadId,
+    gmailAccountIndex: data.gmailAccountIndex,
+    currencyCode: data.currencyCode,
+    originalAmount: data.originalAmount,
+    referenceNumber: data.referenceNumber,
+    transactionSubtype: data.transactionSubtype,
   });
 }

@@ -1,7 +1,25 @@
 import { gmail_v1 } from 'googleapis';
 
+export type EmailCategory = 
+  | 'transaction_success'
+  | 'refund'
+  | 'payment_success'
+  | 'payment_reminder'
+  | 'payment_declined'
+  | 'statement_generated'
+  | 'statement_reminder'
+  | 'otp'
+  | 'card_activation'
+  | 'limit_change'
+  | 'reward_update'
+  | 'emi_conversion'
+  | 'auto_debit'
+  | 'card_block'
+  | 'unknown';
+
 export interface DetectionResult {
-  isTransaction: boolean;
+  isTransaction: boolean; // True only for transaction_success and refund
+  category: EmailCategory;
   confidence: number;
   reason?: string;
   hasPdf?: boolean;
@@ -23,38 +41,61 @@ export class CreditCardMailDetector {
     'rblbank.com', 
     'sc.com',
     'yesbank.in',
-    'jupiter.money', 'federalbank.co.in'
+    'jupiter.money', 'federalbank.co.in',
+    'aubank.in', 'au small finance',
+    'bankofbaroda.in', 'bankofbaroda.com',
+    'canarabank.in',
+    'pnbindia.in', 'pnb.co.in',
+    'unionbankofindia.co.in'
   ];
 
-  private static readonly SUBJECT_KEYWORDS = [
-    /transaction alert/i,
-    /credit card statement/i,
-    /payment received/i,
-    /spent/i,
-    /purchase/i,
-    /debited/i,
-    /charged/i,
-    /e-statement/i,
-    /transaction notification/i,
-    /bill/i,
-    /due/i,
-    /refund/i,
-    /reversal/i,
-    /reversed/i,
-    /credited/i
-  ];
-
-  private static readonly BODY_KEYWORDS = [
-    /ending in \d{4}/i,
-    /card no\.? \w*\d{4}/i,
-    /available limit/i,
-    /transaction of/i,
-    /spent on/i,
-    /merchant/i,
-    /otp/i,
-    /total amount due/i,
-    /payment due date/i
-  ];
+  private static readonly CATEGORY_RULES: Record<EmailCategory, RegExp[]> = {
+    transaction_success: [
+      /transaction alert/i, /spent/i, /purchase/i, /debited/i, /charged/i, 
+      /transaction notification/i, /transaction of/i, /spent on/i, /thank you for using/i
+    ],
+    refund: [
+      /refund/i, /reversal/i, /reversed/i, /credited/i, /credit adjustment/i
+    ],
+    payment_success: [
+      /payment received/i, /payment confirmation/i, /payment successful/i, 
+      /thank you for your payment/i, /payment credited/i
+    ],
+    payment_reminder: [
+      /payment due/i, /bill due/i, /payment reminder/i, /outstanding/i, /pay now/i
+    ],
+    payment_declined: [
+      /payment declined/i, /transaction declined/i, /payment failed/i, /transaction failed/i
+    ],
+    statement_generated: [
+      /statement generated/i, /e-statement/i, /monthly statement/i, /account statement/i
+    ],
+    statement_reminder: [
+      /download statement/i, /view statement/i, /check statement/i
+    ],
+    otp: [
+      /otp/i, /one time password/i, /verification code/i, /authentication code/i
+    ],
+    card_activation: [
+      /card activated/i, /card delivered/i, /card dispatched/i, /welcome to/i
+    ],
+    limit_change: [
+      /limit increase/i, /limit decrease/i, /limit changed/i, /limit enhancement/i
+    ],
+    reward_update: [
+      /reward points/i, /points balance/i, /points expiring/i, /points redeemed/i
+    ],
+    emi_conversion: [
+      /emi conversion/i, /converted to emi/i, /merchant emi/i
+    ],
+    auto_debit: [
+      /auto debit/i, /standing instruction/i, /autopay/i
+    ],
+    card_block: [
+      /card blocked/i, /card unblocked/i, /block your card/i
+    ],
+    unknown: []
+  };
 
   /**
    * Detect if an email is a credit card transaction email
@@ -63,69 +104,81 @@ export class CreditCardMailDetector {
     const headers = message.payload?.headers || [];
     const fromHeader = headers.find(h => h.name === 'From')?.value || '';
     const subjectHeader = headers.find(h => h.name === 'Subject')?.value || '';
+    const snippet = message.snippet || '';
     
     // 1. Check Sender
     const isBankSender = this.SENDER_DOMAINS.some(domain => fromHeader.toLowerCase().includes(domain));
     
-    // 2. Check Subject
-    const hasTransactionSubject = this.SUBJECT_KEYWORDS.some(regex => regex.test(subjectHeader));
+    if (!isBankSender) {
+      // Allow some flexibility if subject is very strong, but generally require bank sender
+      const isStrongSubject = /transaction alert|credit card statement|spent|debited/i.test(subjectHeader);
+      if (!isStrongSubject) {
+        return {
+          isTransaction: false,
+          category: 'unknown',
+          confidence: 0.0,
+          reason: 'Not a bank sender'
+        };
+      }
+    }
+
+    // 2. Classify Category
+    const combinedText = `${subjectHeader} ${snippet}`.toLowerCase();
+    let bestCategory: EmailCategory = 'unknown';
+    let maxMatches = 0;
+
+    // Prioritize transaction_success and refund
+    const priorityCategories: EmailCategory[] = ['transaction_success', 'refund'];
+    
+    // Check priority categories first
+    for (const category of priorityCategories) {
+      const rules = this.CATEGORY_RULES[category];
+      const matches = rules.filter(regex => regex.test(combinedText)).length;
+      if (matches > 0) {
+        bestCategory = category;
+        maxMatches = matches;
+        break; // Stop if we find a transaction or refund
+      }
+    }
+
+    // If no priority category found, check others
+    if (bestCategory === 'unknown') {
+      for (const [category, rules] of Object.entries(this.CATEGORY_RULES)) {
+        if (priorityCategories.includes(category as EmailCategory)) continue;
+        
+        const matches = rules.filter(regex => regex.test(combinedText)).length;
+        if (matches > maxMatches) {
+          maxMatches = matches;
+          bestCategory = category as EmailCategory;
+        }
+      }
+    }
 
     // 3. Check Attachments (PDFs often are statements)
     const parts = message.payload?.parts || [];
     const hasPdf = parts.some(part => part.mimeType === 'application/pdf' || part.filename?.toLowerCase().endsWith('.pdf'));
 
-    // 4. Check Body (Snippet)
-    const snippet = message.snippet || '';
-    const hasBodyKeywords = this.BODY_KEYWORDS.some(regex => regex.test(snippet));
-
-    // Debug logging for first few emails
-    const shouldLog = Math.random() < 0.01; // Log ~1% of emails
-    if (shouldLog) {
-      console.log('[CreditCardMailDetector] Sample detection:', {
-        from: fromHeader.substring(0, 50),
-        subject: subjectHeader.substring(0, 50),
-        isBankSender,
-        hasTransactionSubject,
-        hasBodyKeywords,
-        hasPdf
-      });
+    // Refine classification based on PDF
+    if (bestCategory === 'unknown' && hasPdf) {
+      if (/statement/i.test(combinedText)) {
+        bestCategory = 'statement_generated';
+      }
     }
 
-    // Decision Logic - MORE LENIENT
-    // Option 1: Bank sender + any signal
-    if (isBankSender && (hasTransactionSubject || hasBodyKeywords || hasPdf)) {
-      return {
-        isTransaction: true,
-        confidence: 0.9,
-        reason: 'Bank sender + keywords/PDF',
-        hasPdf
-      };
-    }
-
-    // Option 2: Strong subject alone (even without bank sender)
-    if (hasTransactionSubject) {
-      return {
-        isTransaction: true,
-        confidence: 0.7,
-        reason: 'Transaction subject keywords',
-        hasPdf
-      };
-    }
-
-    // Option 3: Body keywords with PDF
-    if (hasBodyKeywords && hasPdf) {
-      return {
-        isTransaction: true,
-        confidence: 0.6,
-        reason: 'Body keywords + PDF attachment',
-        hasPdf
-      };
-    }
+    // 4. Determine if Displayable Transaction
+    const isTransaction = bestCategory === 'transaction_success' || bestCategory === 'refund';
+    
+    // Calculate confidence
+    let confidence = 0.5;
+    if (isBankSender) confidence += 0.2;
+    if (maxMatches > 0) confidence += 0.2;
+    if (maxMatches > 1) confidence += 0.1;
 
     return {
-      isTransaction: false,
-      confidence: 0.1,
-      reason: 'No strong signals',
+      isTransaction,
+      category: bestCategory,
+      confidence: Math.min(confidence, 1.0),
+      reason: `Classified as ${bestCategory} with ${maxMatches} signal matches`,
       hasPdf
     };
   }

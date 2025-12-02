@@ -84,6 +84,14 @@ export async function handleGmailPubSubMessage(payload: PubSubPayload) {
               merchant: result.transaction.merchant,
               category: result.transaction.category,
               emailMessageId: message.id,
+              exactTimestamp: result.transaction.exactTimestamp,
+              emailSubject: result.transaction.emailSubject,
+              gmailThreadId: result.transaction.gmailThreadId,
+              gmailAccountIndex: 0,
+              currencyCode: result.transaction.currencyCode,
+              originalAmount: result.transaction.originalAmount,
+              referenceNumber: result.transaction.referenceNumber,
+              transactionSubtype: result.transaction.transactionType,
             });
             
             console.log(`[GmailPubSubHandler] Created transaction ${tx?.id}`);

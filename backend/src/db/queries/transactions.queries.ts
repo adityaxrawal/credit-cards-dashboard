@@ -18,6 +18,14 @@ export interface Transaction {
   metadata: any;
   created_at: Date;
   updated_at: Date;
+  exact_timestamp?: Date;
+  email_subject?: string;
+  gmail_thread_id?: string;
+  gmail_account_index?: number;
+  currency_code?: string;
+  original_amount?: number;
+  reference_number?: string;
+  transaction_subtype?: string;
 }
 
 export interface TransactionFilters {
@@ -143,13 +151,23 @@ export async function createTransaction(data: {
   txnFingerprint?: string;
   isManuallyAdded?: boolean;
   metadata?: any;
+  exactTimestamp?: Date;
+  emailSubject?: string;
+  gmailThreadId?: string;
+  gmailAccountIndex?: number;
+  currencyCode?: string;
+  originalAmount?: number;
+  referenceNumber?: string;
+  transactionSubtype?: string;
 }): Promise<Transaction | null> {
   const { rows } = await pool.query(
     `INSERT INTO transactions (
       user_id, card_id, transaction_date, merchant, category,
       amount, transaction_type, description, bill_month, bill_year,
-      email_message_id, txn_fingerprint, is_manually_added, metadata
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      email_message_id, txn_fingerprint, is_manually_added, metadata,
+      exact_timestamp, email_subject, gmail_thread_id, gmail_account_index,
+      currency_code, original_amount, reference_number, transaction_subtype
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
     ON CONFLICT (email_message_id, txn_fingerprint) DO NOTHING
     RETURNING *`,
     [
@@ -167,6 +185,14 @@ export async function createTransaction(data: {
       data.txnFingerprint || null,
       data.isManuallyAdded || false,
       data.metadata || null,
+      data.exactTimestamp || null,
+      data.emailSubject || null,
+      data.gmailThreadId || null,
+      data.gmailAccountIndex || 0,
+      data.currencyCode || null,
+      data.originalAmount || null,
+      data.referenceNumber || null,
+      data.transactionSubtype || null,
     ]
   );
   return rows[0] || null;

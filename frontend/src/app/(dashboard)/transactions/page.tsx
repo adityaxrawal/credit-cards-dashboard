@@ -28,6 +28,7 @@ import {
 import { cardApi } from "@/lib/api/cards";
 import { useToast } from "@/components/ui/feedback/Toast";
 import { BulkImportModal } from "@/components/features/transactions/BulkImportModal";
+import { TransactionDetailModal } from "@/components/features/transactions/TransactionDetailModal";
 
 interface TransactionModalData {
   id?: string;
@@ -52,6 +53,9 @@ export default function TransactionsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [editingTransaction, setEditingTransaction] =
     useState<TransactionModalData | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = 
+    useState<Transaction | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   // Filters state
   const [selectedCard, setSelectedCard] = useState<string>("");
@@ -305,6 +309,17 @@ export default function TransactionsPage() {
       header: "Actions",
       render: (_: unknown, row: unknown) => (
         <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedTransaction(row as unknown as Transaction);
+              setShowDetailModal(true);
+            }}
+          >
+            View Details
+          </Button>
           <Button
             variant="secondary"
             size="sm"
@@ -705,6 +720,16 @@ export default function TransactionsPage() {
         isOpen={showBulkImport}
         onClose={() => setShowBulkImport(false)}
         cards={cards}
+      />
+
+      {/* Transaction Detail Modal */}
+      <TransactionDetailModal
+        isOpen={showDetailModal}
+        onClose={() => {
+          setShowDetailModal(false);
+          setSelectedTransaction(null);
+        }}
+        transaction={selectedTransaction}
       />
     </AppLayout>
   );
