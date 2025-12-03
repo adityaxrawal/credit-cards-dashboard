@@ -20,11 +20,11 @@ export function TransactionDetailModal({
   if (!transaction) return null;
 
   const gmailLink = transaction.gmail_message_id
-    ? `https://mail.google.com/mail/u/0/#all/${transaction.gmail_message_id}`
+    ? `https://mail.google.com/mail/u/1/#all/${transaction.gmail_message_id}`
     : undefined;
 
   const gmailThreadLink = transaction.gmail_thread_id
-    ? `https://mail.google.com/mail/u/0/#all/${transaction.gmail_thread_id}`
+    ? `https://mail.google.com/mail/u/1/#all/${transaction.gmail_thread_id}`
     : undefined;
 
   return (
@@ -77,7 +77,13 @@ export function TransactionDetailModal({
           {/* Card */}
           <DetailRow label="Card" icon={<CreditCard className="w-4 h-4" />}>
             <div className="flex items-center gap-2">
-              <span>{transaction.card?.card_name || "Unknown"}</span>
+              <span>
+                {transaction.card?.card_name && transaction.card.card_name !== "Unknown"
+                  ? transaction.card.card_name
+                  : transaction.card?.last_four
+                  ? `Card ending in ${transaction.card.last_four}`
+                  : "Unknown Card"}
+              </span>
               {transaction.card?.last_four && (
                 <Badge label={`•••• ${transaction.card.last_four}`} variant="default" size="sm" />
               )}
@@ -86,7 +92,7 @@ export function TransactionDetailModal({
 
           {/* Bank */}
           <DetailRow label="Bank" icon={<Building2 className="w-4 h-4" />}>
-            <span>{transaction.card?.bank_name || "Unknown"}</span>
+            <span>{transaction.card?.bank_name || transaction.bank_name || "Unknown Bank"}</span>
           </DetailRow>
 
           {/* Category */}

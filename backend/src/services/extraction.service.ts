@@ -4,6 +4,7 @@ import { BankParsers, ParsedTransaction } from './extraction/BankParsers';
 import { PdfParser } from './extraction/PdfParser';
 import { GmailLinkGenerator } from '../utils/GmailLinkGenerator';
 import { BankParserPatterns } from '../utils/RegexCache';
+import { MerchantExtractor } from '../utils/MerchantExtractor';
 
 export interface ExtractionInput {
   id: string;
@@ -51,9 +52,9 @@ export async function extractTransactionFromEmail(
 ): Promise<ExtractionResult> {
   try {
     // 1. Identify Bank Parser
-    const parser = BankParsers.find(p => 
-      p.identifiers.some(id => 
-        message.from.toLowerCase().includes(id) || 
+    const parser = BankParsers.find(p =>
+      p.identifiers.some(id =>
+        message.from.toLowerCase().includes(id) ||
         message.subject.toLowerCase().includes(id)
       )
     );
@@ -69,34 +70,48 @@ export async function extractTransactionFromEmail(
     // Optimized HTML processing: Use fast regex for simple cases
     if ((!textToParse || textToParse.length < 50) && message.bodyHtml) {
       const html = message.bodyHtml;
-      
+
       // Check if HTML contains scripts or styles (indicates complex HTML)
       const hasComplexHtml = /<script|<style/i.test(html);
-      
+
       if (hasComplexHtml) {
         // Use Cheerio for complex HTML
         const $ = cheerio.load(html);
         $('script').remove();
         $('style').remove();
+        // Convert boundaries to newlines
+        $('br').replaceWith('\n');
+        $('p').after('\n');
         textToParse = $('body').text();
       } else {
         // Use fast regex for simple HTML (10x faster)
-        textToParse = html.replace(BankParserPatterns.HTML_TAGS, ' ')
-                          .replace(BankParserPatterns.WHITESPACE, ' ')
-                          .trim();
+        // Converts <br> and <p> boundaries into newline \n, then strips tags, then collapses whitespace
+        textToParse = html.replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<\/p>/gi, '\n')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
       }
     }
-    
+
     // Clean text
     textToParse = PdfParser.cleanText(textToParse);
 
     // 3. Try Parsing Body
     let parsed: ParsedTransaction | null = parser.parse(textToParse, message.subject, message.from, message.date);
 
+    // Fallback for merchant extraction
+    if (parsed && (!parsed.merchant || parsed.merchant.trim().length === 0 || parsed.merchant.trim().split(/\s+/).length <= 1)) {
+      const fallback = MerchantExtractor.extract(textToParse);
+      if (fallback) {
+        parsed.merchant = fallback;
+      }
+    }
+
     // 4. If failed, try PDF Attachments
     if (!parsed && message.attachments && message.attachments.length > 0 && fetchAttachment) {
       console.log(`[ExtractionService] Body parse failed, checking ${message.attachments.length} attachments...`);
-      
+
       for (const att of message.attachments) {
         if (att.mimeType === 'application/pdf' || att.filename.toLowerCase().endsWith('.pdf')) {
           const buffer = await fetchAttachment(message.id, att.id);
@@ -104,6 +119,14 @@ export async function extractTransactionFromEmail(
             const pdfText = await PdfParser.extractText(buffer);
             const cleanPdfText = PdfParser.cleanText(pdfText);
             parsed = parser.parse(cleanPdfText, message.subject, message.from, message.date);
+
+            // Fallback for merchant extraction in PDF
+            if (parsed && (!parsed.merchant || parsed.merchant.trim().length === 0 || parsed.merchant.trim().split(/\s+/).length <= 1)) {
+              const fallback = MerchantExtractor.extract(cleanPdfText);
+              if (fallback) {
+                parsed.merchant = fallback;
+              }
+            }
             if (parsed) {
               console.log(`[ExtractionService] Successfully parsed PDF attachment: ${att.filename}`);
               break;

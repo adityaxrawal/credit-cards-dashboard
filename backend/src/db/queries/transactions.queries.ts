@@ -44,51 +44,54 @@ export interface TransactionFilters {
 /**
  * List transactions with filters and pagination
  */
+/**
+ * List transactions with filters and pagination
+ */
 export async function listTransactions(
   userId: string,
-  filters: TransactionFilters
+  filters: TransactionFilters & { sortBy?: string; sortOrder?: 'asc' | 'desc' }
 ): Promise<{ data: Transaction[]; total: number }> {
-  const where: string[] = ['user_id = $1'];
+  const where: string[] = ['t.user_id = $1'];
   const params: any[] = [userId];
   let paramIndex = 2;
 
   if (filters.cardId) {
-    where.push(`card_id = $${paramIndex++}`);
+    where.push(`t.card_id = $${paramIndex++}`);
     params.push(filters.cardId);
   }
 
   if (filters.from) {
-    where.push(`transaction_date >= $${paramIndex++}`);
+    where.push(`t.transaction_date >= $${paramIndex++}`);
     params.push(filters.from);
   }
 
   if (filters.to) {
-    where.push(`transaction_date <= $${paramIndex++}`);
+    where.push(`t.transaction_date <= $${paramIndex++}`);
     params.push(filters.to);
   }
 
   if (filters.billMonth) {
-    where.push(`bill_month = $${paramIndex++}`);
+    where.push(`t.bill_month = $${paramIndex++}`);
     params.push(filters.billMonth);
   }
 
   if (filters.billYear) {
-    where.push(`bill_year = $${paramIndex++}`);
+    where.push(`t.bill_year = $${paramIndex++}`);
     params.push(filters.billYear);
   }
 
   if (filters.category) {
-    where.push(`category = $${paramIndex++}`);
+    where.push(`t.category = $${paramIndex++}`);
     params.push(filters.category);
   }
 
   if (filters.transactionType) {
-    where.push(`transaction_type = $${paramIndex++}`);
+    where.push(`t.transaction_type = $${paramIndex++}`);
     params.push(filters.transactionType);
   }
 
   if (filters.merchant) {
-    where.push(`merchant ILIKE $${paramIndex++}`);
+    where.push(`t.merchant ILIKE $${paramIndex++}`);
     params.push(`%${filters.merchant}%`);
   }
 
@@ -96,7 +99,7 @@ export async function listTransactions(
 
   // Get total count
   const countResult = await pool.query(
-    `SELECT COUNT(*) as total FROM transactions WHERE ${whereClause}`,
+    `SELECT COUNT(*) as total FROM transactions t WHERE ${whereClause}`,
     params
   );
   const total = parseInt(countResult.rows[0].total);
@@ -104,11 +107,28 @@ export async function listTransactions(
   // Get paginated data
   const limit = filters.limit || 50;
   const offset = filters.offset || 0;
-  
+
+  // Sorting
+  const sortBy = filters.sortBy || 'transaction_date';
+  const sortOrder = filters.sortOrder || 'desc';
+
+  // Validate sort column to prevent SQL injection
+  const validSortColumns = ['transaction_date', 'amount', 'merchant', 'category'];
+  const sortColumn = validSortColumns.includes(sortBy) ? `t.${sortBy}` : 't.transaction_date';
+  const orderDirection = sortOrder.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
   const dataResult = await pool.query(
-    `SELECT * FROM transactions 
+    `SELECT t.*, 
+      json_build_object(
+        'id', c.id,
+        'card_name', c.card_name,
+        'bank_name', c.bank_name,
+        'last_four', c.card_number_last4
+      ) as card
+     FROM transactions t
+     LEFT JOIN credit_cards c ON t.card_id = c.id
      WHERE ${whereClause}
-     ORDER BY transaction_date DESC
+     ORDER BY ${sortColumn} ${orderDirection}
      LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
     [...params, limit, offset]
   );
@@ -160,6 +180,13 @@ export async function createTransaction(data: {
   referenceNumber?: string;
   transactionSubtype?: string;
 }): Promise<Transaction | null> {
+  // Truncate fields to match database VARCHAR limits
+  const truncatedMerchant = data.merchant?.substring(0, 255) || data.merchant;
+  const truncatedCategory = data.category?.substring(0, 100) || data.category;
+  const truncatedEmailMessageId = data.emailMessageId?.substring(0, 255) || data.emailMessageId;
+  const truncatedEmailSubject = data.emailSubject?.substring(0, 500) || data.emailSubject;
+  const truncatedReferenceNumber = data.referenceNumber?.substring(0, 100) || data.referenceNumber;
+
   const { rows } = await pool.query(
     `INSERT INTO transactions (
       user_id, card_id, transaction_date, merchant, category,
@@ -174,24 +201,24 @@ export async function createTransaction(data: {
       data.userId,
       data.cardId,
       data.transactionDate,
-      data.merchant,
-      data.category,
+      truncatedMerchant,
+      truncatedCategory,
       data.amount,
       data.transactionType,
       data.description || null,
       data.billMonth || null,
       data.billYear || null,
-      data.emailMessageId || null,
+      truncatedEmailMessageId,
       data.txnFingerprint || null,
       data.isManuallyAdded || false,
       data.metadata || null,
       data.exactTimestamp || null,
-      data.emailSubject || null,
+      truncatedEmailSubject,
       data.gmailThreadId || null,
-      data.gmailAccountIndex || 0,
+      data.gmailAccountIndex || 1,
       data.currencyCode || null,
       data.originalAmount || null,
-      data.referenceNumber || null,
+      truncatedReferenceNumber,
       data.transactionSubtype || null,
     ]
   );
@@ -237,31 +264,38 @@ export async function createTransactionsBulk(dataList: Array<{
     let paramIndex = 1;
 
     for (const data of dataList) {
+      // Truncate fields to match database VARCHAR limits
+      const truncatedMerchant = data.merchant?.substring(0, 255) || data.merchant;
+      const truncatedCategory = data.category?.substring(0, 100) || data.category;
+      const truncatedEmailMessageId = data.emailMessageId?.substring(0, 255) || data.emailMessageId;
+      const truncatedEmailSubject = data.emailSubject?.substring(0, 500) || data.emailSubject;
+      const truncatedReferenceNumber = data.referenceNumber?.substring(0, 100) || data.referenceNumber;
+
       placeholders.push(
-        `($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4}, $${paramIndex+5}, $${paramIndex+6}, $${paramIndex+7}, $${paramIndex+8}, $${paramIndex+9}, $${paramIndex+10}, $${paramIndex+11}, $${paramIndex+12}, $${paramIndex+13}, $${paramIndex+14}, $${paramIndex+15}, $${paramIndex+16}, $${paramIndex+17}, $${paramIndex+18}, $${paramIndex+19}, $${paramIndex+20}, $${paramIndex+21})`
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13}, $${paramIndex + 14}, $${paramIndex + 15}, $${paramIndex + 16}, $${paramIndex + 17}, $${paramIndex + 18}, $${paramIndex + 19}, $${paramIndex + 20}, $${paramIndex + 21})`
       );
       values.push(
         data.userId,
         data.cardId,
         data.transactionDate,
-        data.merchant,
-        data.category,
+        truncatedMerchant,
+        truncatedCategory,
         data.amount,
         data.transactionType,
         data.description || null,
         data.billMonth || null,
         data.billYear || null,
-        data.emailMessageId || null,
+        truncatedEmailMessageId,
         data.txnFingerprint || null,
         data.isManuallyAdded || false,
         data.metadata || null,
         data.exactTimestamp || null,
-        data.emailSubject || null,
+        truncatedEmailSubject,
         data.gmailThreadId || null,
-        data.gmailAccountIndex || 0,
+        data.gmailAccountIndex || 1,
         data.currencyCode || null,
         data.originalAmount || null,
-        data.referenceNumber || null,
+        truncatedReferenceNumber,
         data.transactionSubtype || null
       );
       paramIndex += 22;
@@ -281,7 +315,7 @@ export async function createTransactionsBulk(dataList: Array<{
 
     const result = await client.query(query, values);
     await client.query('COMMIT');
-    
+
     return result.rows;
   } catch (error) {
     await client.query('ROLLBACK');

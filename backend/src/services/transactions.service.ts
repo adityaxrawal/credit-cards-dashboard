@@ -18,12 +18,14 @@ export async function listTransactions(
     merchant?: string;
     page?: number;
     limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
   }
 ) {
   const page = filters.page || 1;
   const limit = filters.limit || 50;
   const offset = (page - 1) * limit;
-  
+
   const result = await transactionsQueries.listTransactions(userId, {
     cardId: filters.cardId,
     from: filters.from ? new Date(filters.from) : undefined,
@@ -35,15 +37,17 @@ export async function listTransactions(
     merchant: filters.merchant,
     limit,
     offset,
+    sortBy: filters.sortBy,
+    sortOrder: filters.sortOrder,
   });
-  
+
   const aggregations = await transactionsQueries.getSpendingAggregations(userId, {
     from: filters.from ? new Date(filters.from) : undefined,
     to: filters.to ? new Date(filters.to) : undefined,
     billMonth: filters.billMonth,
     billYear: filters.billYear,
   });
-  
+
   return {
     data: result.data,
     pagination: {
@@ -81,12 +85,12 @@ export async function createManualTransaction(data: {
   if (!card) {
     throw new Error('Card not found');
   }
-  
+
   // Calculate bill month/year based on card billing cycle
   const txDate = dayjs(data.transactionDate);
   const billMonth = txDate.month() + 1;
   const billYear = txDate.year();
-  
+
   return await transactionsQueries.createTransaction({
     userId: data.userId,
     cardId: data.cardId,
@@ -156,7 +160,7 @@ export async function insertFromEmail(
   const txDate = dayjs(data.transactionDate);
   const billMonth = txDate.month() + 1;
   const billYear = txDate.year();
-  
+
   return await transactionsQueries.createTransaction({
     userId,
     cardId: data.cardId,

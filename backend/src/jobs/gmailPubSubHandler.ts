@@ -87,7 +87,7 @@ export async function handleGmailPubSubMessage(payload: PubSubPayload) {
               exactTimestamp: result.transaction.exactTimestamp,
               emailSubject: result.transaction.emailSubject,
               gmailThreadId: result.transaction.gmailThreadId,
-              gmailAccountIndex: 0,
+              gmailAccountIndex: 1,
               currencyCode: result.transaction.currencyCode,
               originalAmount: result.transaction.originalAmount,
               referenceNumber: result.transaction.referenceNumber,

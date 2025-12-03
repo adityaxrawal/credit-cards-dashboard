@@ -31,6 +31,7 @@ export interface Transaction {
     card_number_last4: string;
     last_four?: string;
   };
+  bank_name?: string;
 }
 
 export interface TransactionFormData {
@@ -54,6 +55,8 @@ export interface TransactionFilters {
   billYear?: number;
   page?: number;
   limit?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
 }
 
 export interface TransactionListResponse {
@@ -88,9 +91,11 @@ export const transactionApi = {
     if (filters?.merchant) params.append("merchant", filters.merchant);
     if (filters?.billMonth) params.append("billMonth", filters.billMonth.toString());
     if (filters?.billYear) params.append("billYear", filters.billYear.toString());
-    
+
     if (filters?.page) params.append("page", filters.page.toString());
     if (filters?.limit) params.append("limit", filters.limit.toString());
+    if (filters?.sortBy) params.append("sortBy", filters.sortBy);
+    if (filters?.sortOrder) params.append("sortOrder", filters.sortOrder);
 
     return apiGet<TransactionListResponse>(
       `/api/transactions?${params.toString()}`

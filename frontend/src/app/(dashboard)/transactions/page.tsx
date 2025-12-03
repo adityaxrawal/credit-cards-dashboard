@@ -72,10 +72,17 @@ export default function TransactionsPage() {
     queryFn: () => cardApi.getCards(),
   });
 
+  // Sorting state
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: "asc" | "desc";
+  } | null>(null);
+  const [sortScope, setSortScope] = useState<"page" | "all">("page");
+
   // Build filters object
   const appliedFilters = useMemo(() => {
     const f: TransactionFilters = {
-      merchant: searchValue || undefined, // Search by merchant
+      merchant: searchValue || undefined,
       cardId: selectedCard || undefined,
       from: dateRange.start || undefined,
       to: dateRange.end || undefined,
@@ -87,8 +94,14 @@ export default function TransactionsPage() {
     if (activeTab === "debit") f.transactionType = "debit";
     else if (activeTab === "credit") f.transactionType = "credit";
 
+    // Apply backend sorting if scope is 'all'
+    if (sortScope === "all" && sortConfig) {
+      f.sortBy = sortConfig.key;
+      f.sortOrder = sortConfig.direction;
+    }
+
     return f;
-  }, [searchValue, selectedCard, dateRange, categoryFilter, activeTab, currentPage, pageSize]);
+  }, [searchValue, selectedCard, dateRange, categoryFilter, activeTab, currentPage, pageSize, sortScope, sortConfig]);
 
   // Fetch transactions
   const {
@@ -226,11 +239,56 @@ export default function TransactionsPage() {
     setCurrentPage(1);
   };
 
+  // Sort transactions (Client-side if scope is 'page')
+  const sortedTransactions = useMemo(() => {
+    // If sorting is handled by backend (scope 'all'), return as is
+    if (sortScope === "all") return transactions;
+    
+    if (!sortConfig) return transactions;
+    
+    const sorted = [...transactions].sort((a, b) => {
+      let aValue: any = a[sortConfig.key as keyof Transaction];
+      let bValue: any = b[sortConfig.key as keyof Transaction];
+      
+      // Handle date sorting
+      if (sortConfig.key === "transaction_date") {
+        aValue = new Date(aValue).getTime();
+        bValue = new Date(bValue).getTime();
+      }
+      
+      // Handle amount sorting
+      if (sortConfig.key === "amount") {
+        aValue = Math.abs(Number(aValue));
+        bValue = Math.abs(Number(bValue));
+      }
+      
+      if (aValue < bValue) {
+        return sortConfig.direction === "asc" ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortConfig.direction === "asc" ? 1 : -1;
+      }
+      return 0;
+    });
+    
+    return sorted;
+  }, [transactions, sortConfig, sortScope]);
+
+  const handleSort = (key: string, direction: "asc" | "desc") => {
+    setSortConfig({ key, direction });
+  };
+
+  const handleRowClick = (row: Transaction) => {
+    setSelectedTransaction(row);
+    setShowDetailModal(true);
+  };
+
   // Data table columns
   const columns: Column[] = [
     {
       key: "transaction_date",
       header: "Date",
+      sortable: true,
       render: (value: unknown) => formatDate(value as string, "short"),
     },
     {
@@ -255,6 +313,7 @@ export default function TransactionsPage() {
     {
       key: "amount",
       header: "Amount",
+      sortable: true,
       render: (value: unknown, row: unknown) => {
         const type = (row as Transaction).transaction_type;
         const amount = Math.abs(value as number);
@@ -274,13 +333,30 @@ export default function TransactionsPage() {
     {
       key: "card",
       header: "Card",
-      render: (_: unknown, row: unknown) => (
-        <Badge
-          label={(row as Transaction).card?.card_name || "Unknown"}
-          variant="default"
-          size="sm"
-        />
-      ),
+      render: (_: unknown, row: unknown) => {
+        const transaction = row as Transaction;
+        const card = transaction.card;
+        let cardLabel = "Unknown";
+        
+        if (card) {
+          // Show bank name + last 4 digits if available
+          if (card.bank_name && card.last_four) {
+            cardLabel = `${card.bank_name} ${card.last_four}`;
+          } else if (card.card_name && card.card_name !== "Unknown") {
+            cardLabel = card.card_name;
+          } else if (card.bank_name) {
+            cardLabel = card.bank_name;
+          }
+        }
+        
+        return (
+          <Badge
+            label={cardLabel}
+            variant="default"
+            size="sm"
+          />
+        );
+      },
     },
     {
       key: "category",
@@ -308,7 +384,7 @@ export default function TransactionsPage() {
       key: "actions",
       header: "Actions",
       render: (_: unknown, row: unknown) => (
-        <div className="flex gap-2">
+        <div className="flex gap-2 text-nowrap">
           <Button
             variant="secondary"
             size="sm"
@@ -365,7 +441,18 @@ export default function TransactionsPage() {
             />
           </div>
 
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
+            <div className="flex items-center gap-2 mr-2">
+              <span className="text-sm text-secondary-text">Sort Scope:</span>
+              <select
+                value={sortScope}
+                onChange={(e) => setSortScope(e.target.value as "page" | "all")}
+                className="px-2 py-1 text-sm border rounded-lg bg-card-bg"
+              >
+                <option value="page">Current Page</option>
+                <option value="all">All Data</option>
+              </select>
+            </div>
             <Button
               variant="secondary"
               onClick={() => setShowFilters(!showFilters)}
@@ -537,8 +624,10 @@ export default function TransactionsPage() {
           <>
             <DataTable
               columns={columns}
-              data={transactions as unknown as Record<string, unknown>[]}
-              onRowClick={(row) => console.log("Transaction clicked:", row)}
+              data={sortedTransactions as unknown as Record<string, unknown>[]}
+              onRowClick={(row) => handleRowClick(row as unknown as Transaction)}
+              sortable={true}
+              onSort={handleSort}
               emptyMessage="No transactions found"
             />
 

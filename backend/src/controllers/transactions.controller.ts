@@ -18,10 +18,12 @@ export async function getTransactions(req: Request, res: Response, next: NextFun
       merchant: req.query.merchant as string,
       page: req.query.page ? parseInt(req.query.page as string) : 1,
       limit: req.query.limit ? parseInt(req.query.limit as string) : 50,
+      sortBy: req.query.sortBy as string,
+      sortOrder: req.query.sortOrder as 'asc' | 'desc',
     };
-    
+
     const result = await transactionsService.listTransactions(userId, filters);
-    
+
     res.json(result);
   } catch (error) {
     next(error);
@@ -35,13 +37,13 @@ export async function getTransaction(req: Request, res: Response, next: NextFunc
   try {
     const userId = (req as any).user.id;
     const { id } = req.params;
-    
+
     const transaction = await transactionsService.getTransaction(userId, id);
-    
+
     if (!transaction) {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Transaction not found' } });
     }
-    
+
     res.json({ data: transaction });
   } catch (error) {
     next(error);
@@ -55,7 +57,7 @@ export async function createTransaction(req: Request, res: Response, next: NextF
   try {
     const userId = (req as any).user.id;
     const { cardId, transactionDate, merchant, category, amount, transactionType, description } = req.body;
-    
+
     // Validation
     if (!cardId || !transactionDate || !merchant || !category || !amount || !transactionType) {
       return res.status(400).json({
@@ -65,7 +67,7 @@ export async function createTransaction(req: Request, res: Response, next: NextF
         },
       });
     }
-    
+
     const transaction = await transactionsService.createManualTransaction({
       userId,
       cardId,
@@ -76,7 +78,7 @@ export async function createTransaction(req: Request, res: Response, next: NextF
       transactionType,
       description,
     });
-    
+
     res.status(201).json({ data: transaction });
   } catch (error) {
     next(error);
@@ -91,13 +93,13 @@ export async function updateTransaction(req: Request, res: Response, next: NextF
     const userId = (req as any).user.id;
     const { id } = req.params;
     const updates = req.body;
-    
+
     const transaction = await transactionsService.updateTransaction(userId, id, updates);
-    
+
     if (!transaction) {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Transaction not found' } });
     }
-    
+
     res.json({ data: transaction });
   } catch (error) {
     next(error);
@@ -111,13 +113,13 @@ export async function deleteTransaction(req: Request, res: Response, next: NextF
   try {
     const userId = (req as any).user.id;
     const { id } = req.params;
-    
+
     const deleted = await transactionsService.deleteTransaction(userId, id);
-    
+
     if (!deleted) {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Transaction not found' } });
     }
-    
+
     res.json({ message: 'Transaction deleted successfully' });
   } catch (error) {
     next(error);
