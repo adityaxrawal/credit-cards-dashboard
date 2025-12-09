@@ -1,235 +1,296 @@
 import { gmail_v1 } from 'googleapis';
+import { OllamaService } from './ollama.service';
+import { EmailCleanerService } from './emailCleaner.service';
+import { TransactionPrefilter } from '../utils/TransactionPrefilter';
+import { MLClassificationResult } from '../types/ml-schema';
 
+/**
+ * Email Category Types
+ * Mapped directly from ML classification results
+ */
 export type EmailCategory =
   | 'transaction_success'
   | 'refund'
-  | 'payment_success'
-  | 'payment_reminder'
-  | 'payment_declined'
-  | 'statement_generated'
-  | 'statement_reminder'
+  | 'statement'
   | 'otp'
-  | 'card_activation'
-  | 'limit_change'
-  | 'reward_update'
-  | 'emi_conversion'
-  | 'auto_debit'
-  | 'card_block'
-  | 'unknown';
+  | 'non_transaction';
 
+/**
+ * Detection Result
+ * Extended with ML-specific fields
+ */
 export interface DetectionResult {
-  isTransaction: boolean; // True only for transaction_success and refund
+  isTransaction: boolean;
   category: EmailCategory;
   confidence: number;
-  reason?: string;
-  hasPdf?: boolean;
+  merchant: string | null;
+  amount: number | null;
+  currency: string | null;
+  transactionDate: string | null;
+  cardLast4: string | null;
+  cleanedText: string;
+  needsReview?: boolean;
+  mlRawResponse?: MLClassificationResult;
+  error?: string;
 }
 
+/**
+ * Credit Card Mail Detector - ML-Only Version
+ * 
+ * IMPORTANT: This class now uses 100% ML-based detection.
+ * ALL regex-based and rule-based logic has been removed.
+ * 
+ * The only remaining purpose of SENDER_DOMAINS is for Gmail query optimization
+ * during historical scans (to reduce API calls). It is NOT used for detection.
+ */
 export class CreditCardMailDetector {
-  // Configurable rules
+  /**
+   * Bank sender domains - ONLY used for Gmail query filtering
+   * NOT used for detection/classification
+   */
   public static readonly SENDER_DOMAINS = [
-    // Universal new government-mandated domain
-    ".bank.in",
+    // Universal government-mandated domain
+    '.bank.in',
 
-    // HDFC
-    "hdfcbank.com", "hdfcbank.net",
-
-    // SBI + SBI Card
-    "sbi.co.in", "sbicard.com",
-
-    // ICICI
-    "icicibank.com", "icicibank.in",
-
-    // Axis
-    "axisbank.com", "axisbank.co.in",
-
-    // IDFC FIRST
-    "idfcfirstbank.com",
-
-    // IndusInd
-    "indusind.com", "indusindbank.in",
-
-    // Citi India
-    "citibank.com", "citi.com",
-
-    // Amex
-    "americanexpress.com", "aexp.com",
-
-    // HSBC
-    "hsbc.co.in",
-
-    // Kotak
-    "kotak.com", "kotak.in",
-
-    // RBL
-    "rblbank.com",
-
-    // Standard Chartered
-    "sc.com", "in.sc.com",
-
-    // Yes Bank
-    "yesbank.in",
-
-    // Federal Bank
-    "federalbank.co.in", "federalbank.in",
-
-    // AU Small Finance Bank
-    "aubank.in",
-
-    // Bank of Baroda
-    "bankofbaroda.com", "bankofbaroda.in",
-
-    // Canara Bank
-    "canarabank.in",
-
-    // PNB
-    "pnbindia.in", "pnb.co.in",
-
-    // Union Bank
-    "unionbankofindia.co.in",
-
-    // Bank of India
-    "bankofindia.co.in",
-
-    // IDBI
-    "idbibank.in",
-
-    // DBS
-    "dbs.com"
+    // Major Indian Banks
+    'hdfcbank.com', 'hdfcbank.net',
+    'sbi.co.in', 'sbicard.com',
+    'icicibank.com', 'icicibank.in',
+    'axisbank.com', 'axisbank.co.in',
+    'idfcfirstbank.com',
+    'indusind.com', 'indusindbank.in',
+    'citibank.com', 'citi.com',
+    'americanexpress.com', 'aexp.com',
+    'hsbc.co.in',
+    'kotak.com', 'kotak.in',
+    'rblbank.com',
+    'sc.com', 'in.sc.com',
+    'yesbank.in',
+    'federalbank.co.in', 'federalbank.in',
+    'aubank.in',
+    'bankofbaroda.com', 'bankofbaroda.in',
+    'canarabank.in',
+    'pnbindia.in', 'pnb.co.in',
+    'unionbankofindia.co.in',
+    'bankofindia.co.in',
+    'idbibank.in',
+    'dbs.com'
   ];
 
-
-  private static readonly CATEGORY_RULES: Record<EmailCategory, RegExp[]> = {
-    transaction_success: [
-      /transaction alert/i, /spent/i, /purchase/i, /debited/i, /charged/i,
-      /transaction notification/i, /transaction of/i, /spent on/i, /thank you for using/i
-    ],
-    refund: [
-      /refund/i, /reversal/i, /reversed/i, /credited/i, /credit adjustment/i
-    ],
-    payment_success: [
-      /payment received/i, /payment confirmation/i, /payment successful/i,
-      /thank you for your payment/i, /payment credited/i
-    ],
-    payment_reminder: [
-      /payment due/i, /bill due/i, /payment reminder/i, /outstanding/i, /pay now/i
-    ],
-    payment_declined: [
-      /payment declined/i, /transaction declined/i, /payment failed/i, /transaction failed/i
-    ],
-    statement_generated: [
-      /statement generated/i, /e-statement/i, /monthly statement/i, /account statement/i
-    ],
-    statement_reminder: [
-      /download statement/i, /view statement/i, /check statement/i
-    ],
-    otp: [
-      /otp/i, /one time password/i, /verification code/i, /authentication code/i
-    ],
-    card_activation: [
-      /card activated/i, /card delivered/i, /card dispatched/i, /welcome to/i
-    ],
-    limit_change: [
-      /limit increase/i, /limit decrease/i, /limit changed/i, /limit enhancement/i
-    ],
-    reward_update: [
-      /reward points/i, /points balance/i, /points expiring/i, /points redeemed/i
-    ],
-    emi_conversion: [
-      /emi conversion/i, /converted to emi/i, /merchant emi/i
-    ],
-    auto_debit: [
-      /auto debit/i, /standing instruction/i, /autopay/i
-    ],
-    card_block: [
-      /card blocked/i, /card unblocked/i, /block your card/i
-    ],
-    unknown: []
-  };
-
   /**
-   * Detect if an email is a credit card transaction email
+   * Detect if an email is a credit card transaction email using ML
+   * 
+   * @param message Raw Gmail message
+   * @returns Detection result with ML classification
    */
-  static detect(message: gmail_v1.Schema$Message): DetectionResult {
-    const headers = message.payload?.headers || [];
-    const fromHeader = headers.find(h => h.name === 'From')?.value || '';
-    const subjectHeader = headers.find(h => h.name === 'Subject')?.value || '';
-    const snippet = message.snippet || '';
+  static async detect(message: gmail_v1.Schema$Message): Promise<DetectionResult> {
+    try {
+      // Step 1: Clean email text
+      const cleanedText = await EmailCleanerService.cleanEmailText(message);
 
-    // 1. Check Sender
-    const isBankSender = this.SENDER_DOMAINS.some(domain => fromHeader.toLowerCase().includes(domain));
-
-    if (!isBankSender) {
-      // Allow some flexibility if subject is very strong, but generally require bank sender
-      const isStrongSubject = /transaction alert|credit card statement|spent|debited/i.test(subjectHeader);
-      if (!isStrongSubject) {
+      if (!cleanedText || cleanedText.length < 10) {
         return {
           isTransaction: false,
-          category: 'unknown',
+          category: 'non_transaction',
           confidence: 0.0,
-          reason: 'Not a bank sender'
+          merchant: null,
+          amount: null,
+          currency: null,
+          transactionDate: null,
+          cardLast4: null,
+          cleanedText: '',
+          error: 'Email body too short or empty after cleaning'
         };
       }
-    }
 
-    // 2. Classify Category
-    const combinedText = `${subjectHeader} ${snippet}`.toLowerCase();
-    let bestCategory: EmailCategory = 'unknown';
-    let maxMatches = 0;
+      // Step 2: Signal-Based Prefilter (The "Fast Lane")
+      // 10x Optimization: Discard obvious non-transactions immediately
+      const prefilterResult = TransactionPrefilter.evaluate(cleanedText);
 
-    // Prioritize transaction_success and refund
-    const priorityCategories: EmailCategory[] = ['transaction_success', 'refund'];
-
-    // Check priority categories first
-    for (const category of priorityCategories) {
-      const rules = this.CATEGORY_RULES[category];
-      const matches = rules.filter(regex => regex.test(combinedText)).length;
-      if (matches > 0) {
-        bestCategory = category;
-        maxMatches = matches;
-        break; // Stop if we find a transaction or refund
+      if (!prefilterResult.shouldProcess) {
+        // console.log('[Detector] Skipped via prefilter', prefilterResult);
+        return {
+          isTransaction: false,
+          category: 'non_transaction',
+          confidence: 0.0,
+          merchant: null,
+          amount: null,
+          currency: null,
+          transactionDate: null,
+          cardLast4: null,
+          cleanedText,
+          needsReview: false
+        };
       }
-    }
 
-    // If no priority category found, check others
-    if (bestCategory === 'unknown') {
-      for (const [category, rules] of Object.entries(this.CATEGORY_RULES)) {
-        if (priorityCategories.includes(category as EmailCategory)) continue;
+      // Step 3: ML classification
+      let mlResult: MLClassificationResult;
+      try {
+        mlResult = await OllamaService.classifyEmail(cleanedText);
+      } catch (mlError) {
+        console.error('[CreditCardMailDetector] ML classification failed:', mlError);
 
-        const matches = rules.filter(regex => regex.test(combinedText)).length;
-        if (matches > maxMatches) {
-          maxMatches = matches;
-          bestCategory = category as EmailCategory;
-        }
+        // Mark for manual review if ML fails
+        return {
+          isTransaction: false,
+          category: 'non_transaction',
+          confidence: 0.0,
+          merchant: null,
+          amount: null,
+          currency: null,
+          transactionDate: null,
+          cardLast4: null,
+          cleanedText,
+          needsReview: true,
+          error: `ML classification error: ${mlError instanceof Error ? mlError.message : 'Unknown error'}`
+        };
       }
+
+      // Step 4: Validate ML output
+      const needsReview = mlResult.confidence < 0.7;
+
+      return {
+        isTransaction: mlResult.isTransaction,
+        category: mlResult.category,
+        confidence: mlResult.confidence,
+        merchant: mlResult.merchant,
+        amount: mlResult.amount,
+        currency: mlResult.currency,
+        transactionDate: mlResult.transactionDate,
+        cardLast4: mlResult.cardLast4,
+        cleanedText,
+        needsReview,
+        mlRawResponse: mlResult
+      };
+
+    } catch (error) {
+      console.error('[CreditCardMailDetector] Unexpected error:', error);
+
+      return {
+        isTransaction: false,
+        category: 'non_transaction',
+        confidence: 0.0,
+        merchant: null,
+        amount: null,
+        currency: null,
+        transactionDate: null,
+        cardLast4: null,
+        cleanedText: '',
+        needsReview: true,
+        error: `Detection error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
+  }
+
+  /**
+   * Batch detect multiple emails (for efficiency)
+   * Processes in parallel with concurrency limit
+   */
+  /**
+   * Batch detect multiple emails (Prompt Packing Optimized)
+   */
+  static async detectBatch(
+    messages: gmail_v1.Schema$Message[],
+    concurrency: number = 3 // Concurrency of BATCHES (e.g. 3 concurrent batches of 5 = 15 emails being processed)
+  ): Promise<DetectionResult[]> {
+    const BATCH_SIZE = 3; // Reduced from 5 for better stability with 3B models
+
+    // 1. Prefilter & Clean all
+    const cleaned = await Promise.all(messages.map(async (msg, index) => {
+      const text = await EmailCleanerService.cleanEmailText(msg);
+      const prefilter = TransactionPrefilter.evaluate(text);
+      return { index, msg, text, prefilter };
+    }));
+
+    // 2. Separate into "Process" and "Skip"
+    const toProcess = cleaned.filter(c => c.prefilter.shouldProcess);
+    const skipped = cleaned.filter(c => !c.prefilter.shouldProcess);
+
+    // 3. Process in Batches
+    const { default: pLimit } = await import('p-limit');
+    const limit = pLimit(concurrency);
+
+    // Helper to chunk array
+    const chunks = [];
+    for (let i = 0; i < toProcess.length; i += BATCH_SIZE) {
+      chunks.push(toProcess.slice(i, i + BATCH_SIZE));
     }
 
-    // 3. Check Attachments (PDFs often are statements)
-    const parts = message.payload?.parts || [];
-    const hasPdf = parts.some(part => part.mimeType === 'application/pdf' || part.filename?.toLowerCase().endsWith('.pdf'));
+    const processedResults = await Promise.all(chunks.map(chunk => limit(async () => {
+      const emails = chunk.map(c => c.text);
 
-    // Refine classification based on PDF
-    if (bestCategory === 'unknown' && hasPdf) {
-      if (/statement/i.test(combinedText)) {
-        bestCategory = 'statement_generated';
+      try {
+        // CALL OLLAMA BATCH
+        const mlResults = await OllamaService.classifyBatch(emails);
+
+        // Map back to detection results
+        return chunk.map((item, i) => {
+          const ml = mlResults[i];
+          const needsReview = ml.confidence < 0.7;
+
+          return {
+            originalIndex: item.index,
+            result: {
+              isTransaction: ml.isTransaction,
+              category: ml.category as any,
+              confidence: ml.confidence,
+              merchant: ml.merchant,
+              amount: ml.amount,
+              currency: ml.currency,
+              transactionDate: ml.transactionDate,
+              cardLast4: ml.cardLast4,
+              cleanedText: item.text,
+              needsReview,
+              mlRawResponse: ml
+            } as DetectionResult
+          };
+        });
+      } catch (err) {
+        console.error('[Detector] Batch failed completely', err);
+        // Fallback: mark all as error/needs review
+        return chunk.map((item) => ({
+          originalIndex: item.index,
+          result: {
+            isTransaction: false,
+            category: 'non_transaction',
+            confidence: 0,
+            merchant: null,
+            amount: null,
+            currency: null,
+            transactionDate: null,
+            cardLast4: null,
+            cleanedText: item.text,
+            needsReview: true,
+            error: 'Batch processing error'
+          } as any
+        }));
       }
-    }
+    })));
 
-    // 4. Determine if Displayable Transaction
-    const isTransaction = bestCategory === 'transaction_success' || bestCategory === 'refund';
+    // Flatten processed results
+    const flatProcessed = processedResults.flat();
 
-    // Calculate confidence
-    let confidence = 0.5;
-    if (isBankSender) confidence += 0.2;
-    if (maxMatches > 0) confidence += 0.2;
-    if (maxMatches > 1) confidence += 0.1;
+    // 4. Transform Skipped
+    const skippedResults = skipped.map(item => ({
+      originalIndex: item.index,
+      result: {
+        isTransaction: false,
+        category: 'non_transaction' as const,
+        confidence: 0,
+        merchant: null,
+        amount: null,
+        currency: null,
+        transactionDate: null,
+        cardLast4: null,
+        cleanedText: item.text,
+        needsReview: false
+      } as DetectionResult
+    }));
 
-    return {
-      isTransaction,
-      category: bestCategory,
-      confidence: Math.min(confidence, 1.0),
-      reason: `Classified as ${bestCategory} with ${maxMatches} signal matches`,
-      hasPdf
-    };
+    // 5. Reassemble in original order
+    const all = [...flatProcessed, ...skippedResults];
+    all.sort((a, b) => a.originalIndex - b.originalIndex);
+
+    return all.map(a => a.result);
   }
 }

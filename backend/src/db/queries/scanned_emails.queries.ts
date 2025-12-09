@@ -1,5 +1,9 @@
 import pool from '../../lib/db';
 
+/**
+ * Scanned Email Data (ML Schema)
+ * Updated for ML-based classification
+ */
 export interface ScannedEmailData {
   userId: string;
   messageId: string;
@@ -7,9 +11,13 @@ export interface ScannedEmailData {
   subject: string;
   sender: string;
   snippet: string;
-  isTransaction: boolean;
-  detectionConfidence: number;
-  detectionReason: string;
+  cleanedText: string;
+  mlIsTransaction: boolean;
+  mlCategory: string;
+  mlConfidence: number;
+  mlMerchant: string | null;
+  needsReview: boolean;
+  parseEvidence: string | null;
   scanJobId: string;
 }
 
@@ -18,6 +26,7 @@ export interface ScanStats {
   totalProcessed: number;
   totalTransactions: number;
   lastScannedDate: Date | null;
+  needsReviewCount: number;
 }
 
 /**
@@ -27,15 +36,14 @@ export async function getLastScannedDate(userId: string): Promise<Date | null> {
   const { rows } = await pool.query(
     `SELECT MAX(internal_date) as last_date 
      FROM gmail_scanned_emails 
-     WHERE user_id = $1`,
+     WHERE user_id = $1 AND processed = true`,
     [userId]
   );
-  
+
   if (rows[0]?.last_date) {
-    // Convert Unix timestamp (milliseconds) to Date
     return new Date(parseInt(rows[0].last_date));
   }
-  
+
   return null;
 }
 
@@ -46,14 +54,21 @@ export async function insertScannedEmail(data: ScannedEmailData): Promise<void> 
   await pool.query(
     `INSERT INTO gmail_scanned_emails (
       user_id, message_id, internal_date, subject, sender, snippet,
-      is_transaction, detection_confidence, detection_reason, scan_job_id
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      cleaned_text, ml_is_transaction, ml_category, ml_confidence, ml_merchant,
+      needs_review, parse_evidence, scan_job_id,
+      is_transaction, detection_confidence
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $8, $10)
     ON CONFLICT (user_id, message_id) 
     DO UPDATE SET
-      is_transaction = EXCLUDED.is_transaction,
-      detection_confidence = EXCLUDED.detection_confidence,
-      detection_reason = EXCLUDED.detection_reason,
+      ml_is_transaction = EXCLUDED.ml_is_transaction,
+      ml_category = EXCLUDED.ml_category,
+      ml_confidence = EXCLUDED.ml_confidence,
+      ml_merchant = EXCLUDED.ml_merchant,
+      needs_review = EXCLUDED.needs_review,
+      parse_evidence = EXCLUDED.parse_evidence,
       scan_job_id = EXCLUDED.scan_job_id,
+      is_transaction = EXCLUDED.ml_is_transaction,
+      detection_confidence = EXCLUDED.ml_confidence,
       scanned_at = NOW()`,
     [
       data.userId,
@@ -62,9 +77,13 @@ export async function insertScannedEmail(data: ScannedEmailData): Promise<void> 
       data.subject,
       data.sender,
       data.snippet,
-      data.isTransaction,
-      data.detectionConfidence,
-      data.detectionReason,
+      data.cleanedText,
+      data.mlIsTransaction,
+      data.mlCategory,
+      data.mlConfidence,
+      data.mlMerchant,
+      data.needsReview,
+      data.parseEvidence,
       data.scanJobId
     ]
   );
@@ -80,15 +99,12 @@ export async function insertScannedEmailsBulk(dataList: ScannedEmailData[]): Pro
   try {
     await client.query('BEGIN');
 
-    // We can't easily do a single huge INSERT with arrays in node-postgres without unnest or generating a huge query string.
-    // Generating a query string is efficient enough for batches of 50-100.
-    
     const values: any[] = [];
     const placeholders: string[] = [];
     let paramIndex = 1;
 
     for (const data of dataList) {
-      placeholders.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4}, $${paramIndex+5}, $${paramIndex+6}, $${paramIndex+7}, $${paramIndex+8}, $${paramIndex+9})`);
+      placeholders.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13}, $${paramIndex + 7}, $${paramIndex + 9})`);
       values.push(
         data.userId,
         data.messageId,
@@ -96,25 +112,36 @@ export async function insertScannedEmailsBulk(dataList: ScannedEmailData[]): Pro
         data.subject,
         data.sender,
         data.snippet,
-        data.isTransaction,
-        data.detectionConfidence,
-        data.detectionReason,
+        data.cleanedText,
+        data.mlIsTransaction,
+        data.mlCategory,
+        data.mlConfidence,
+        data.mlMerchant,
+        data.needsReview,
+        data.parseEvidence,
         data.scanJobId
       );
-      paramIndex += 10;
+      paramIndex += 14;
     }
 
     const query = `
       INSERT INTO gmail_scanned_emails (
         user_id, message_id, internal_date, subject, sender, snippet,
-        is_transaction, detection_confidence, detection_reason, scan_job_id
+        cleaned_text, ml_is_transaction, ml_category, ml_confidence, ml_merchant,
+        needs_review, parse_evidence, scan_job_id,
+        is_transaction, detection_confidence
       ) VALUES ${placeholders.join(', ')}
       ON CONFLICT (user_id, message_id) 
       DO UPDATE SET
-        is_transaction = EXCLUDED.is_transaction,
-        detection_confidence = EXCLUDED.detection_confidence,
-        detection_reason = EXCLUDED.detection_reason,
+        ml_is_transaction = EXCLUDED.ml_is_transaction,
+        ml_category = EXCLUDED.ml_category,
+        ml_confidence = EXCLUDED.ml_confidence,
+        ml_merchant = EXCLUDED.ml_merchant,
+        needs_review = EXCLUDED.needs_review,
+        parse_evidence = EXCLUDED.parse_evidence,
         scan_job_id = EXCLUDED.scan_job_id,
+        is_transaction = EXCLUDED.ml_is_transaction,
+        detection_confidence = EXCLUDED.ml_confidence,
         scanned_at = NOW()
     `;
 
@@ -162,9 +189,8 @@ export async function updateScannedEmailsProcessedBulk(
   try {
     await client.query('BEGIN');
 
-    // Build a CASE statement for efficient bulk updates
     const messageIds = updates.map(u => u.messageId);
-    const transactionIdCase = updates.map((u, idx) => 
+    const transactionIdCase = updates.map((u, idx) =>
       `WHEN message_id = $${idx + 2} THEN ${u.transactionId ? `'${u.transactionId}'` : 'NULL'}`
     ).join(' ');
 
@@ -186,7 +212,6 @@ export async function updateScannedEmailsProcessedBulk(
   }
 }
 
-
 /**
  * Get scan statistics for a user
  */
@@ -195,18 +220,36 @@ export async function getScannedEmailStats(userId: string): Promise<ScanStats> {
     `SELECT 
       COUNT(*) as total_scanned,
       COUNT(*) FILTER (WHERE processed = true) as total_processed,
-      COUNT(*) FILTER (WHERE is_transaction = true) as total_transactions,
+      COUNT(*) FILTER (WHERE ml_is_transaction = true OR is_transaction = true) as total_transactions,
+      COUNT(*) FILTER (WHERE needs_review = true) as needs_review_count,
       MAX(internal_date) as last_date
      FROM gmail_scanned_emails 
      WHERE user_id = $1`,
     [userId]
   );
-  
+
   const row = rows[0];
   return {
     totalScanned: parseInt(row.total_scanned || '0'),
     totalProcessed: parseInt(row.total_processed || '0'),
     totalTransactions: parseInt(row.total_transactions || '0'),
+    needsReviewCount: parseInt(row.needs_review_count || '0'),
     lastScannedDate: row.last_date ? new Date(parseInt(row.last_date)) : null
   };
+}
+
+/**
+ * Check which message IDs have already been processed
+ */
+export async function getProcessedMessageIds(userId: string, messageIds: string[]): Promise<Set<string>> {
+  if (messageIds.length === 0) return new Set();
+
+  const { rows } = await pool.query(
+    `SELECT message_id 
+     FROM gmail_scanned_emails 
+     WHERE user_id = $1 AND message_id = ANY($2) AND processed = true`,
+    [userId, messageIds]
+  );
+
+  return new Set(rows.map(r => r.message_id));
 }

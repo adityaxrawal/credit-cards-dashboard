@@ -9,6 +9,7 @@ import gmailRoutes from './gmail.routes';
 import billsRoutes from './bills.routes';
 import statementsRoutes from './statements.routes';
 import rewardsRoutes from './rewards.routes';
+import syncRoutes from './sync.routes';
 
 const router = Router();
 
@@ -25,6 +26,6 @@ router.use('/gmail', gmailRoutes);
 router.use('/bills', billsRoutes);
 router.use('/statements', statementsRoutes);
 router.use('/rewards', rewardsRoutes);
+router.use('/sync', syncRoutes);
 
 export default router;
-
