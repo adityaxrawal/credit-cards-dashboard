@@ -55,8 +55,8 @@ export function GmailSyncModal({
       }
     };
 
-    // Start polling every 3 seconds
-    pollIntervalRef.current = setInterval(pollStatus, 3000);
+    // Start polling every 1.5 seconds for smoother UI updates
+    pollIntervalRef.current = setInterval(pollStatus, 1500);
 
     return () => {
       clearPolling();
@@ -244,20 +244,31 @@ export function GmailSyncModal({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-hover-bg rounded-lg p-3">
-                      <p className="text-xs text-secondary-text">Transactions Found</p>
-                      <p className="text-2xl font-bold text-primary-text mt-1">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-hover-bg rounded-lg p-3 text-center">
+                      <p className="text-xs text-secondary-text">Emails</p>
+                      <p className="text-xl font-bold text-primary-text mt-1">
+                        {progress.processed}/{progress.total}
+                      </p>
+                    </div>
+                    <div className="bg-hover-bg rounded-lg p-3 text-center">
+                      <p className="text-xs text-secondary-text">Transactions</p>
+                      <p className="text-xl font-bold text-green-500 mt-1">
                         {progress.inserted || 0}
                       </p>
                     </div>
-                    <div className="bg-hover-bg rounded-lg p-3">
+                    <div className="bg-hover-bg rounded-lg p-3 text-center">
                       <p className="text-xs text-secondary-text">Errors</p>
-                      <p className="text-2xl font-bold text-primary-text mt-1">
+                      <p className="text-xl font-bold text-red-500 mt-1">
                         {progress.errors || 0}
                       </p>
                     </div>
                   </div>
+                  {progress.toProcess && (
+                    <p className="text-xs text-muted-text text-center mt-2">
+                      Processing {progress.toProcess} emails in current batch...
+                    </p>
+                  )}
                 </>
               ) : (
                 <div className="text-center py-8">

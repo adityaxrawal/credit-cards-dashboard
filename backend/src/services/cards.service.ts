@@ -6,26 +6,28 @@ import { getCurrentBillingPeriod, getBillingPeriodForMonth } from '../utils/bill
  */
 export async function getAllCards(userId: string) {
   const cards = await cardsQueries.getUserCards(userId);
-  
-  const cardsWithUtilization = await Promise.all(
-    cards.map(async (card) => {
-      const utilization = await cardsQueries.getCardUtilization(card.id);
-      const utilizationPercent = card.credit_limit 
-        ? (utilization / card.credit_limit) * 100 
-        : 0;
-      
-      const currentPeriod = getCurrentBillingPeriod(card.bill_date, card.due_date);
-      
-      return {
-        ...card,
-        currentBalance: utilization,
-        utilization: utilizationPercent,
-        nextBillDate: currentPeriod.billDate,
-        nextDueDate: currentPeriod.dueDate,
-      };
-    })
-  );
-  
+
+  // Batch fetch utilization to avoid N+1 queries
+  const cardIds = cards.map(c => c.id);
+  const utilizationMap = await cardsQueries.getBatchCardUtilization(cardIds);
+
+  const cardsWithUtilization = cards.map((card) => {
+    const utilization = utilizationMap.get(card.id) || 0;
+    const utilizationPercent = card.credit_limit
+      ? (utilization / card.credit_limit) * 100
+      : 0;
+
+    const currentPeriod = getCurrentBillingPeriod(card.bill_date, card.due_date);
+
+    return {
+      ...card,
+      currentBalance: utilization,
+      utilization: utilizationPercent,
+      nextBillDate: currentPeriod.billDate,
+      nextDueDate: currentPeriod.dueDate,
+    };
+  });
+
   return cardsWithUtilization;
 }
 
@@ -34,18 +36,18 @@ export async function getAllCards(userId: string) {
  */
 export async function getCardDetails(userId: string, cardId: string) {
   const card = await cardsQueries.getCardById(userId, cardId);
-  
+
   if (!card) {
     return null;
   }
-  
+
   const utilization = await cardsQueries.getCardUtilization(card.id);
-  const utilizationPercent = card.credit_limit 
-    ? (utilization / card.credit_limit) * 100 
+  const utilizationPercent = card.credit_limit
+    ? (utilization / card.credit_limit) * 100
     : 0;
-  
+
   const currentPeriod = getCurrentBillingPeriod(card.bill_date, card.due_date);
-  
+
   return {
     ...card,
     currentBalance: utilization,
@@ -108,13 +110,13 @@ export async function getCardStatement(
   year: number
 ) {
   const card = await cardsQueries.getCardById(userId, cardId);
-  
+
   if (!card) {
     return null;
   }
-  
+
   const billingPeriod = getBillingPeriodForMonth(card.bill_date, card.due_date, month, year);
-  
+
   // Get transactions for this billing period
   const transactionsQueries = await import('../db/queries/transactions.queries');
   const { data: transactions } = await transactionsQueries.listTransactions(userId, {
@@ -122,15 +124,15 @@ export async function getCardStatement(
     from: billingPeriod.start,
     to: billingPeriod.end,
   });
-  
+
   const totalDebits = transactions
     .filter(t => t.transaction_type === 'debit')
     .reduce((sum, t) => sum + parseFloat(t.amount.toString()), 0);
-    
+
   const totalCredits = transactions
     .filter(t => t.transaction_type === 'credit')
     .reduce((sum, t) => sum + parseFloat(t.amount.toString()), 0);
-  
+
   return {
     card,
     billingPeriod,

@@ -5,9 +5,11 @@ import * as transactionsService from '../services/transactions.service';
 import * as cardsQueries from '../db/queries/cards.queries';
 import * as scannedEmailQueries from '../db/queries/scanned_emails.queries';
 import { CreditCardMailDetector } from '../services/CreditCardMailDetector';
+import { gmail_v1 } from 'googleapis'; // ADDED IMPORT
 import dayjs from 'dayjs';
 import * as fs from 'fs';
 import * as path from 'path';
+import { NotificationService } from '../services/notification.service'; // ADDED
 
 /**
  * Historical Email Scanner
@@ -41,6 +43,15 @@ export async function runHistoricalScan(
 
     const user = users[0];
 
+    // Verify Ollama is healthy before starting scan
+    const { OllamaService } = await import('../services/ollama.service');
+    const ollamaHealthy = await OllamaService.healthCheck();
+    if (!ollamaHealthy) {
+      throw new Error('Ollama is not available or model is not loaded. Please run: ollama pull deepseek-r1:8b');
+    }
+    await OllamaService.warmup();
+    console.log('[HistoricalScanner] Ollama model ready');
+
     // Get last scanned date for incremental syncing
     const lastScannedDate = await scannedEmailQueries.getLastScannedDate(userId);
 
@@ -65,13 +76,18 @@ export async function runHistoricalScan(
     const from = fromDateToUse.format('YYYY/MM/DD');
     const to = toDate ? dayjs(toDate).format('YYYY/MM/DD') : dayjs().format('YYYY/MM/DD');
 
-    // Optimize query by filtering for known bank senders
-    // This significantly reduces the number of emails to fetch and process
+    // Optimize query by filtering for known bank senders AND transaction keywords
     const senderFilter = CreditCardMailDetector.SENDER_DOMAINS
       .map(domain => `from:"${domain}"`)
       .join(' OR ');
 
-    const query = `after:${from} before:${to} (${senderFilter})`;
+    // Add keyword filter to be more robust (User Request)
+    const keywordFilter = CreditCardMailDetector.TRANSACTION_KEYWORDS
+      .map(kw => `"${kw}"`) // Quote keywords for exact phrase or strong match
+      .join(' OR ');
+
+    // Query: (Senders) AND (Keywords) - Exclude promo/social/forums for better precision
+    const query = `after:${from} before:${to} ({${senderFilter}}) ({${keywordFilter}}) -category:promotions -category:social -category:forums`;
 
     // Setup local logging with WriteStream (Async)
     const logsDir = path.join(__dirname, '../../logs/scanned_emails');
@@ -92,10 +108,9 @@ export async function runHistoricalScan(
     );
 
     const CHUNK_SIZE = 200; // Fetch 200 IDs at a time (optimized)
-    const CONCURRENCY = 50; // Process 50 emails in parallel (optimized for HTTP/2)
+    const CONCURRENCY = 20; // Lower concurrency for Detection to avoid queuing explosion (since Ollama is sequential)
     const BULK_INSERT_BATCH = 100; // Batch size for bulk transaction inserts
-    const STATUS_UPDATE_INTERVAL = 500; // Update job status every 500 emails
-    const LOG_BUFFER_SIZE = 1000; // Buffer 1000 log entries before flush
+    const LOG_BUFFER_SIZE = 10000; // Buffer 10000 log entries before flush
     const limit = pLimit(CONCURRENCY);
 
     let pageToken: string | undefined = undefined;
@@ -110,13 +125,20 @@ export async function runHistoricalScan(
     const cardCache = new Map<string, any>();
 
     // Buffer for bulk operations
-    let transactionBuffer: any[] = [];
     let logBuffer: string[] = [];
 
     let hasMore = true;
 
     // Pipeline: We need to fetch the first chunk to start the loop
     let nextChunkPromise = gmailClient.listMessages(user.google_refresh_token, query, CHUNK_SIZE, pageToken);
+
+    // Start Heartbeat for Frontend (New)
+    NotificationService.startHeartbeat(() => ({
+      processedCount: processed,
+      pendingCount: Math.max(0, totalMessages - processed),
+      isRunning: true,
+      jobId: jobId
+    }));
 
     while (hasMore) {
       currentBatchNumber++;
@@ -138,7 +160,6 @@ export async function runHistoricalScan(
         nextChunkPromise = gmailClient.listMessages(user.google_refresh_token, query, CHUNK_SIZE, pageToken);
       } else {
         hasMore = false;
-        // No more pages, so nextChunkPromise is not needed or can be resolved to empty
         nextChunkPromise = Promise.resolve({ messages: [] });
       }
 
@@ -152,22 +173,65 @@ export async function runHistoricalScan(
 
       console.log(`[HistoricalScanner] Batch ${currentBatchNumber}: Processing ${batchCount} messages...`);
 
-      // Update job status only every STATUS_UPDATE_INTERVAL emails
-      if (totalMessages % STATUS_UPDATE_INTERVAL < batchCount) {
-        await pool.query(
-          `UPDATE gmail_sync_jobs 
-           SET total_messages = $1, current_step = 'PROCESSING_BATCH', 
-               metadata = jsonb_set(COALESCE(metadata, '{}'), '{currentBatch}', $2::jsonb),
-               last_update_at = NOW() 
-           WHERE id = $3`,
-          [totalMessages, JSON.stringify(currentBatchNumber), jobId]
-        );
+      // 0. Idempotency Check: Filter out messages that are ALREADY PROCESSED
+      // Note: We might want to re-process if we updated the logic. 
+      // But for speed, assuming check is valid.
+      const messageIds = messages.map(m => m.id);
+      const processedSet = await scannedEmailQueries.getProcessedMessageIds(user.id, messageIds);
+
+      const idsToProcess = messageIds.filter(id => !processedSet.has(id));
+      const skippedCount = messageIds.length - idsToProcess.length;
+
+      if (idsToProcess.length === 0) {
+        console.log(`[HistoricalScanner] Batch ${currentBatchNumber}: All ${batchCount} messages already processed. Skipping.`);
+        // Even if skipped, we should update progress
+        processed += skippedCount; // We count them as "processed" in terms of progress
+        continue;
       }
 
+      console.log(`[HistoricalScanner] Batch ${currentBatchNumber}: ${skippedCount} skipped (already processed), ${idsToProcess.length} to process.`);
+
+      // Update job status at START of each batch
+      await pool.query(
+        `UPDATE gmail_sync_jobs 
+         SET total_messages = $1, current_step = 'FETCHING_BATCH', 
+             metadata = jsonb_set(
+               jsonb_set(COALESCE(metadata, '{}'), '{currentBatch}', $2::jsonb),
+               '{toProcess}', $3::jsonb
+             ),
+             last_update_at = NOW() 
+         WHERE id = $4`,
+        [totalMessages, JSON.stringify(currentBatchNumber), JSON.stringify(idsToProcess.length), jobId]
+      );
+
       // 1. Batch Fetch Raw Messages (Parallel)
-      // Use our new batchGetMessages which uses p-limit internally
-      const messageIds = messages.map(m => m.id);
-      const rawMessages = await gmailClient.batchGetMessages(user.google_refresh_token, messageIds, CONCURRENCY);
+      const rawMessages = await gmailClient.batchGetMessages(user.google_refresh_token, idsToProcess, 50);
+
+      // Update status after fetch, before ML
+      await pool.query(
+        `UPDATE gmail_sync_jobs 
+         SET current_step = 'PROCESSING_ML', last_update_at = NOW() 
+         WHERE id = $1`,
+        [jobId]
+      );
+
+      // 1b. Batch Detect (Concurrent calls to Detect)
+      // We process only valid messages
+      const validMessages = rawMessages.filter(m => m !== null) as gmail_v1.Schema$Message[];
+
+      // Map validMessages to detections concurrently
+      // pLimit ensures we don't flood, but OllamaService internal limit ensures sequentiality
+      const detectionResults = await Promise.all(
+        validMessages.map(msg => limit(() => CreditCardMailDetector.detect(msg)))
+      );
+
+      // Update status after ML detection completes
+      await pool.query(
+        `UPDATE gmail_sync_jobs 
+         SET current_step = 'INSERTING', last_update_at = NOW() 
+         WHERE id = $1`,
+        [jobId]
+      );
 
       // 2. Process Messages in Memory
       const scannedDataList: any[] = [];
@@ -175,12 +239,12 @@ export async function runHistoricalScan(
       const transactionMessages: any[] = []; // To process for transactions
       const transactionsToInsert: any[] = []; // Accumulate for bulk insert
 
-      for (let i = 0; i < rawMessages.length; i++) {
-        const rawMessage = rawMessages[i];
-        if (!rawMessage) {
-          errors++;
-          continue;
-        }
+      // We align detectionResults with validMessages
+      // rawMessages might have nulls, so we iterate validMessages for the results
+
+      for (let i = 0; i < validMessages.length; i++) {
+        const rawMessage = validMessages[i];
+        const detection = detectionResults[i];
 
         try {
           const headers = rawMessage.payload?.headers || [];
@@ -189,10 +253,7 @@ export async function runHistoricalScan(
           const snippet = rawMessage.snippet || '';
           const internalDate = parseInt(rawMessage.internalDate || '0');
 
-          // Detect
-          const detection = CreditCardMailDetector.detect(rawMessage);
-
-          // Prepare for Bulk Insert
+          // Prepare for Bulk Insert with ML fields
           scannedDataList.push({
             userId: user.id,
             messageId: rawMessage.id || '',
@@ -200,9 +261,13 @@ export async function runHistoricalScan(
             subject,
             sender,
             snippet,
-            isTransaction: detection.isTransaction,
-            detectionConfidence: detection.confidence,
-            detectionReason: detection.reason || '',
+            cleanedText: detection.cleanedText || '',
+            mlIsTransaction: detection.isTransaction,
+            mlCategory: detection.category,
+            mlConfidence: detection.confidence,
+            mlMerchant: detection.merchant,
+            needsReview: detection.needsReview || false,
+            parseEvidence: detection.mlRawResponse ? JSON.stringify(detection.mlRawResponse) : null,
             scanJobId: jobId
           });
 
@@ -215,54 +280,49 @@ export async function runHistoricalScan(
             snippet: snippet.substring(0, 100),
             detection: {
               isTransaction: detection.isTransaction,
+              category: detection.category,
               confidence: detection.confidence,
-              reason: detection.reason
+              merchant: detection.merchant,
+              amount: detection.amount,
+              needsReview: detection.needsReview,
+              error: detection.error
             },
             processed: false,
             transactionId: null
           });
 
           if (detection.isTransaction) {
-            transactionMessages.push({ rawMessage, index: i });
+            transactionMessages.push({ rawMessage, index: i, merchant: detection.merchant, detection });
           } else {
             processed++;
           }
 
         } catch (err) {
-          console.error(`[HistoricalScanner] Error parsing message ${rawMessage.id}:`, err);
+          console.error(`[HistoricalScanner] Error processing message ${rawMessage.id}:`, err);
           errors++;
         }
       }
 
-      // 3. Bulk Insert Scanned Emails
+      // 3. Bulk Insert Scanned Emails ('Checkpoint')
       if (scannedDataList.length > 0) {
         await scannedEmailQueries.insertScannedEmailsBulk(scannedDataList);
       }
 
       // 4. Process Transactions (Parallel)
-      // We need to fetch the simplified message (or just reuse raw if we can, but extractionService expects GmailMessage)
-      // extractionService expects GmailMessage which is what getMessage returns. 
-      // We can reconstruct GmailMessage from rawMessage to avoid another API call!
-      // Optimization: Avoid calling gmailClient.getMessage again.
-
-      const transactionTasks = transactionMessages.map(({ rawMessage, index }) => limit(async () => {
+      // extractionService now uses the ML fields from `detection` directly!
+      const transactionTasks = transactionMessages.map(({ rawMessage, index, detection }) => limit(async () => {
         try {
-          // Construct GmailMessage from rawMessage locally
+          // Construct simplified message for extraction service logic
           const headers = rawMessage.payload?.headers || [];
           const getHeader = (name: string) => headers.find((h: any) => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
 
-          let bodyText = '';
-          let bodyHtml = '';
-
+          // Re-parsing attachments info in case extracting logic needs it (e.g. PDF fallback)
+          // Though we assume detection covered it.
           const getAttachments = (parts: any[]): any[] => {
             let attachments: any[] = [];
             for (const part of parts) {
               if (part.filename && part.body?.attachmentId) {
-                attachments.push({
-                  id: part.body.attachmentId,
-                  filename: part.filename,
-                  mimeType: part.mimeType,
-                });
+                attachments.push({ id: part.body.attachmentId, filename: part.filename, mimeType: part.mimeType });
               }
               if (part.parts) {
                 attachments = attachments.concat(getAttachments(part.parts));
@@ -270,20 +330,6 @@ export async function runHistoricalScan(
             }
             return attachments;
           };
-
-          if (rawMessage.payload?.body?.data) {
-            bodyText = Buffer.from(rawMessage.payload.body.data, 'base64').toString('utf-8');
-          } else if (rawMessage.payload?.parts) {
-            for (const part of rawMessage.payload.parts) {
-              if (part.mimeType === 'text/plain' && part.body?.data) {
-                bodyText = Buffer.from(part.body.data, 'base64').toString('utf-8');
-              }
-              if (part.mimeType === 'text/html' && part.body?.data) {
-                bodyHtml = Buffer.from(part.body.data, 'base64').toString('utf-8');
-              }
-            }
-          }
-
           const attachments = rawMessage.payload?.parts ? getAttachments(rawMessage.payload.parts) : [];
 
           const simplifiedMessage = {
@@ -292,8 +338,8 @@ export async function runHistoricalScan(
             subject: getHeader('Subject'),
             from: getHeader('From'),
             date: new Date(parseInt(rawMessage.internalDate || '0')),
-            bodyText,
-            bodyHtml,
+            bodyText: detection.cleanedText, // already cleaned
+            bodyHtml: '',
             snippet: rawMessage.snippet || '',
             attachments
           };
@@ -302,7 +348,8 @@ export async function runHistoricalScan(
             return await gmailClient.getAttachment(user.google_refresh_token, msgId, attId);
           };
 
-          const result = await extractionService.extractTransactionFromEmail(user.id, simplifiedMessage, fetchAttachment);
+          // Pass the pre-computed detection
+          const result = await extractionService.extractTransactionFromEmail(user.id, simplifiedMessage, fetchAttachment, detection);
 
           if (result.status === 'success' && result.transaction) {
             // Use card cache to avoid repeated DB queries
@@ -310,50 +357,35 @@ export async function runHistoricalScan(
             let card = cardCache.get(cardKey);
 
             if (!card) {
-              card = await cardsQueries.findCardByBankAndLastFour(
-                user.id,
-                result.transaction.bankName,
-                result.transaction.lastFourDigits
-              );
-
-              // If card not found, auto-create it
+              card = await cardsQueries.findCardByBankAndLastFour(user.id, result.transaction.bankName, result.transaction.lastFourDigits);
               if (!card) {
-                console.log(`[HistoricalScanner] Card not found for ${result.transaction.bankName} ${result.transaction.lastFourDigits}, creating new card...`);
                 try {
                   card = await cardsQueries.createCard({
                     userId: user.id,
                     cardName: `${result.transaction.bankName} ${result.transaction.lastFourDigits}`,
                     bankName: result.transaction.bankName,
                     lastFour: result.transaction.lastFourDigits,
-                    billDate: 1, // Default
-                    dueDate: 10, // Default
-                    creditLimit: 0, // Default/Unknown
+                    billDate: 1, dueDate: 10, creditLimit: 0
                   });
                 } catch (createErr) {
-                  console.error(`[HistoricalScanner] Failed to auto-create card:`, createErr);
+                  // ignore
                 }
               }
-
-              // Cache the card for future lookups
-              if (card) {
-                cardCache.set(cardKey, card);
-              }
+              if (card) cardCache.set(cardKey, card);
             }
 
             if (card) {
-              // Create fingerprint for deduplication
+              // Fingerprint & Insert
               const fingerprintData = `${rawMessage.id}-${result.transaction.transactionDate.toISOString()}-${result.transaction.amount}-${result.transaction.merchant}`;
               const crypto = require('crypto');
               const txnFingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');
-
               const txDate = require('dayjs')(result.transaction.transactionDate);
 
-              // Add to bulk insert buffer instead of inserting immediately
               transactionsToInsert.push({
                 userId: user.id,
                 cardId: card.id,
                 transactionDate: result.transaction.transactionDate,
-                merchant: result.transaction.merchant,
+                merchant: result.transaction.merchant, // FIXED: use result.transaction.merchant
                 category: result.transaction.category || 'Others',
                 amount: result.transaction.amount,
                 transactionType: 'debit',
@@ -370,14 +402,14 @@ export async function runHistoricalScan(
                 originalAmount: result.transaction.originalAmount,
                 referenceNumber: result.transaction.referenceNumber,
                 transactionSubtype: result.transaction.transactionType,
-                messageId: rawMessage.id, // For later processed status update
-                logIndex: index, // To update log entry later
+                messageId: rawMessage.id,
+                logIndex: index
               });
             }
+          } else {
+            console.warn(`[HistoricalScanner] Extraction incomplete for ${rawMessage.id}: ${result.error}`);
           }
-
           processed++;
-
         } catch (err) {
           console.error(`[HistoricalScanner] Error processing transaction for ${rawMessage.id}:`, err);
           errors++;
@@ -390,53 +422,52 @@ export async function runHistoricalScan(
       // 5. Bulk Insert Transactions
       if (transactionsToInsert.length > 0) {
         console.log(`[HistoricalScanner] Bulk inserting ${transactionsToInsert.length} transactions...`);
-
         const transactionsQueries = await import('../db/queries/transactions.queries');
         const insertedTransactions = await transactionsQueries.createTransactionsBulk(transactionsToInsert);
-
         inserted += insertedTransactions.length;
 
-        // 6. Bulk Update Processed Status
-        const processedUpdates = transactionsToInsert.map((tx, idx) => ({
-          userId: user.id,
-          messageId: tx.messageId,
-          transactionId: insertedTransactions[idx]?.id,
-        }));
+        // 6. Update processed status
+        const transactionIds = transactionsToInsert.map(t => ({ userId: user.id, messageId: t.messageId }));
+        // Also update non-transactions that were processed
+        const nonTxIds = scannedDataList.filter(d => !d.mlIsTransaction).map(d => ({ userId: user.id, messageId: d.messageId }));
 
-        if (processedUpdates.length > 0) {
-          await scannedEmailQueries.updateScannedEmailsProcessedBulk(processedUpdates);
-        }
+        await scannedEmailQueries.updateScannedEmailsProcessedBulk([...transactionIds, ...nonTxIds]);
 
-        // 7. Update log entries with transaction IDs
+        // 7. Update log entries
         insertedTransactions.forEach((tx, idx) => {
+          // We need to map back to original log entry. transactionsToInsert has logIndex relative to validMessages loop
+          // Our logEntries array is also parallel to validMessages loop (pushed in same loop)
+          // So logEntries[logIndex] is correct.
           const logIdx = transactionsToInsert[idx].logIndex;
           if (logEntries[logIdx]) {
             logEntries[logIdx].processed = true;
             logEntries[logIdx].transactionId = tx.id;
           }
         });
+      } else {
+        // Mark non-transactions as processed
+        const nonTxIds = scannedDataList.map(d => ({ userId: user.id, messageId: d.messageId }));
+        if (nonTxIds.length > 0) await scannedEmailQueries.updateScannedEmailsProcessedBulk(nonTxIds);
       }
 
-      console.log(`[HistoricalScanner] Batch ${currentBatchNumber} Summary: Processed=${processed}, Inserted=${inserted}, Errors=${errors}`);
+      console.log(`[HistoricalScanner] Batch ${currentBatchNumber} Summary: Processed=${processed}, Inserted=${inserted}, Errors=${errors}.`);
 
-      // 8. Buffer Logs (Write only when buffer is full or at end)
+      // 8. Buffer Logs
       logBuffer.push(...logEntries.map(e => JSON.stringify(e)));
-
       if (logBuffer.length >= LOG_BUFFER_SIZE || !hasMore) {
         const logChunk = logBuffer.join('\n') + '\n';
         logStream.write(logChunk);
-        logBuffer = []; // Clear buffer
+        logBuffer = [];
       }
 
-      // 9. Update job progress (reduced frequency)
-      if (totalMessages % STATUS_UPDATE_INTERVAL < batchCount || !hasMore) {
-        await pool.query(
-          `UPDATE gmail_sync_jobs 
-           SET processed_count = $1, saved_count = $2, error_count = $3, last_update_at = NOW()
-           WHERE id = $4`,
-          [processed, inserted, errors, jobId]
-        );
-      }
+      // 9. Update job progress
+      await pool.query(
+        `UPDATE gmail_sync_jobs 
+         SET processed_count = $1, saved_count = $2, error_count = $3, 
+             current_step = 'PROCESSING_BATCH', last_update_at = NOW()
+         WHERE id = $4`,
+        [processed, inserted, errors, jobId]
+      );
 
     } // End while
 
@@ -453,12 +484,9 @@ export async function runHistoricalScan(
 
     console.log(`[HistoricalScanner] Completed: ${processed} processed, ${inserted} inserted, ${errors} errors`);
 
-    return {
-      total: totalMessages,
-      processed,
-      inserted,
-      errors,
-    };
+    NotificationService.stopHeartbeat(); // Stop Heartbeat
+
+    return { total: totalMessages, processed, inserted, errors };
 
   } catch (error) {
     console.error(`[HistoricalScanner] Scan ${jobId} failed:`, error);
@@ -468,35 +496,17 @@ export async function runHistoricalScan(
        WHERE id = $2`,
       [JSON.stringify([{ error: error instanceof Error ? error.message : 'Unknown error' }]), jobId]
     );
+    NotificationService.stopHeartbeat(); // Stop Heartbeat
     throw error;
   }
 }
 
-// If run directly
 if (require.main === module) {
   const userId = process.argv[2];
   const jobId = process.argv[3] || `manual-${Date.now()}`;
-
-  if (!userId) {
-    console.error('Usage: ts-node historicalScanner.ts <userId> [jobId]');
-    process.exit(1);
-  }
-
-  // Insert job first
-  pool.query(
-    `INSERT INTO scan_jobs (id, user_id, status, current_step, started_at)
-     VALUES ($1, $2, 'pending', 'INITIALIZING', NOW())`,
-    [jobId, userId]
-  ).then(() => {
-    console.log(`[Manual] Created job ${jobId}`);
-    return runHistoricalScan(userId, jobId);
-  })
-    .then((result) => {
-      console.log('Result:', result);
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error(error);
-      process.exit(1);
-    });
+  if (!userId) { console.error('Usage: <userId> [jobId]'); process.exit(1); }
+  pool.query(`INSERT INTO gmail_sync_jobs (id, user_id, status) VALUES ($1, $2, 'pending')`, [jobId, userId])
+    .then(() => runHistoricalScan(userId, jobId))
+    .then(r => { console.log('Done', r); process.exit(0); })
+    .catch(e => { console.error(e); process.exit(1); });
 }

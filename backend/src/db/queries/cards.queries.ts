@@ -188,6 +188,24 @@ export async function findCardByBankAndLastFour(
 }
 
 /**
+ * Find card by last four digits (when bank name is unknown)
+ */
+export async function findCardByLastFour(
+  userId: string,
+  lastFour: string
+): Promise<Card | null> {
+  const { rows } = await pool.query(
+    `SELECT * FROM credit_cards 
+     WHERE user_id = $1 
+       AND card_number_last4 = $2 
+       AND is_active = true
+     LIMIT 1`,
+    [userId, lastFour]
+  );
+  return rows[0] || null;
+}
+
+/**
  * Get card utilization (sum of outstanding transactions)
  */
 export async function getCardUtilization(cardId: string): Promise<number> {
@@ -200,4 +218,28 @@ export async function getCardUtilization(cardId: string): Promise<number> {
     [cardId]
   );
   return parseFloat(rows[0].outstanding || '0');
+}
+
+/**
+ * Get card utilization for multiple cards (Batch)
+ */
+export async function getBatchCardUtilization(cardIds: string[]): Promise<Map<string, number>> {
+  if (cardIds.length === 0) return new Map();
+
+  const { rows } = await pool.query(
+    `SELECT card_id, COALESCE(SUM(amount), 0) as outstanding
+     FROM transactions
+     WHERE card_id = ANY($1) 
+       AND transaction_type = 'debit'
+       AND is_settled = false
+     GROUP BY card_id`,
+    [cardIds]
+  );
+
+  const map = new Map<string, number>();
+  rows.forEach(row => {
+    map.set(row.card_id, parseFloat(row.outstanding));
+  });
+
+  return map;
 }

@@ -81,8 +81,8 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
     console.log('[AuthController] Generating tokens for user:', user.id);
     console.log('[AuthController] Access Token Options:', {
       httpOnly: true,
-      secure: false, // Forced false for debugging
-      sameSite: 'lax',
+      secure: env.NODE_ENV === 'production',
+      sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax', // Environment-aware
       path: '/',
       maxAge: 60 * 60 * 1000
     });
@@ -90,16 +90,16 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
     // Set cookies
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: false, // Forced false for debugging
-      sameSite: 'lax',
+      secure: env.NODE_ENV === 'production',
+      sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax', // Environment-aware
       path: '/', // Explicitly set path to root
       maxAge: 60 * 60 * 1000 // 1 hour
     });
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: false, // Forced false for debugging
-      sameSite: 'lax',
+      secure: env.NODE_ENV === 'production',
+      sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax', // Environment-aware
       path: '/',
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     });
@@ -115,7 +115,7 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
     // Trigger background Gmail sync
     // We check if we have a refresh token either from the new login or existing in DB
     const hasRefreshToken = !!tokens.refresh_token || !!user.google_refresh_token;
-    
+
     console.log(`[Auth] User ${user.id} login successful. Has refresh token: ${hasRefreshToken}`);
 
   } catch (error) {
@@ -135,7 +135,7 @@ export const getMe = async (req: any, res: Response, next: NextFunction) => {
 export const refresh = async (req: Request, res: Response, next: NextFunction) => {
   try {
     let { refreshToken } = req.body;
-    
+
     // Also check cookies if not in body
     if (!refreshToken && req.cookies && req.cookies.refreshToken) {
       refreshToken = req.cookies.refreshToken;
@@ -157,16 +157,16 @@ export const refresh = async (req: Request, res: Response, next: NextFunction) =
     // Set cookies
     res.cookie('accessToken', tokens.accessToken, {
       httpOnly: true,
-      secure: false, // Forced false for debugging
-      sameSite: 'lax',
+      secure: env.NODE_ENV === 'production',
+      sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax', // Environment-aware
       path: '/',
       maxAge: 60 * 60 * 1000 // 1 hour
     });
 
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
-      secure: false, // Forced false for debugging
-      sameSite: 'lax',
+      secure: env.NODE_ENV === 'production',
+      sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax', // Environment-aware
       path: '/',
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     });

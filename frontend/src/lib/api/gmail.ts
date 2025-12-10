@@ -21,6 +21,8 @@ export interface ScanStatus {
   errorMessage?: string;
   currentBatch?: number;
   totalBatches?: number;
+  toProcess?: number;      // Emails to process in current batch
+  skipped?: number;        // Emails skipped (already processed)
 }
 
 export const gmailApi = {
@@ -69,9 +71,8 @@ export const gmailApi = {
    * Get scan job status
    */
   getScanStatus: async (jobId: string): Promise<ScanStatus> => {
-    const response = await apiGet<{ data: ScanStatus }>(`/api/gmail/jobs/${jobId}`);
-    // Backend returns { data: {...} }, so we need to unwrap it
-    return response.data || response as any;
+    // Client auto-unwraps { success: true, data: ... } to just data
+    return apiGet<ScanStatus>(`/api/gmail/jobs/${jobId}`);
   },
 
   /**

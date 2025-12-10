@@ -17,7 +17,10 @@ app.use(cors({
   origin: env.FRONTEND_URL,
   credentials: true
 }));
-app.use(morgan('dev'));
+// Filter out GET /api/gmail/jobs/* logs to reduce noise
+app.use(morgan('dev', {
+  skip: (req, res) => req.method === 'GET' && req.url.startsWith('/api/gmail/jobs/')
+}));
 app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
