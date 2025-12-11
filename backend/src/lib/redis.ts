@@ -1,5 +1,6 @@
 import { Redis } from '@upstash/redis';
 import { env } from '../config/env';
+import logger from '../utils/logger';
 
 // Initialize Upstash Redis client
 const redis = new Redis({
@@ -19,7 +20,7 @@ export class CacheManager {
       const value = await redis.get(key);
       return value as T | null;
     } catch (error) {
-      console.error(`[Redis] Error getting key ${key}:`, error);
+      logger.error(`[Redis] Error getting key ${key}:`, error);
       return null;
     }
   }
@@ -35,7 +36,7 @@ export class CacheManager {
         await redis.set(key, JSON.stringify(value));
       }
     } catch (error) {
-      console.error(`[Redis] Error setting key ${key}:`, error);
+      logger.error(`[Redis] Error setting key ${key}:`, error);
     }
   }
 
@@ -46,7 +47,7 @@ export class CacheManager {
     try {
       await redis.del(key);
     } catch (error) {
-      console.error(`[Redis] Error deleting key ${key}:`, error);
+      logger.error(`[Redis] Error deleting key ${key}:`, error);
     }
   }
 
@@ -57,9 +58,9 @@ export class CacheManager {
     try {
       // Note: Upstash Redis may not support SCAN, use with caution
       // For now, individual key deletion is recommended
-      console.warn(`[Redis] Pattern deletion not fully supported in Upstash`);
+      logger.warn(`[Redis] Pattern deletion not fully supported in Upstash`);
     } catch (error) {
-      console.error(`[Redis] Error deleting pattern ${pattern}:`, error);
+      logger.error(`[Redis] Error deleting pattern ${pattern}:`, error);
     }
   }
 
@@ -70,7 +71,7 @@ export class CacheManager {
     try {
       return await redis.incr(key);
     } catch (error) {
-      console.error(`[Redis] Error incrementing key ${key}:`, error);
+      logger.error(`[Redis] Error incrementing key ${key}:`, error);
       return 0;
     }
   }

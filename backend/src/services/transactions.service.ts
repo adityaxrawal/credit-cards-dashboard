@@ -185,3 +185,67 @@ export async function insertFromEmail(
     transactionSubtype: data.transactionSubtype,
   });
 }
+
+/**
+ * Bulk insert transactions from emails
+ */
+export async function insertFromEmailBulk(
+  userId: string,
+  items: Array<{
+    cardId: string;
+    amount: number;
+    transactionDate: Date;
+    merchant: string;
+    category: string;
+    emailMessageId: string;
+    metadata?: any;
+    exactTimestamp?: Date;
+    emailSubject?: string;
+    gmailThreadId?: string;
+    gmailAccountIndex?: number;
+    currencyCode?: string;
+    originalAmount?: number;
+    referenceNumber?: string;
+    transactionSubtype?: string;
+  }>
+) {
+  if (items.length === 0) return [];
+
+  const crypto = require('crypto');
+
+  const transactionsToCreate = items.map(data => {
+    // Create fingerprint for deduplication
+    const fingerprintData = `${data.emailMessageId}-${data.transactionDate.toISOString()}-${data.amount}-${data.merchant}`;
+    const txnFingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');
+
+    const txDate = dayjs(data.transactionDate);
+    const billMonth = txDate.month() + 1;
+    const billYear = txDate.year();
+
+    return {
+      userId,
+      cardId: data.cardId,
+      transactionDate: data.transactionDate,
+      merchant: data.merchant,
+      category: data.category || 'Others',
+      amount: data.amount,
+      transactionType: 'debit',
+      billMonth,
+      billYear,
+      emailMessageId: data.emailMessageId,
+      txnFingerprint,
+      isManuallyAdded: false,
+      metadata: data.metadata,
+      exactTimestamp: data.exactTimestamp,
+      emailSubject: data.emailSubject,
+      gmailThreadId: data.gmailThreadId,
+      gmailAccountIndex: data.gmailAccountIndex,
+      currencyCode: data.currencyCode,
+      originalAmount: data.originalAmount,
+      referenceNumber: data.referenceNumber,
+      transactionSubtype: data.transactionSubtype,
+    };
+  });
+
+  return await transactionsQueries.createTransactionsBulk(transactionsToCreate);
+}

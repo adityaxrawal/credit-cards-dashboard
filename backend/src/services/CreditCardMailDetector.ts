@@ -147,8 +147,83 @@ export class CreditCardMailDetector {
     unknown: []
   };
 
+  // Weighted scoring for transaction detection
+  private static readonly WEIGHTED_KEYWORDS: { positive: Record<string, number>; negative: Record<string, number> } = {
+    positive: {
+      'transaction alert': 15,
+      'transaction notification': 15,
+      'charged': 10,
+      'spent': 10,
+      'debited': 10,
+      'purchase': 8,
+      'bought': 8,
+      'transaction of': 8,
+      'spent on': 8,
+      'rs.': 5,
+      'inr': 5,
+      '₹': 5,
+      'at merchant': 5,
+      'refund': 8,
+      'reversal': 8,
+      'credited': 5,
+    },
+    negative: {
+      'otp': -50,
+      'one time password': -50,
+      'verification code': -40,
+      'authentication code': -40,
+      'statement generated': -30,
+      'e-statement': -30,
+      'monthly statement': -25,
+      'account statement': -25,
+      'payment received': -20,
+      'payment confirmation': -20,
+      'payment successful': -20,
+      'thank you for your payment': -20,
+      'payment credited': -15,
+      'reward points': -15,
+      'points balance': -10,
+      'download statement': -15,
+      'view statement': -15,
+      'bill due': -10,
+      'payment reminder': -10,
+      'card activated': -10,
+      'welcome to': -10,
+    }
+  };
+
+  private static readonly TRANSACTION_THRESHOLD = 15;
+
+  /**
+   * Calculate weighted score for transaction classification
+   */
+  private static calculateScore(text: string): { score: number; matchedKeywords: string[] } {
+    const lowerText = text.toLowerCase();
+    let score = 0;
+    const matchedKeywords: string[] = [];
+
+    // Check positive keywords
+    for (const [keyword, weight] of Object.entries(this.WEIGHTED_KEYWORDS.positive)) {
+      if (lowerText.includes(keyword)) {
+        score += weight;
+        matchedKeywords.push(`+${keyword}(${weight})`);
+      }
+    }
+
+    // Check negative keywords
+    for (const [keyword, weight] of Object.entries(this.WEIGHTED_KEYWORDS.negative)) {
+      if (lowerText.includes(keyword)) {
+        score += weight; // weight is already negative
+        matchedKeywords.push(`${keyword}(${weight})`);
+      }
+    }
+
+    return { score, matchedKeywords }
+  };
+
   /**
    * Detect if an email is a credit card transaction email
+   * Uses weighted scoring system for accurate classification
    */
   static detect(message: gmail_v1.Schema$Message): DetectionResult {
     const headers = message.payload?.headers || [];
@@ -163,6 +238,7 @@ export class CreditCardMailDetector {
       // Allow some flexibility if subject is very strong, but generally require bank sender
       const isStrongSubject = /transaction alert|credit card statement|spent|debited/i.test(subjectHeader);
       if (!isStrongSubject) {
+        console.log('[Detector] Rejected - Not a bank sender:', fromHeader.substring(0, 50));
         return {
           isTransaction: false,
           category: 'unknown',
@@ -172,63 +248,78 @@ export class CreditCardMailDetector {
       }
     }
 
-    // 2. Classify Category
-    const combinedText = `${subjectHeader} ${snippet}`.toLowerCase();
+    // 2. Calculate weighted score for transaction detection
+    const combinedText = `${subjectHeader} ${snippet}`;
+    const { score, matchedKeywords } = this.calculateScore(combinedText);
+
+    // 3. Classify Category using existing rules
+    const combinedLower = combinedText.toLowerCase();
     let bestCategory: EmailCategory = 'unknown';
     let maxMatches = 0;
 
-    // Prioritize transaction_success and refund
-    const priorityCategories: EmailCategory[] = ['transaction_success', 'refund'];
-
-    // Check priority categories first
-    for (const category of priorityCategories) {
-      const rules = this.CATEGORY_RULES[category];
-      const matches = rules.filter(regex => regex.test(combinedText)).length;
-      if (matches > 0) {
-        bestCategory = category;
+    // Check all categories
+    for (const [category, rules] of Object.entries(this.CATEGORY_RULES)) {
+      const matches = rules.filter(regex => regex.test(combinedLower)).length;
+      if (matches > maxMatches) {
         maxMatches = matches;
-        break; // Stop if we find a transaction or refund
+        bestCategory = category as EmailCategory;
       }
     }
 
-    // If no priority category found, check others
-    if (bestCategory === 'unknown') {
-      for (const [category, rules] of Object.entries(this.CATEGORY_RULES)) {
-        if (priorityCategories.includes(category as EmailCategory)) continue;
-
-        const matches = rules.filter(regex => regex.test(combinedText)).length;
-        if (matches > maxMatches) {
-          maxMatches = matches;
-          bestCategory = category as EmailCategory;
-        }
-      }
-    }
-
-    // 3. Check Attachments (PDFs often are statements)
+    // 4. Check Attachments (PDFs often are statements)
     const parts = message.payload?.parts || [];
     const hasPdf = parts.some(part => part.mimeType === 'application/pdf' || part.filename?.toLowerCase().endsWith('.pdf'));
 
     // Refine classification based on PDF
     if (bestCategory === 'unknown' && hasPdf) {
-      if (/statement/i.test(combinedText)) {
+      if (/statement/i.test(combinedLower)) {
         bestCategory = 'statement_generated';
       }
     }
 
-    // 4. Determine if Displayable Transaction
-    const isTransaction = bestCategory === 'transaction_success' || bestCategory === 'refund';
+    // 5. CRITICAL: Explicit exclusions - these categories are NEVER transactions
+    const excludedCategories: EmailCategory[] = [
+      'otp',
+      'statement_generated',
+      'statement_reminder',
+      'payment_success',
+      'payment_reminder',
+      'card_activation',
+      'reward_update'
+    ];
 
-    // Calculate confidence
-    let confidence = 0.5;
+    // 6. Determine if processable transaction using BOTH category AND score
+    let isTransaction = false;
+
+    if (excludedCategories.includes(bestCategory)) {
+      // Explicitly excluded categories - never a transaction
+      isTransaction = false;
+    } else if (bestCategory === 'transaction_success' || bestCategory === 'refund') {
+      // Primary transaction categories - use score threshold for confirmation
+      isTransaction = score >= this.TRANSACTION_THRESHOLD;
+    } else if (score >= this.TRANSACTION_THRESHOLD) {
+      // High score but unknown/other category - might be a transaction
+      isTransaction = true;
+      if (bestCategory === 'unknown') {
+        bestCategory = 'transaction_success'; // Upgrade category
+      }
+    }
+
+    // Calculate confidence based on score and matches
+    let confidence = 0.3;
     if (isBankSender) confidence += 0.2;
-    if (maxMatches > 0) confidence += 0.2;
+    if (score >= this.TRANSACTION_THRESHOLD) confidence += 0.3;
+    if (maxMatches > 0) confidence += 0.1;
     if (maxMatches > 1) confidence += 0.1;
+
+    // Debug logging
+    console.log(`[Detector] Score: ${score} | Category: ${bestCategory} | isTransaction: ${isTransaction} | Keywords: ${matchedKeywords.slice(0, 5).join(', ')}`);
 
     return {
       isTransaction,
       category: bestCategory,
       confidence: Math.min(confidence, 1.0),
-      reason: `Classified as ${bestCategory} with ${maxMatches} signal matches`,
+      reason: `Score: ${score}, Category: ${bestCategory}, Matches: ${maxMatches}`,
       hasPdf
     };
   }

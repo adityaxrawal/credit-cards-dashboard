@@ -2,6 +2,7 @@ import 'dotenv/config';
 import app from './app';
 import pool from './lib/db';
 import { env } from './config/env';
+import './services/gptBatchProcessor'; // Initialize background worker
 
 const PORT = env.PORT || 8000;
 

@@ -1,10 +1,29 @@
 import * as cheerio from 'cheerio';
 import * as cardsQueries from '../db/queries/cards.queries';
-import { BankParsers, ParsedTransaction } from './extraction/BankParsers';
-import { PdfParser } from './extraction/PdfParser';
-import { GmailLinkGenerator } from '../utils/GmailLinkGenerator';
-import { BankParserPatterns } from '../utils/RegexCache';
-import { MerchantExtractor } from '../utils/MerchantExtractor';
+import { BankParsers, ParsedTransaction } from './extraction/bankParsers';
+import { PdfParser } from './extraction/pdfParser';
+import { GmailLinkGenerator } from '../utils/gmailLinkGenerator';
+import { BankParserPatterns } from '../utils/regexCache';
+import { MerchantExtractor } from '../utils/merchantExtractor';
+
+/**
+ * Utility to clean email body before regex matching
+ * Normalizes HTML artifacts, whitespace, and special characters
+ */
+function cleanBody(text: string): string {
+  return text
+    .replace(/&nbsp;/gi, ' ')           // HTML non-breaking space entities
+    .replace(/&amp;/gi, '&')            // HTML ampersand entities
+    .replace(/&lt;/gi, '<')             // HTML less-than entities
+    .replace(/&gt;/gi, '>')             // HTML greater-than entities
+    .replace(/&#\d+;/g, ' ')            // Numeric HTML entities
+    .replace(/\u00a0/g, ' ')            // Unicode non-breaking spaces
+    .replace(/\r\n/g, ' ')              // Windows newlines
+    .replace(/[\r\n]+/g, ' ')           // Unix newlines
+    .replace(/\t+/g, ' ')               // Tabs
+    .replace(/\s{2,}/g, ' ')            // Multiple spaces to single
+    .trim();
+}
 
 export interface ExtractionInput {
   id: string;
@@ -94,11 +113,25 @@ export async function extractTransactionFromEmail(
       }
     }
 
-    // Clean text
+    // Clean text - apply cleanBody first for HTML normalization, then PdfParser.cleanText
+    textToParse = cleanBody(textToParse);
     textToParse = PdfParser.cleanText(textToParse);
 
     // 3. Try Parsing Body
     let parsed: ParsedTransaction | null = parser.parse(textToParse, message.subject, message.from, message.date);
+
+    // Debug logging for rule-based extraction
+    if (parsed) {
+      console.log(`[RuleBased] Success - Extracted:`, {
+        amount: parsed.amount,
+        merchant: parsed.merchant,
+        date: parsed.transactionDate?.toISOString().split('T')[0],
+        confidence: 'high',
+        bank: parsed.bankName
+      });
+    } else {
+      console.log(`[RuleBased] Failed - No match for ${parser.name} parser on: ${message.subject.substring(0, 50)}`);
+    }
 
     // Fallback for merchant extraction
     if (parsed && (!parsed.merchant || parsed.merchant.trim().length === 0 || parsed.merchant.trim().split(/\s+/).length <= 1)) {

@@ -1,5 +1,5 @@
-import { DateParser } from './DateParser';
-import { BankParserPatterns } from '../../utils/RegexCache';
+import { DateParser } from './dateParser';
+import { BankParserPatterns } from '../../utils/regexCache';
 
 export interface ParsedTransaction {
   amount: number;
@@ -81,7 +81,7 @@ const extractCardDigits = (text: string): string | null => {
  */
 const detectTransactionType = (text: string, subject: string, combinedLower?: string): ParsedTransaction['transactionType'] => {
   const combined = combinedLower || (text + ' ' + subject).toLowerCase();
-  
+
   if (BankParserPatterns.KEYWORD_REFUND.test(combined)) {
     return 'refund';
   }
@@ -97,7 +97,7 @@ const detectTransactionType = (text: string, subject: string, combinedLower?: st
   if (BankParserPatterns.KEYWORD_INTERNATIONAL.test(combined)) {
     return 'international';
   }
-  
+
   return 'purchase';
 };
 
@@ -157,10 +157,10 @@ export const BankParsers: BankParser[] = [
     parse: (text, subject, sender, emailDate) => {
       // Optimized: Use pre-compiled pattern and single replace call
       const cleanText = text.replace(BankParserPatterns.UPI_LINKED, '').replace(BankParserPatterns.WHITESPACE, ' ');
-      
+
       // Cache combined lowercase for multiple checks
       const combinedLower = (cleanText + ' ' + subject).toLowerCase();
-      
+
       const amountMatch = cleanText.match(BankParserPatterns.AMOUNT_INTL);
       const cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);

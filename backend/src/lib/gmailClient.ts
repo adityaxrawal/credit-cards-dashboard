@@ -12,6 +12,7 @@ export interface GmailMessage {
   threadId: string;
   subject: string;
   from: string;
+  to: string;
   date: Date;
   bodyText: string;
   bodyHtml?: string;
@@ -52,7 +53,7 @@ export async function getRawMessage(
 
   try {
     const gmail = getGmailClient(refreshToken);
-    
+
     const response = await gmail.users.messages.get({
       userId: 'me',
       id: messageId,
@@ -64,7 +65,7 @@ export async function getRawMessage(
       const firstKey = messageCache.keys().next().value;
       if (firstKey) messageCache.delete(firstKey);
     }
-    
+
     messageCache.set(messageId, {
       data: response.data,
       timestamp: Date.now()
@@ -78,6 +79,55 @@ export async function getRawMessage(
 }
 
 /**
+ * Parse raw Gmail message into simplified format
+ */
+export function parseMessage(rawMessage: gmail_v1.Schema$Message): GmailMessage {
+  const headers = rawMessage.payload?.headers || [];
+
+  const getHeader = (name: string) =>
+    headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
+
+  // Extract body text recursively
+  let bodyText = '';
+  let bodyHtml = '';
+
+  const extractBody = (parts: gmail_v1.Schema$MessagePart[]) => {
+    for (const part of parts) {
+      if (part.mimeType === 'text/plain' && part.body?.data) {
+        bodyText = Buffer.from(part.body.data, 'base64').toString('utf-8');
+      } else if (part.mimeType === 'text/html' && part.body?.data) {
+        bodyHtml = Buffer.from(part.body.data, 'base64').toString('utf-8');
+      } else if (part.parts) {
+        extractBody(part.parts);
+      }
+    }
+  };
+
+  if (rawMessage.payload?.body?.data) {
+    bodyText = Buffer.from(rawMessage.payload.body.data, 'base64').toString('utf-8');
+  } else if (rawMessage.payload?.parts) {
+    extractBody(rawMessage.payload.parts);
+  }
+
+  // Fallback: If no plain text, use HTML stripped of tags
+  if (!bodyText && bodyHtml) {
+    bodyText = bodyHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  return {
+    id: rawMessage.id!,
+    threadId: rawMessage.threadId!,
+    subject: getHeader('Subject'),
+    from: getHeader('From'),
+    to: getHeader('To'),
+    date: new Date(parseInt(rawMessage.internalDate || '0')),
+    bodyText,
+    bodyHtml,
+    snippet: rawMessage.snippet || '',
+  };
+}
+
+/**
  * Fetch a single Gmail message
  */
 export async function getMessage(
@@ -88,48 +138,7 @@ export async function getMessage(
     const rawMessage = await getRawMessage(refreshToken, messageId);
     if (!rawMessage) return null;
 
-    const headers = rawMessage.payload?.headers || [];
-    
-    const getHeader = (name: string) => 
-      headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
-
-    // Extract body text recursively
-    let bodyText = '';
-    let bodyHtml = '';
-
-    const extractBody = (parts: gmail_v1.Schema$MessagePart[]) => {
-      for (const part of parts) {
-        if (part.mimeType === 'text/plain' && part.body?.data) {
-          bodyText = Buffer.from(part.body.data, 'base64').toString('utf-8');
-        } else if (part.mimeType === 'text/html' && part.body?.data) {
-          bodyHtml = Buffer.from(part.body.data, 'base64').toString('utf-8');
-        } else if (part.parts) {
-          extractBody(part.parts);
-        }
-      }
-    };
-
-    if (rawMessage.payload?.body?.data) {
-      bodyText = Buffer.from(rawMessage.payload.body.data, 'base64').toString('utf-8');
-    } else if (rawMessage.payload?.parts) {
-      extractBody(rawMessage.payload.parts);
-    }
-
-    // Fallback: If no plain text, use HTML stripped of tags
-    if (!bodyText && bodyHtml) {
-      bodyText = bodyHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    }
-
-    return {
-      id: rawMessage.id!,
-      threadId: rawMessage.threadId!,
-      subject: getHeader('Subject'),
-      from: getHeader('From'),
-      date: new Date(parseInt(rawMessage.internalDate || '0')),
-      bodyText,
-      bodyHtml,
-      snippet: rawMessage.snippet || '',
-    };
+    return parseMessage(rawMessage);
   } catch (error) {
     console.error('[GmailClient] Error fetching message:', error);
     return null;
@@ -149,7 +158,7 @@ export async function batchGetMessages(
   // Dynamic import p-limit because it is an ESM module
   const { default: pLimit } = await import('p-limit');
   const limit = pLimit(concurrency);
-  
+
   const tasks = messageIds.map(id => limit(() => getRawMessage(refreshToken, id)));
   return Promise.all(tasks);
 }
@@ -164,7 +173,7 @@ export async function fetchHistory(
 ): Promise<{ messages: Array<{ id: string; threadId: string }> }> {
   try {
     const gmail = getGmailClient(refreshToken);
-    
+
     const response = await gmail.users.history.list({
       userId: 'me',
       startHistoryId,
@@ -173,7 +182,7 @@ export async function fetchHistory(
     });
 
     const messages: Array<{ id: string; threadId: string }> = [];
-    
+
     if (response.data.history) {
       for (const historyItem of response.data.history) {
         if (historyItem.messagesAdded) {
@@ -207,7 +216,7 @@ export async function listMessages(
 ): Promise<{ messages: Array<{ id: string; threadId: string }>; nextPageToken?: string; resultSizeEstimate?: number }> {
   try {
     const gmail = getGmailClient(refreshToken);
-    
+
     const response = await gmail.users.messages.list({
       userId: 'me',
       q: query,
@@ -216,10 +225,10 @@ export async function listMessages(
     });
 
     const messages = (response.data.messages || [])
-      .filter((m): m is { id: string; threadId: string } => 
+      .filter((m): m is { id: string; threadId: string } =>
         typeof m.id === 'string' && typeof m.threadId === 'string'
       );
-      
+
     return {
       messages,
       nextPageToken: response.data.nextPageToken || undefined,
@@ -240,7 +249,7 @@ export async function setupWatch(
 ): Promise<{ historyId: string; expiration: number } | null> {
   try {
     const gmail = getGmailClient(refreshToken);
-    
+
     const response = await gmail.users.watch({
       userId: 'me',
       requestBody: {

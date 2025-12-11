@@ -15,101 +15,103 @@ interface PubSubPayload {
  */
 export async function handleGmailPubSubMessage(payload: PubSubPayload) {
   console.log('[GmailPubSubHandler] Processing notification:', payload);
-  
+
   const { emailAddress, historyId } = payload;
-  
+
   try {
     // Find user by email
     const { rows: users } = await pool.query(
       'SELECT id, google_refresh_token, gmail_history_id FROM users WHERE email = $1',
       [emailAddress]
     );
-    
+
     if (users.length === 0) {
       console.log('[GmailPubSubHandler] User not found for email:', emailAddress);
       return;
     }
-    
+
     const user = users[0];
-    
+
     if (!user.google_refresh_token) {
       console.log('[GmailPubSubHandler] User has no refresh token');
       return;
     }
-    
+
     // Fetch history since last known historyId
     const history = await gmailClient.fetchHistory(
       user.google_refresh_token,
       user.gmail_history_id || '0'
     );
-    
-    console.log(`[GmailPubSubHandler] Found ${history.messages.length} new messages`);
-    
-    for (const msgRef of history.messages) {
-      try {
-        // Fetch full message
-        const message = await gmailClient.getMessage(user.google_refresh_token, msgRef.id);
-        
-        if (!message) {
-          console.log(`[GmailPubSubHandler] Could not fetch message ${msgRef.id}`);
-          continue;
-        }
-        
-        // Check if it's a potential transaction email
-        if (!isPotentialTransactionEmail(message)) {
-          console.log(`[GmailPubSubHandler] Message ${msgRef.id} is not a transaction email`);
-          continue;
-        }
-        
-        // Extract transaction
-        const result = await extractionService.extractTransactionFromEmail(user.id, message);
-        
-        // Log processing
-        await logEmailProcessing(user.id, message.id, result);
-        
-        if (result.status === 'success' && result.transaction) {
-          // Find matching card
-          const card = await cardsQueries.findCardByBankAndLastFour(
-            user.id,
-            result.transaction.bankName,
-            result.transaction.lastFourDigits
-          );
-          
-          if (card) {
-            // Insert transaction
-            const tx = await transactionsService.insertFromEmail(user.id, {
-              cardId: card.id,
-              amount: result.transaction.amount,
-              transactionDate: result.transaction.transactionDate,
-              merchant: result.transaction.merchant,
-              category: result.transaction.category,
-              emailMessageId: message.id,
-              exactTimestamp: result.transaction.exactTimestamp,
-              emailSubject: result.transaction.emailSubject,
-              gmailThreadId: result.transaction.gmailThreadId,
-              gmailAccountIndex: 1,
-              currencyCode: result.transaction.currencyCode,
-              originalAmount: result.transaction.originalAmount,
-              referenceNumber: result.transaction.referenceNumber,
-              transactionSubtype: result.transaction.transactionType,
-            });
-            
-            console.log(`[GmailPubSubHandler] Created transaction ${tx?.id}`);
-          } else {
-            console.warn(`[GmailPubSubHandler] No card found for ${result.transaction.bankName} ${result.transaction.lastFourDigits}`);
+
+    const messageIds = history.messages.map(m => m.id);
+    console.log(`[GmailPubSubHandler] Found ${messageIds.length} new messages`);
+
+    if (messageIds.length > 0) {
+      // Batch fetch messages
+      const rawMessages = await gmailClient.batchGetMessages(user.google_refresh_token, messageIds);
+
+      for (const rawMessage of rawMessages) {
+        if (!rawMessage) continue;
+
+        try {
+          const message = gmailClient.parseMessage(rawMessage);
+
+          // Check if it's a potential transaction email
+          if (!isPotentialTransactionEmail(message)) {
+            console.log(`[GmailPubSubHandler] Message ${message.id} is not a transaction email`);
+            continue;
           }
+
+          // Extract transaction
+          const result = await extractionService.extractTransactionFromEmail(user.id, message);
+
+          // Log processing
+          await logEmailProcessing(user.id, message.id, result);
+
+          if (result.status === 'success' && result.transaction) {
+            // Find matching card
+            const card = await cardsQueries.findCardByBankAndLastFour(
+              user.id,
+              result.transaction.bankName,
+              result.transaction.lastFourDigits
+            );
+
+            if (card) {
+              // Insert transaction
+              const tx = await transactionsService.insertFromEmail(user.id, {
+                cardId: card.id,
+                amount: result.transaction.amount,
+                transactionDate: result.transaction.transactionDate,
+                merchant: result.transaction.merchant,
+                category: result.transaction.category,
+                emailMessageId: message.id,
+                exactTimestamp: result.transaction.exactTimestamp,
+                emailSubject: result.transaction.emailSubject,
+                gmailThreadId: result.transaction.gmailThreadId,
+                gmailAccountIndex: 1,
+                currencyCode: result.transaction.currencyCode,
+                originalAmount: result.transaction.originalAmount,
+                referenceNumber: result.transaction.referenceNumber,
+                transactionSubtype: result.transaction.transactionType,
+              });
+
+              console.log(`[GmailPubSubHandler] Created transaction ${tx?.id}`);
+            } else {
+              console.warn(`[GmailPubSubHandler] No card found for ${result.transaction.bankName} ${result.transaction.lastFourDigits}`);
+            }
+          }
+        } catch (error) {
+          console.error(`[GmailPubSubHandler] Error processing message ${rawMessage.id}:`, error);
         }
-      } catch (error) {
-        console.error(`[GmailPubSubHandler] Error processing message ${msgRef.id}:`, error);
       }
     }
-    
+
     // Update user's historyId
     await pool.query(
       'UPDATE users SET gmail_history_id = $1, updated_at = NOW() WHERE id = $2',
       [historyId, user.id]
     );
-    
+
     console.log('[GmailPubSubHandler] Completed');
   } catch (error) {
     console.error('[GmailPubSubHandler] Error:', error);
@@ -129,17 +131,17 @@ function isPotentialTransactionEmail(message: { from: string; subject: string })
     /indusind/i,
     /yes bank/i,
   ];
-  
+
   const subjectPatterns = [
     /transaction/i,
     /spent/i,
     /purchase/i,
     /card.*used/i,
   ];
-  
+
   const isBank = bankPatterns.some(pattern => pattern.test(message.from));
   const isTransaction = subjectPatterns.some(pattern => pattern.test(message.subject));
-  
+
   return isBank && isTransaction;
 }
 
@@ -149,7 +151,7 @@ function isPotentialTransactionEmail(message: { from: string; subject: string })
 async function logEmailProcessing(
   userId: string,
   emailMessageId: string,
-  result: { status: string; error?: string; transaction?: any }
+  result: { status: string; error?: string; transaction?: unknown }
 ) {
   try {
     await pool.query(
