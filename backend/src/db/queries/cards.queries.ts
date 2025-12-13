@@ -188,6 +188,25 @@ export async function findCardByBankAndLastFour(
 }
 
 /**
+ * Find card by last four digits (ignoring bank name)
+ * Used for normalization to avoid duplicates
+ */
+export async function findCardByLastFour(
+  userId: string,
+  lastFour: string
+): Promise<Card | null> {
+  const { rows } = await pool.query(
+    `SELECT * FROM credit_cards 
+     WHERE user_id = $1 
+       AND card_number_last4 = $2 
+       AND is_active = true
+     LIMIT 1`,
+    [userId, lastFour]
+  );
+  return rows[0] || null;
+}
+
+/**
  * Get card utilization (sum of outstanding transactions)
  */
 export async function getCardUtilization(cardId: string): Promise<number> {

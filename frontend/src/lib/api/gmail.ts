@@ -104,4 +104,12 @@ export const gmailApi = {
   getAuthUrl: async (): Promise<{ success: boolean; data?: string; error?: string }> => {
     return apiPost<{ success: boolean; data?: string; error?: string }>("/api/gmail/auth");
   },
+
+  /**
+   * Get last successful sync timestamp
+   */
+  getLastSync: async (): Promise<{ lastSync: string | null }> => {
+    const response = await apiGet<{ data: { lastSync: string | null } }>("/api/gmail/last-sync");
+    return response.data;
+  },
 };

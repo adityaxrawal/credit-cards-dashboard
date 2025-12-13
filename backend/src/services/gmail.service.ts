@@ -138,7 +138,8 @@ export async function triggerHistoricalScan(userId: string, fromDate?: Date, toD
 export async function getHistoricalScanStatus(userId: string, jobId: string) {
   const { rows } = await pool.query(
     `SELECT id, status, current_step, total_messages, processed_count, saved_count, error_count, errors,
-            started_at, completed_at, last_update_at, metadata
+            started_at, completed_at, last_update_at, metadata,
+            rule_based_success, rule_based_failure, queued_for_gpt, terminated_count
      FROM gmail_sync_jobs
      WHERE id = $1 AND user_id = $2`,
     [jobId, userId]
@@ -164,7 +165,24 @@ export async function getHistoricalScanStatus(userId: string, jobId: string) {
     lastUpdateAt: job.last_update_at,
     currentBatch: job.metadata?.currentBatch,
     totalBatches: job.metadata?.totalBatches,
+    // NEW: Breakdown metrics
+    breakdown: {
+      rule_based_success: job.rule_based_success || 0,
+      rule_based_failure: job.rule_based_failure || 0,
+      queued_for_gpt: job.queued_for_gpt || 0,
+      terminated: job.terminated_count || 0,
+    }
   };
+}
+
+/**
+ * Get terminator report
+ */
+import { EmailProcessingLogService } from './emailProcessingLog.service';
+
+export async function getTerminatorReport(userId: string, startDate: Date, endDate: Date) {
+  const logService = new EmailProcessingLogService(pool);
+  return await logService.getTerminatorReport(userId, startDate, endDate);
 }
 
 /**
@@ -200,6 +218,22 @@ export async function getLatestJob(userId: string) {
     completedAt: job.completed_at,
     lastUpdateAt: job.last_update_at,
   };
+}
+
+/**
+ * Get last successful sync timestamp
+ */
+export async function getLastSuccessfulSync(userId: string) {
+  const { rows } = await pool.query(
+    `SELECT completed_at
+     FROM gmail_sync_jobs
+     WHERE user_id = $1 AND status = 'completed'
+     ORDER BY completed_at DESC
+     LIMIT 1`,
+    [userId]
+  );
+
+  return rows.length > 0 ? rows[0].completed_at : null;
 }
 
 /**

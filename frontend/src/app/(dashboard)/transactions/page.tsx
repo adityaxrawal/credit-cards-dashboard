@@ -7,6 +7,8 @@ import {
   Filter as FilterIcon,
   X,
   Upload,
+  Mail,
+  ExternalLink,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout";
@@ -29,6 +31,7 @@ import { cardApi } from "@/lib/api/cards";
 import { useToast } from "@/components/ui/feedback/Toast";
 import { BulkImportModal } from "@/components/features/transactions/BulkImportModal";
 import { TransactionDetailModal } from "@/components/features/transactions/TransactionDetailModal";
+import { GmailUtils } from "@/lib/utils/gmailUtils";
 
 interface TransactionModalData {
   id?: string;
@@ -385,6 +388,19 @@ export default function TransactionsPage() {
       header: "Actions",
       render: (_: unknown, row: unknown) => (
         <div className="flex gap-2 text-nowrap">
+          {(row as Transaction).gmail_message_id && (
+             <Button
+                variant="secondary"
+                size="sm"
+                title="View in Gmail"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(GmailUtils.getMailLink((row as Transaction).gmail_message_id!), "_blank");
+                }}
+             >
+                <Mail className="w-4 h-4" />
+             </Button>
+          )}
           <Button
             variant="secondary"
             size="sm"

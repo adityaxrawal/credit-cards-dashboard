@@ -12,3 +12,4 @@ backend/deploy.sh
 .dockerignore
 backend/logs
 .md
+*.md

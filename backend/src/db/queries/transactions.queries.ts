@@ -154,6 +154,23 @@ export async function getTransactionById(
 }
 
 /**
+ * Find transaction by fingerprint (Date + Amount + Merchant Hash)
+ * Used for deduplication across different sources (Email vs Statement)
+ */
+export async function findTransactionByFingerprint(
+  userId: string,
+  fingerprint: string
+): Promise<Transaction | null> {
+  const { rows } = await pool.query(
+    `SELECT * FROM transactions 
+     WHERE user_id = $1 AND txn_fingerprint = $2
+     LIMIT 1`,
+    [userId, fingerprint]
+  );
+  return rows[0] || null;
+}
+
+/**
  * Create a new transaction
  */
 export async function createTransaction(data: {

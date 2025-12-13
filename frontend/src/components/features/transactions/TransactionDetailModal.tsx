@@ -5,6 +5,7 @@ import { ExternalLink, Calendar, CreditCard, Building2, Hash, Globe, Clock } fro
 import { Modal, Button, Badge } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { Transaction } from "@/lib/api/transactions";
+import { GmailUtils } from "@/lib/utils/gmailUtils";
 
 interface TransactionDetailModalProps {
   isOpen: boolean;
@@ -20,11 +21,11 @@ export function TransactionDetailModal({
   if (!transaction) return null;
 
   const gmailLink = transaction.gmail_message_id
-    ? `https://mail.google.com/mail/u/1/#all/${transaction.gmail_message_id}`
+    ? GmailUtils.getMailLink(transaction.gmail_message_id)
     : undefined;
 
   const gmailThreadLink = transaction.gmail_thread_id
-    ? `https://mail.google.com/mail/u/1/#all/${transaction.gmail_thread_id}`
+    ? GmailUtils.getThreadLink(transaction.gmail_thread_id)
     : undefined;
 
   return (
