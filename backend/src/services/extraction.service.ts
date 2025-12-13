@@ -10,6 +10,8 @@ import { MerchantExtractor } from '../utils/merchantExtractor';
 import { DateParser } from './extraction/dateParser';
 import pool from '../lib/db'; // Import DB pool for logging
 import { CreditCardMailDetector } from './creditCardMailDetector';
+import { normalizeMerchant, getCategoryForMerchant } from '../utils/merchantNormalizer';
+import { calculateConfidence, ExtractionDetails, ConfidenceResult } from '../utils/confidenceScoring';
 
 /**
  * Utility to clean email body before regex matching
@@ -208,6 +210,59 @@ export async function extractTransactionFromEmail(
       const fallback = MerchantExtractor.extract(textToParse);
       if (fallback) {
         parsed.merchant = fallback;
+      }
+    }
+
+    // STAGE 3 ENHANCEMENT: Normalize merchant name
+    if (parsed && parsed.merchant) {
+      const originalMerchant = parsed.merchant;
+      parsed.merchant = normalizeMerchant(parsed.merchant);
+
+      // Get category from merchant if not set properly
+      if (parsed.category === 'Others' || !parsed.category) {
+        parsed.category = getCategoryForMerchant(parsed.merchant);
+      }
+
+      console.log(`[RuleBased] Merchant normalized: "${originalMerchant}" → "${parsed.merchant}" (${parsed.category})`);
+    }
+
+    // STAGE 3 ENHANCEMENT: Calculate confidence score
+    if (parsed) {
+      const extractionDetails: ExtractionDetails = {
+        amount: parsed.amount,
+        amountSource: parsed.amount > 0 ? 'regex' : 'missing',
+        merchant: parsed.merchant,
+        merchantFound: parsed.merchant !== 'Unknown Merchant' && parsed.merchant !== 'UNKNOWN',
+        date: parsed.transactionDate,
+        dateSource: parsed.exactTimestamp ? 'body' : 'timestamp',
+        cardLast4: parsed.lastFourDigits,
+        cardFound: !!parsed.lastFourDigits && parsed.lastFourDigits !== '0000',
+        bankName: parsed.bankName,
+        bankSource: parser ? 'sender' : 'missing',
+        transactionType: parsed.transactionType === 'international' ? 'PURCHASE' :
+          parsed.transactionType === 'emi' ? 'RECURRING' : 'PURCHASE',
+        category: parsed.category,
+        categorySource: parsed.category !== 'Others' ? 'keyword' : 'unknown',
+      };
+
+      const confidence: ConfidenceResult = calculateConfidence(extractionDetails);
+
+      console.log(`[RuleBased] Confidence: ${confidence.score} (${confidence.level})`, confidence.factors);
+
+      // If confidence is too low, route to GPT
+      if (confidence.needsGptReview) {
+        console.log(`[RuleBased] Low confidence (${confidence.score}), routing to GPT queue.`);
+        try {
+          await pool.query(
+            `INSERT INTO email_processing_log 
+               (user_id, email_message_id, from_email, subject, processing_status, reason, confidence_score, processed_by, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+               ON CONFLICT (email_message_id) 
+               DO UPDATE SET processing_status = $5, reason = $6, confidence_score = $7`,
+            [userId, message.id, message.from, message.subject, 'queued_for_gpt', `Low confidence: ${confidence.level}`, confidence.score, 'rule_based']
+          );
+        } catch (e) { }
+        return { status: 'queued_for_gpt', reason: `Low confidence (${confidence.score})` };
       }
     }
 

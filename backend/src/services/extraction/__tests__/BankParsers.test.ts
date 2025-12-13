@@ -1,5 +1,5 @@
-import { BankParsers } from '../BankParsers';
-import { DateParser } from '../DateParser';
+import { BankParsers } from '../bankParsers';
+import { DateParser } from '../dateParser';
 
 describe('BankParsers', () => {
   const mockDate = new Date('2023-11-14T10:00:00.000Z');

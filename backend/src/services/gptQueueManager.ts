@@ -15,7 +15,7 @@ export class GptQueueManager extends EventEmitter {
         3: []
     };
 
-    private batchSize = 5;
+    private batchSize = 10; // Increased from 5 for better cost efficiency
 
     constructor() {
         super();

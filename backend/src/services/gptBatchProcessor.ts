@@ -10,7 +10,7 @@ import { ExtractionInput } from './extraction.service';
 
 // Configuration
 const GPT_MODEL = 'gpt-4o-mini'; // Using efficient model
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 10; // Increased from 5 for ~2x cost reduction
 const TIMEOUT_MS = 60000; // 60 seconds
 const MAX_RETRIES = 3;
 const BACKOFF_K = 2; // Exponential backoff base

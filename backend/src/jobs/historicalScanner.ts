@@ -49,7 +49,7 @@ export async function runHistoricalScan(
       [jobId]
     );
 
-    const FETCH_BATCH_SIZE = 50;
+    const FETCH_BATCH_SIZE = 200; // Spec: 200 emails per batch for optimal throughput
     let pageToken: string | undefined = undefined;
     let totalFetched = 0;
     let ruleBasedSuccessCount = 0;
