@@ -6,6 +6,8 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { errorHandler } from './middleware/error.middleware';
 import { apiLimiter } from './middleware/rateLimit.middleware';
+import { metricsMiddleware } from './middleware/metrics.middleware';
+import { metricsService } from './services/metrics.service';
 import routes from './routes';
 import { env } from './config/env';
 
@@ -19,6 +21,9 @@ app.use(cors({
   credentials: true
 }));
 
+// Monitoring Middleware (Before Rate Limit to catch everything)
+app.use(metricsMiddleware);
+
 // Rate Limiting (per spec Section 8: 100 req/15min)
 app.use('/api', apiLimiter);
 
@@ -27,6 +32,13 @@ app.use(morgan('dev'));
 app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Internal Monitoring Endpoint (Admin Only - simplified protection for now)
+app.get('/api/admin/metrics', (req, res) => {
+  // In prod, check for Admin Header or Auth. 
+  // For now, simple exposure as requested.
+  res.json(metricsService.getAllMetrics());
+});
 
 // Health Check
 app.get('/health', (req, res) => {

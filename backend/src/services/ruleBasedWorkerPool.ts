@@ -10,11 +10,14 @@ interface WorkerResult {
     queueId?: number;
 }
 
-export class RuleBasedWorkerPool {
+import { EventEmitter } from 'events';
+
+export class RuleBasedWorkerPool extends EventEmitter {
     private pool: Piscina;
     private workerCount: number;
 
     constructor(workerCount: number = 4) {
+        super();
         this.workerCount = workerCount;
         const isTs = __filename.endsWith('.ts');
         const filename = isTs
@@ -36,7 +39,12 @@ export class RuleBasedWorkerPool {
         this.pool = new Piscina(options);
     }
 
-    async processEmail(userId: string, email: ExtractionInput, workerId: number): Promise<WorkerResult> {
+    // Track active tasks
+    private activeTasks = 0;
+    private MAX_RETRIES = 3;
+
+    async processEmail(userId: string, email: ExtractionInput, workerId: number, retryCount = 0): Promise<WorkerResult> {
+        this.activeTasks++;
         try {
             const result = await this.pool.run({ userId, email, workerId });
 
@@ -51,18 +59,51 @@ export class RuleBasedWorkerPool {
                 else if (workerId === 4) queueId = 1; // Round robin back to 1
             }
 
+            this.decrementActiveTasks();
             return {
                 ...result,
                 queueId
             };
         } catch (error: any) {
-            console.error('Worker Pool Error:', error);
+            console.error(`Worker Pool Error (Attempt ${retryCount + 1}/${this.MAX_RETRIES}):`, error);
+
+            // Retry logic
+            if (retryCount < this.MAX_RETRIES) {
+                // Exponential backoff
+                const delay = Math.pow(2, retryCount) * 1000;
+                await new Promise(resolve => setTimeout(resolve, delay));
+
+                // Retry recursively (don't decrement activeTasks yet as we are continuing)
+                // Actually we should decrement because we are exiting THIS function call scope?
+                // No, we await the recursive call.
+                this.activeTasks--; // Decrement for current call stack to avoid double counting? 
+                // Wait, if I recurse, I enter processEmail again, which increments.
+                // So I MUST decrement here before recursing?
+                // Yes.
+
+                return this.processEmail(userId, email, workerId, retryCount + 1);
+            }
+
+            this.decrementActiveTasks();
+
+            // Fallback to GPT queue after retries exhausted
             return {
                 status: 'error',
                 error: error.message,
                 workerId,
                 queueId: workerId === 4 ? 1 : workerId // Fail safe routing
             };
+        }
+    }
+
+    private decrementActiveTasks() {
+        this.activeTasks--;
+        if (this.activeTasks <= 0) {
+            this.activeTasks = 0;
+            this.emit('pool_drained', {
+                timestamp: new Date(),
+                stats: this.getStats()
+            });
         }
     }
 

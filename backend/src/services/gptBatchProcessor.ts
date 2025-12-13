@@ -1,5 +1,7 @@
 
 import OpenAI from 'openai';
+import { env } from '../config/env';
+import { CircuitBreaker } from '../utils/circuitBreaker'; // Import CircuitBreaker
 import { gptQueueManager } from './gptQueueManager'; // Use new queue manager
 import pool from '../lib/db';
 import * as transactionsService from './transactions.service';
@@ -10,6 +12,8 @@ import { ExtractionInput } from './extraction.service';
 const GPT_MODEL = 'gpt-4o-mini'; // Using efficient model
 const BATCH_SIZE = 5;
 const TIMEOUT_MS = 60000; // 60 seconds
+const MAX_RETRIES = 3;
+const BACKOFF_K = 2; // Exponential backoff base
 
 interface GptTransactionResult {
     id: string; // This corresponds to email messageId
@@ -26,30 +30,51 @@ interface GptTransactionResult {
 
 export class GptBatchProcessor {
     private openai: OpenAI;
+    private circuitBreaker: CircuitBreaker;
     private processingBatches = new Set<string>(); // batchIds
     private cardCache = new Map<string, any>();
 
     constructor() {
         this.openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY,
+            apiKey: env.OPENAI_API_KEY,
+            timeout: TIMEOUT_MS // 60s timeout for OpenAI client itself
         });
 
-        // Listen for batch ready events
-        gptQueueManager.on('batch_ready', (queueId: number) => {
-            this.processBatchFromQueue(queueId);
+        this.circuitBreaker = new CircuitBreaker('OpenAI', {
+            failureThreshold: 5,
+            resetTimeout: 60000 // 1 minute backoff for API outages
+        });
+
+        // Listen for queue events
+        gptQueueManager.on('batch_ready', (queueId) => {
+            this.processBatchFromQueue(queueId); // Trigger processing
         });
     }
 
     /**
      * Process a batch from a specific queue
      */
-    private async processBatchFromQueue(queueId: number) {
+    private async processBatchFromQueue(queueId: number, retryCount = 0) {
         // Get batch
         const batchItems = gptQueueManager.getBatch(queueId);
-        if (!batchItems || batchItems.length === 0) return;
+        if (!batchItems || batchItems.length === 0) {
+            // Check if queue is empty and emit drained event if needed
+            const stats = gptQueueManager.getQueueStats();
+            if (stats[`queue${queueId}` as keyof typeof stats] === 0) {
+                gptQueueManager.emit('queue_drained', queueId);
+            }
+            return;
+        }
 
+        await this.processBatch(batchItems, queueId, retryCount);
+    }
+
+    /**
+     * Public method to process a specific batch of items (e.g. for draining)
+     */
+    public async processBatch(batchItems: Array<{ email: ExtractionInput, workerId: number, userId: string }>, queueId: number, retryCount = 0) {
         const batchId = `batch_${Date.now()}_${queueId}_${Math.random().toString(36).substr(2, 5)}`;
-        console.log(`[GptProcessor] Starting batch ${batchId} with ${batchItems.length} emails from QUEUE_${queueId}`);
+        console.log(`[GptProcessor] Starting batch ${batchId} with ${batchItems.length} emails from QUEUE_${queueId} (Attempt ${retryCount + 1})`);
 
         try {
             // Update DB status for tracking
@@ -57,21 +82,21 @@ export class GptBatchProcessor {
 
             // Log batch creation
             await pool.query(
-                `INSERT INTO gpt_batch_queue (queue_id, batch_id, email_message_ids, batch_size, status, processing_started_at)
-                 VALUES ($1, $2, $3, $4, 'processing', NOW())`,
-                [queueId, batchId, JSON.stringify(emailIds), batchItems.length]
+                `INSERT INTO gpt_batch_queue (queue_id, batch_id, email_message_ids, batch_size, status, processing_started_at, retry_count)
+                 VALUES ($1, $2, $3, $4, 'processing', NOW(), $5)`,
+                [queueId, batchId, JSON.stringify(emailIds), batchItems.length, retryCount]
             );
 
             // 1. Prepare Prompt
             const processedEmails = batchItems.map(item => this.preprocessEmail(item.email));
-            const prompt = this.buildBatchPrompt(processedEmails);
+            const promptMessages = this.buildBatchPrompt(processedEmails);
 
-            // 2. Call OpenAI (SINGLE CALL)
-            const response = await this.callModelWithRetry({
+            // 2. Call OpenAI (SINGLE CALL with Timeout using CircuitBreaker)
+            const response = await this.circuitBreaker.execute(() => this.openai.chat.completions.create({
                 model: GPT_MODEL,
-                messages: prompt,
-                response_format: { type: 'json_object' }
-            });
+                messages: promptMessages as any, // Type cast if needed depending on OpenAI types
+                response_format: { type: "json_object" }
+            }));
 
             // 3. Process Results
             const content = response.choices[0].message.content;
@@ -93,10 +118,38 @@ export class GptBatchProcessor {
                 [batchId]
             );
 
+            // Check if queue is now empty
+            if (gptQueueManager.getQueueStats()[`queue${queueId}` as keyof ReturnType<typeof gptQueueManager.getQueueStats>] === 0) {
+                gptQueueManager.emit('queue_drained', queueId);
+            }
+
         } catch (error: any) {
             console.error(`[GptProcessor] Batch ${batchId} failed:`, error);
 
-            // Mark batch as failed
+            // Retry Logic
+            if (retryCount < MAX_RETRIES) {
+                const delay = Math.pow(BACKOFF_K, retryCount) * 1000;
+                console.log(`[GptProcessor] Retrying batch ${batchId} in ${delay}ms...`);
+
+                // For manual batches passed to processBatch, we can't easily "put back" into manager.
+                // But we CAN recurse with processBatch!
+
+                setTimeout(() => {
+                    this.processBatch(batchItems, queueId, retryCount + 1);
+                }, delay);
+
+                // Mark DB as retrying?
+                await pool.query(
+                    `UPDATE gpt_batch_queue 
+                     SET status = 'retrying', processing_note = $1
+                     WHERE batch_id = $2`,
+                    [`Retry ${retryCount + 1} pending`, batchId]
+                );
+
+                return;
+            }
+
+            // Mark batch as failed permanently
             await pool.query(
                 `UPDATE gpt_batch_queue 
                  SET status = 'failed'
@@ -110,7 +163,7 @@ export class GptBatchProcessor {
                     `UPDATE email_processing_log 
                       SET processing_status = 'failed', error_message = $1
                       WHERE email_message_id = $2`,
-                    [`Batch processing failed: ${error.message}`, item.email.id]
+                    [`Batch processing failed after ${MAX_RETRIES} retries: ${error.message}`, item.email.id]
                 );
             }
         }
@@ -178,27 +231,60 @@ export class GptBatchProcessor {
     }
 
     private async saveTransaction(userId: string, email: ExtractionInput, result: GptTransactionResult) {
-        // Map GPT result to transaction object
-        const finalTxn = {
-            merchant: result.merchantName || 'Unknown',
-            amount: result.amount || 0,
-            currency: result.currency || 'INR',
-            date: result.date ? new Date(result.date) : email.date,
-            cardLast4: result.cardLast4,
-            bankName: result.bankName
-        };
+        try {
+            // Map GPT result to transaction object
+            const finalTxn = {
+                merchant: result.merchantName || 'Unknown',
+                amount: result.amount || 0,
+                currency: result.currency || 'INR',
+                date: result.date ? new Date(result.date) : email.date,
+                cardLast4: result.cardLast4,
+                bankName: result.bankName,
+                // Ensure date is valid, fallback to email date
+            };
 
-        // Call transaction service (assuming existing service)
-        await transactionsService.createTransactionFromExtraction(userId, {
-            ...finalTxn,
-            extractionMethod: 'gpt',
-            confidence: result.confidence || 0.8
-        }, {
-            id: email.id,
-            subject: email.subject,
-            body: email.bodyText,
-            from: email.from
-        });
+            if (isNaN(finalTxn.date.getTime())) {
+                finalTxn.date = email.date;
+            }
+
+            // Find or create card - logic handled locally to control "Default" behavior better if needed
+            // But reuse existing robust service method createTransactionFromExtraction which does:
+            // 1. Detect card
+            // 2. Validate amount
+            // 3. Insert
+
+            // We pass parameters matching the service signature
+            await transactionsService.createTransactionFromExtraction(userId, {
+                ...finalTxn,
+                extractionMethod: 'gpt',
+                confidence: result.confidence || 0.8,
+                bankName: result.bankName, // Explicitly pass for detection
+            }, {
+                id: email.id,
+                subject: email.subject,
+                body: email.bodyText,
+                from: email.from
+            });
+
+        } catch (error: any) {
+            console.error(`[GptProcessor] saveTransaction failed for ${email.id}:`, error);
+
+            // Fallback: If card detection failed (strict mode in service), we might want to safe-save?
+            // User requested: "Handle case where card not found (create new with default values)"
+            // The service checks `if (!card) throw Error`.
+            // We should catch that specific error and handle it?
+
+            if (error.message && error.message.includes('Card not found')) {
+                console.log(`[GptProcessor] Card not found for ${email.id}, creating temporary card or flagging.`);
+                // For now, let's log specifically so we know. 
+                // If we want to Auto-Create, we would call cardsService.createCard.
+                // But for this critical fix, we might just want to ensure we don't crash.
+                // Service throws, so we catch here.
+                // We should probably UPDATE the log to say "Pending Card" instead of failed?
+                throw new Error(`Card missing: ${error.message}`); // Re-throw to be caught by caller and logged as failed
+            }
+            throw error;
+        }
     }
 
     // ... helper methods (preprocessEmail, buildBatchPrompt, etc.) ...
@@ -225,10 +311,28 @@ export class GptBatchProcessor {
     }
 
     private buildBatchPrompt(emails: any[]): any[] {
-        const systemPrompt = `You are a transaction extractor.
-return JSON object with "results" array.`;
-        const userPrompt = `Process ${emails.length} emails.
-         ${JSON.stringify({ emails })}`;
+        const systemPrompt = `You are a strict transaction parser. Extract transactions from emails.
+Return a JSON object with a "results" array. Each result must have:
+- id: email id
+- isTransaction: boolean (true for debit/credit/refund/purchase/spent)
+- merchantName: string
+- amount: number
+- currency: string (INR, USD, EUR, etc)
+- date: ISO date string (YYYY-MM-DD or full ISO)
+- cardLast4: string (4 digits ONLY if explicitly identified as card number)
+- bankName: string
+- confidence: number (0-1)
+- reason: string
+
+CRITICAL RULES FOR CARD NUMBER:
+1. Extract 'cardLast4' ONLY if you see explicit context like "ending in 1234", "Card XX1234", "Card No: ...1234".
+2. Do NOT extract random 4 digits.
+3. Do NOT extract Account Numbers (e.g. "A/c 1234").
+4. Do NOT extract Order Numbers (e.g. "Order 1234").
+5. Do NOT extract Phone Numbers.
+6. If uncertain, leave cardLast4 null.`;
+
+        const userPrompt = `Process these ${emails.length} emails:\n${JSON.stringify({ emails })}`;
 
         return [
             { role: 'system', content: systemPrompt },

@@ -16,6 +16,7 @@ router.get('/last-sync', gmailController.getLastSync);
 router.get('/jobs/latest', gmailController.getLatestJob);
 router.get('/jobs/:jobId', gmailController.getHistoricalScanStatus);
 router.post('/manual-map', gmailController.manualMap);
+router.get('/stats', gmailController.getStats);
 router.get('/reports/terminator', gmailController.getTerminatorReport);
 
 export default router;

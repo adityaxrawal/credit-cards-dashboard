@@ -1,3 +1,4 @@
+import { decrypt } from '../utils/encryption';
 import pool from '../lib/db';
 import * as gmailClient from '../lib/gmailClient';
 import * as extractionService from '../services/extraction.service';
@@ -32,23 +33,28 @@ export async function handleGmailPubSubMessage(payload: PubSubPayload) {
 
     const user = users[0];
 
+    // ... (in handleGmailPubSubMessage)
+
     if (!user.google_refresh_token) {
       console.log('[GmailPubSubHandler] User has no refresh token');
       return;
     }
 
+    const refreshToken = decrypt(user.google_refresh_token);
+
     // Fetch history since last known historyId
     const history = await gmailClient.fetchHistory(
-      user.google_refresh_token,
+      refreshToken,
       user.gmail_history_id || '0'
     );
+
 
     const messageIds = history.messages.map(m => m.id);
     console.log(`[GmailPubSubHandler] Found ${messageIds.length} new messages`);
 
     if (messageIds.length > 0) {
       // Batch fetch messages
-      const rawMessages = await gmailClient.batchGetMessages(user.google_refresh_token, messageIds);
+      const rawMessages = await gmailClient.batchGetMessages(refreshToken, messageIds);
 
       for (const rawMessage of rawMessages) {
         if (!rawMessage) continue;

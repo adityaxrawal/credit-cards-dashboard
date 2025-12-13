@@ -2,20 +2,50 @@ import { ExtractionInput } from './extraction.service';
 import { ruleBasedWorkerPool } from './ruleBasedWorkerPool';
 import { gptQueueManager } from './gptQueueManager';
 // Import gptBatchProcessor to ensure it's initialized and listening
-import './gptBatchProcessor';
+import { gptProcessor } from './gptBatchProcessor';
 
 export class ParallelProcessingCoordinator {
 
     /**
      * Process a list of emails in parallel using the worker pool
      */
+    private activeJobs = new Map<string, {
+        userId: string;
+        startTime: number;
+        totalEmails: number;
+        processedCount: number;
+        status: 'running' | 'completed' | 'failed' | 'timeout';
+        timer: NodeJS.Timeout;
+    }>();
+
+    private JOB_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+    /**
+     * Process a list of emails in parallel using the worker pool
+     */
     async processEmails(emails: ExtractionInput[], userId: string, jobId: string) {
         console.log(`[Coordinator] Starting parallel processing for ${emails.length} emails...`);
+
+        // Track job
+        const timer = setTimeout(() => this.handleJobTimeout(jobId), this.JOB_TIMEOUT_MS);
+        this.activeJobs.set(jobId, {
+            userId,
+            startTime: Date.now(),
+            totalEmails: emails.length,
+            processedCount: 0,
+            status: 'running',
+            timer
+        });
+
         const startTime = Date.now();
 
         const results = await Promise.all(emails.map(async (email, index) => {
-            // Round robin worker assignment
-            const workerId = (index % 4) + 1;
+            // Round robin worker assignment based on available workers
+            const workerId = (index % 4) + 1; // Assuming 4 workers
+
+            // Check if job still running
+            const job = this.activeJobs.get(jobId);
+            if (!job || job.status !== 'running') return 'skipped';
 
             const result = await ruleBasedWorkerPool.processEmail(userId, email, workerId);
 
@@ -59,12 +89,47 @@ export class ParallelProcessingCoordinator {
             }
         }
 
-        // NOTE: GPT processing happens asynchronously via events in gptQueueManager + gptBatchProcessor
-        // We don't wait for GPT to finish here, unless we want to block the job?
-        // Historical scanner usually runs as a script. If we exit, the process dies.
-        // So we might need a way to wait for queues to empty?
+        // Drain queues before finishing
+        if (stats.queued > 0) {
+            console.log(`[Coordinator] Draining queues for ${stats.queued} items...`);
+            await this.drainQueues();
+        }
 
-        return stats; // Return the calculated stats
+        // Mark job complete
+        const job = this.activeJobs.get(jobId);
+        if (job) {
+            clearTimeout(job.timer);
+            job.status = 'completed';
+            this.activeJobs.delete(jobId);
+        }
+
+        return stats;
+    }
+
+    private async drainQueues() {
+        console.log('[Coordinator] Starting queue drain...');
+        // Drain each queue
+        for (let qId = 1; qId <= 3; qId++) {
+            const items = gptQueueManager.drainQueue(qId);
+            if (items.length > 0) {
+                console.log(`[Coordinator] Draining Queue ${qId} with ${items.length} items (forcing batch)`);
+                // Use gptProcessor to force process
+                // Explicitly call the public processBatch method we just added
+                await gptProcessor.processBatch(items, qId);
+            }
+        }
+    }
+
+    private handleJobTimeout(jobId: string) {
+        console.error(`[Coordinator] Job ${jobId} timed out after ${this.JOB_TIMEOUT_MS}ms`);
+        const job = this.activeJobs.get(jobId);
+        if (job) {
+            job.status = 'timeout';
+            // We can't easily cancel promises, but the checks inside loop will stop processing new ones if any were sequential.
+            // But Promise.all is parallel.
+            // We mainly use this to clean up memory.
+            this.activeJobs.delete(jobId);
+        }
     }
 }
 

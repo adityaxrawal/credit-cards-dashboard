@@ -1,9 +1,8 @@
-
+import { decrypt } from '../utils/encryption';
 import pool from '../lib/db';
 import * as gmailClient from '../lib/gmailClient';
 import { CreditCardMailDetector } from '../services/creditCardMailDetector';
-import { batchQueue, SimplifiedEmail } from '../services/batchQueueService'; // Keeping types if needed, but not using this queue anymore directly ideally?
-// Actually we should use the new coordinator. 
+import { SimplifiedEmail } from '../types';
 import { parallelProcessingCoordinator } from '../services/parallelProcessingCoordinator';
 import { gptQueueManager } from '../services/gptQueueManager';
 import dayjs from 'dayjs';
@@ -31,6 +30,9 @@ export async function runHistoricalScan(
     if (users.length === 0) throw new Error('User not found');
     const user = users[0];
     if (!user.google_refresh_token) throw new Error('Gmail not connected');
+
+    // Decrypt token
+    const refreshToken = decrypt(user.google_refresh_token);
 
     // ... (Date range and Query building same as before) ...
     const fixedStartDate = dayjs().subtract(90, 'day');
@@ -61,17 +63,18 @@ export async function runHistoricalScan(
       batchIndex++;
       logger.info(`[HistoricalScanner] Fetching batch ${batchIndex}...`);
 
-      const response = await gmailClient.listMessages(user.google_refresh_token, query, FETCH_BATCH_SIZE, pageToken);
+      const response = await gmailClient.listMessages(refreshToken, query, FETCH_BATCH_SIZE, pageToken);
       const messages = response.messages;
       pageToken = response.nextPageToken;
 
 
       // Fetch Content
       const messageIds = messages.map(m => m.id);
-      const rawMessages = await gmailClient.batchGetMessages(user.google_refresh_token, messageIds, 50);
+      const rawMessages = await gmailClient.batchGetMessages(refreshToken, messageIds, 50);
 
-      // Prepare for Coordinator
+      // Prepare for Coordinator and DB Log
       const emailsToProcess: extractionService.ExtractionInput[] = [];
+      const messagesToLog: any[] = [];
 
       for (const raw of rawMessages) {
         if (!raw) continue;
@@ -87,16 +90,17 @@ export async function runHistoricalScan(
             internalDate: parsedEmail.date.getTime()
           };
 
-          // Log scanned (same as before)
-          try {
-            await pool.query(
-              `INSERT INTO gmail_scanned_emails 
-                (user_id, scan_job_id, message_id, sender, subject, snippet, internal_date, scanned_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-                ON CONFLICT (message_id) DO NOTHING`,
-              [userId, jobId, simplifiedEmail.messageId, simplifiedEmail.from.substring(0, 500), simplifiedEmail.subject.substring(0, 1000), simplifiedEmail.body.substring(0, 500), simplifiedEmail.internalDate]
-            );
-          } catch (e) { }
+          // Collect for Bulk Insert
+          messagesToLog.push([
+            userId,
+            jobId,
+            simplifiedEmail.messageId,
+            simplifiedEmail.from.substring(0, 500),
+            simplifiedEmail.subject.substring(0, 1000),
+            simplifiedEmail.body.substring(0, 500),
+            simplifiedEmail.internalDate,
+            new Date() // scanned_at matches NOW()
+          ]);
 
           // Convert to ExtractionInput
           emailsToProcess.push({
@@ -112,6 +116,30 @@ export async function runHistoricalScan(
 
         } catch (e) {
           logger.warn(`Failed to parse/prep message ${raw.id}`, e);
+        }
+      }
+
+      // BULK INSERT logs
+      if (messagesToLog.length > 0) {
+        try {
+          // Construct param place holders: ($1, $2, ..), ($9, $10...)
+          const values: any[] = [];
+          const placeholders = messagesToLog.map((_, i) => {
+            const offset = i * 8;
+            return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`;
+          }).join(', ');
+
+          messagesToLog.forEach(row => values.push(...row));
+
+          await pool.query(
+            `INSERT INTO gmail_scanned_emails 
+                  (user_id, scan_job_id, message_id, sender, subject, snippet, internal_date, scanned_at)
+                  VALUES ${placeholders}
+                  ON CONFLICT (user_id, message_id) DO NOTHING`,
+            values
+          );
+        } catch (e) {
+          logger.error('Bulk insert failed for scanned emails', e);
         }
       }
 

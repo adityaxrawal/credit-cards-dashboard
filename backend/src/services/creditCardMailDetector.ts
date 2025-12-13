@@ -1,5 +1,5 @@
 import { gmail_v1 } from 'googleapis';
-import { SimplifiedEmail } from './batchQueueService';
+import { SimplifiedEmail } from '../types';
 
 export type EmailCategory =
   | 'transaction_debit'

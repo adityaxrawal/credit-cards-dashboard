@@ -1,33 +1,33 @@
-import { Client } from 'pg';
+import pool from '../lib/db';
 import fs from 'fs';
 import path from 'path';
-import dotenv from 'dotenv';
 
-dotenv.config();
+async function runMigration() {
+    const args = process.argv.slice(2);
+    const fileArgIndex = args.indexOf('--file');
+    const migrationFile = fileArgIndex !== -1 ? args[fileArgIndex + 1] : args[0];
 
-const runMigration = async () => {
-    const client = new Client({
-        connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false }
-    });
+    if (!migrationFile) {
+        console.error('Usage: ts-node run_migration.ts --file <filename>');
+        process.exit(1);
+    }
 
+    const migrationPath = path.join(__dirname, '../../migrations', migrationFile);
+
+    console.log(`Reading migration file: ${migrationPath}`);
     try {
-        await client.connect();
-        console.log('Connected to database');
+        const sql = fs.readFileSync(migrationPath, 'utf8');
+        console.log('Executing migration SQL...');
 
-        const migrationPath = path.join(__dirname, '../../migrations/add_parallel_processing_columns.sql');
-        const migrationSql = fs.readFileSync(migrationPath, 'utf8');
+        await pool.query(sql);
 
-        console.log('Executing migration...');
-        await client.query(migrationSql);
-        console.log('Migration executed successfully');
-
+        console.log('✅ Migration executed successfully.');
     } catch (err) {
-        console.error('Migration failed:', err);
+        console.error('❌ Migration failed:', err);
         process.exit(1);
     } finally {
-        await client.end();
+        await pool.end();
     }
-};
+}
 
 runMigration();

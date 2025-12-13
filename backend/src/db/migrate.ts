@@ -1,13 +1,11 @@
 import { Client } from 'pg';
 import fs from 'fs';
 import path from 'path';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import { env } from '../config/env';
 
 const runMigration = async () => {
   const client = new Client({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
   });
 

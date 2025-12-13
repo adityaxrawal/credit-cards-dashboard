@@ -33,14 +33,15 @@ export class EmailProcessingLogService {
             await this.pool.query(
                 `INSERT INTO email_processing_log 
          (user_id, email_message_id, from_email, subject, processing_status, 
-          error_message, processing_method, confidence_score)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          error_message, processing_method, confidence_score, reason)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (email_message_id) 
          DO UPDATE SET 
            processing_status = EXCLUDED.processing_status,
            error_message = EXCLUDED.error_message,
            processing_method = EXCLUDED.processing_method,
            confidence_score = EXCLUDED.confidence_score,
+           reason = EXCLUDED.reason,
            processed_at = NOW()`,
                 [
                     data.userId,
@@ -48,9 +49,10 @@ export class EmailProcessingLogService {
                     data.fromAddress,
                     data.subject,
                     'filter_terminated', // Status
-                    data.reason, // Error message (stores termination reason)
+                    data.reason, // Keep logging reason in error_message for backward compatibility/visibility
                     'filter', // Processing method
                     data.confidence || 0, // Confidence score
+                    data.reason // New reason column
                 ]
             );
 

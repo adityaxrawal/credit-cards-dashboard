@@ -1,5 +1,5 @@
 import { GptBatchProcessor } from '../services/gptBatchProcessor';
-import { SimplifiedEmail } from '../services/batchQueueService';
+import { SimplifiedEmail } from '../types';
 
 // Stub Jest
 const jest = { fn: () => { } };

@@ -1,13 +1,14 @@
 import nodemailer from 'nodemailer';
+import { env } from '../config/env';
 
 // Create reusable transporter
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
+  host: env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(env.SMTP_PORT || '587'),
   secure: false, // Use TLS
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: env.SMTP_USER,
+    pass: env.SMTP_PASS,
   },
 });
 
@@ -24,7 +25,7 @@ export interface EmailOptions {
 export async function sendEmail(options: EmailOptions): Promise<boolean> {
   try {
     const info = await transporter.sendMail({
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      from: env.SMTP_FROM || env.SMTP_USER,
       to: options.to,
       subject: options.subject,
       text: options.text,
@@ -53,7 +54,7 @@ export async function sendBudgetAlert(
   }
 ): Promise<boolean> {
   const percentage = ((data.spent / data.monthlyBudget) * 100).toFixed(1);
-  
+
   const html = `
     <h2>Budget Alert</h2>
     <p>Your spending for ${data.month}/${data.year} has reached <strong>${percentage}%</strong> of your monthly budget.</p>

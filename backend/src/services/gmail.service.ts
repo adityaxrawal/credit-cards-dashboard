@@ -5,6 +5,7 @@ import * as cardsQueries from '../db/queries/cards.queries';
 import * as extractionService from '../services/extraction.service';
 import * as transactionsService from '../services/transactions.service';
 import { randomUUID } from 'crypto';
+import { env } from '../config/env';
 import logger from '../utils/logger';
 
 /**
@@ -36,18 +37,21 @@ export async function getConnectionStatus(userId: string) {
   };
 }
 
+import { encrypt, decrypt } from '../utils/encryption';
+
 /**
  * Connect Gmail (setup watch)
  */
 export async function connectGmail(userId: string, refreshToken: string) {
   // Store refresh token
+  const encryptedToken = encrypt(refreshToken);
   await pool.query(
     `UPDATE users SET google_refresh_token = $1, updated_at = NOW() WHERE id = $2`,
-    [refreshToken, userId]
+    [encryptedToken, userId]
   );
 
   // Setup watch
-  const topicName = process.env.GMAIL_PUBSUB_TOPIC || 'projects/YOUR_PROJECT/topics/gmail-notifications';
+  const topicName = env.GMAIL_PUBSUB_TOPIC || 'projects/YOUR_PROJECT/topics/gmail-notifications';
   const watchResult = await gmailClient.setupWatch(refreshToken, topicName);
 
   if (!watchResult) {
@@ -80,7 +84,8 @@ export async function disconnectGmail(userId: string) {
   );
 
   if (rows.length > 0 && rows[0].google_refresh_token) {
-    await gmailClient.stopWatch(rows[0].google_refresh_token);
+    const rawToken = decrypt(rows[0].google_refresh_token);
+    await gmailClient.stopWatch(rawToken);
   }
 
   await pool.query(
@@ -313,4 +318,31 @@ export async function manualMap(userId: string, messageId: string, cardInfo: {
   })();
 
   return { jobId };
+}
+
+/**
+ * Get Pipeline Statistics (Queue depths, etc)
+ */
+import { gptQueueManager } from './gptQueueManager';
+
+export async function getPipelineStats(userId: string) {
+  // Get connection status
+  const connection = await getConnectionStatus(userId);
+
+  // Get GPT queue stats
+  const queueStats = gptQueueManager.getQueueStats();
+
+  // Get active job if any
+  const latestJob = await getLatestJob(userId);
+  const isJobRunning = latestJob?.status === 'pending' || latestJob?.status === 'running';
+
+  return {
+    connection,
+    queues: queueStats,
+    activeJob: isJobRunning ? {
+      id: latestJob?.jobId,
+      status: latestJob?.status,
+      progress: latestJob?.processed ? `${latestJob.processed}/${latestJob.total}` : '0/0'
+    } : null
+  };
 }

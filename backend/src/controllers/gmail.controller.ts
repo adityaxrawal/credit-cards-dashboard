@@ -179,3 +179,16 @@ export async function getTerminatorReport(req: Request, res: Response, next: Nex
   }
 }
 
+/**
+ * Get Pipeline Stats
+ */
+export async function getStats(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = (req as any).user.id;
+    const stats = await gmailService.getPipelineStats(userId);
+    res.json({ data: stats });
+  } catch (error) {
+    next(error);
+  }
+}
+

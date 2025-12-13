@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { UserRepository } from '../repositories/user.repository';
 import { env } from '../config/env';
 import { asyncHandler } from '../utils/asyncHandler';
+import { encrypt } from '../utils/encryption';
 
 const client = new OAuth2Client(
   env.GOOGLE_CLIENT_ID,
@@ -72,7 +73,8 @@ export const googleLogin = asyncHandler(async (req: Request, res: Response) => {
 
   // Store refresh token if available (for offline access like Gmail API)
   if (tokens.refresh_token) {
-    await UserRepository.updateRefreshToken(user.id, tokens.refresh_token);
+    const encryptedToken = encrypt(tokens.refresh_token);
+    await UserRepository.updateRefreshToken(user.id, encryptedToken);
   }
 
   const { accessToken, refreshToken } = generateTokens(user.id);

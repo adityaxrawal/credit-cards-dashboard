@@ -1,12 +1,19 @@
 import { google, gmail_v1 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import pLimit from 'p-limit';
+import { env } from '../config/env';
+import { CircuitBreaker } from '../utils/circuitBreaker';
 
 const oauth2Client = new OAuth2Client(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
+  env.GOOGLE_CLIENT_ID,
+  env.GOOGLE_CLIENT_SECRET,
+  env.GOOGLE_REDIRECT_URI
 );
+
+const gmailCircuitBreaker = new CircuitBreaker('GmailAPI', {
+  failureThreshold: 10, // Higher threshold for Gmail as it's chatty
+  resetTimeout: 30000 // 30s backoff
+});
 
 // --- Rate Limiter & Retry Utilities ---
 
@@ -91,9 +98,9 @@ async function retryWithBackoff<T>(fn: () => Promise<T>, retries = 3, initialDel
   }
 }
 
-// Wrapper for API calls to apply rate limit + retry
+// Wrapper for API calls to apply rate limit + retry + circuit breaker
 async function callGmailApi<T>(fn: () => Promise<T>): Promise<T> {
-  return gmailRateLimiter.schedule(() => retryWithBackoff(fn));
+  return gmailCircuitBreaker.execute(() => gmailRateLimiter.schedule(() => retryWithBackoff(fn)));
 }
 
 // --------------------------------------
@@ -116,9 +123,9 @@ export interface GmailMessage {
  */
 function getGmailClient(refreshToken: string) {
   const client = new OAuth2Client(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
+    env.GOOGLE_CLIENT_ID,
+    env.GOOGLE_CLIENT_SECRET,
+    env.GOOGLE_REDIRECT_URI
   );
   client.setCredentials({ refresh_token: refreshToken });
   // Type assertion needed due to version mismatch between googleapis and google-auth-library

@@ -80,10 +80,10 @@ export class BankParserPatterns {
   // Card digits patterns
   // Card digits patterns
   // Updated to exclude Account/AC numbers using negative lookbehind
-  static readonly CARD_XX_DIGITS = RegexCache.get('(?<!account\\s+)(?<!ac\\s+)(?<!a\\/c\\s+)(?:XX|xx)[\\s*]*(\\d{4})', 'i');
-  static readonly CARD_ENDING = RegexCache.get('(?<!account\\s+)(?<!ac\\s+)(?<!a\\/c\\s+)(?:ending|ending in|ends with|last 4 digits?)\\s*(?:in)?\\s*(\\d{4})', 'i');
-  static readonly CARD_NUMBER = RegexCache.get('(?<!account\\s+)(?<!ac\\s+)(?<!a\\/c\\s+)(?:card|no\\.|number)[\\s:]*(?:XX|xx)?[\\s*]*(\\d{4})', 'i');
-  static readonly CARD_MASKED = RegexCache.get('(?:\\*{4}|\\*{6}|\\*{8}|\\*{12})(\\d{4})', 'i');
+  static readonly CARD_XX_DIGITS = RegexCache.get('(?<!account\\s+)(?<!ac\\s+)(?<!a\\/c\\s+)(?<!order\\s+)(?<!ref\\s+)(?<!mobile\\s+)(?<!phone\\s+)\\b(?:XX|xx|xX|Xx)[\\s*]*(\\d{4})', 'i');
+  static readonly CARD_ENDING = RegexCache.get('(?<!account\\s+)(?<!ac\\s+)(?<!a\\/c\\s+)(?<!order\\s+)(?<!ref\\s+)(?<!mobile\\s+)(?<!phone\\s+)(?:ending|ending in|ends with|last 4 digits?)\\s*(?:in)?\\s*(\\d{4})', 'i');
+  static readonly CARD_NUMBER = RegexCache.get('(?<!account\\s+)(?<!ac\\s+)(?<!a\\/c\\s+)(?<!order\\s+)(?<!ref\\s+)(?<!mobile\\s+)(?<!phone\\s+)(?:card(?:\\s+(?:no\\.|number))?)[\\s:]*(?:XX|xx|xX|Xx)?[\\s*]*(\\d{4})', 'i');
+  static readonly CARD_MASKED = RegexCache.get('(?<!account\\s+)(?<!ac\\s+)(?<!a\\/c\\s+)(?<!order\\s+)(?<!ref\\s+)(?<!mobile\\s+)(?<!phone\\s+)(?:\\*{4}|\\*{6}|\\*{8}|\\*{12})(\\d{4})', 'i');
 
   // Merchant patterns
   static readonly MERCHANT_AT = RegexCache.get('(?:at|@)\\s+([A-Za-z0-9\\s*&.\\-\\/()]+?)(?:\\s+on\\s+(?:\\d|[A-Za-z]{3})|\\s+dated|\\s+for\\s+Rs|\\.|,|\\n|$)', 'i');

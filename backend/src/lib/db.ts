@@ -63,7 +63,7 @@ export const query = async (text: string, params?: any[]) => {
     }
     return res;
   } catch (error: any) {
-    // Check if it's a connection error that might benefit from retry
+    // ... existing error handling ...
     const isTransientError = error.code === 'ECONNRESET' ||
       error.code === '57P01' || // admin_shutdown
       error.code === '57P02' || // crash_shutdown  
@@ -80,6 +80,15 @@ export const query = async (text: string, params?: any[]) => {
     throw error;
   }
 };
+
+export const getPoolStats = () => {
+  return {
+    totalCount: pool.totalCount,
+    idleCount: pool.idleCount,
+    waitingCount: pool.waitingCount,
+  };
+};
+
 
 export default pool;
 
