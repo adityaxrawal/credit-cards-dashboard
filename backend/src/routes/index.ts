@@ -8,6 +8,7 @@ import alertsRoutes from './alerts.routes';
 import gmailRoutes from './gmail.routes';
 
 import rewardsRoutes from './rewards.routes';
+import extractionRoutes from './extraction.routes';
 
 const router = Router();
 
@@ -23,6 +24,7 @@ router.use('/alerts', alertsRoutes);
 router.use('/gmail', gmailRoutes);
 
 router.use('/rewards', rewardsRoutes);
+router.use('/extraction', extractionRoutes);
 
 export default router;
 

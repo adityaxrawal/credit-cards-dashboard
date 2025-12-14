@@ -3,6 +3,8 @@ import app from './app';
 import pool from './lib/db';
 import { env } from './config/env';
 import './services/gptBatchProcessor'; // Initialize background worker
+import { createServer } from 'http';
+import { initializeWebSocket } from './services/webSocketService';
 
 const PORT = env.PORT || 8000;
 
@@ -12,7 +14,13 @@ const startServer = async () => {
     await pool.query('SELECT NOW()');
     console.log('✅ Database connected successfully');
 
-    app.listen(PORT, () => {
+    const server = createServer(app);
+
+    // Initialize WebSocket
+    const io = initializeWebSocket(server);
+    (global as any).ioServer = io;
+
+    server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
   } catch (error) {

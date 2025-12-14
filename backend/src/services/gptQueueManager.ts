@@ -34,12 +34,11 @@ export class GptQueueManager extends EventEmitter {
         // Log to DB that it's queued
         try {
             await pool.query(
-                `UPDATE email_processing_log 
+                `UPDATE emailprocessinglog 
          SET processing_status = 'gpt_processing', 
-             queue_id = $1,
              updated_at = NOW()
-         WHERE email_message_id = $2`,
-                [queueId, email.id]
+         WHERE email_message_id = $1`,
+                [email.id]
             );
         } catch (e) {
             console.warn(`[QueueManager] Failed to update log for ${email.id}`, e);

@@ -1,16 +1,18 @@
 import pool from '../../lib/db';
+import * as cardsQueries from '../../db/queries/cards.queries';
 
 interface CardDetectionResult {
     last4Digits: string;
     cardName?: string;
     bankName: string;
     confidence: number;
-    detectionMethod: 'regex' | 'fuzzy' | 'manual';
-    raw: {
+    detectionMethod: 'regex' | 'fuzzy' | 'manual' | 'heuristic';
+    raw?: {
         extractedLast4: string;
         bankDomainLast4?: string;
         subjectMention?: string;
     };
+    status?: 'CREATE_CARD' | 'FOUND';
 }
 
 export class CardDetectionService {
@@ -22,82 +24,85 @@ export class CardDetectionService {
         userId: string,
         email: { subject: string; body: string; from: string },
         extractedBankName?: string
-    ): Promise<CardDetectionResult> {
+    ): Promise<CardDetectionResult | { status: 'CREATE_CARD'; bankName: string; last4: string }> {
 
         const combined = email.subject + '\n' + email.body;
 
         // STRATEGY 1: Extract via strict regex pattern from email body
-        const regexResult = this.extractViaRegex(combined, email.from);
-        if (regexResult && regexResult.confidence >= 0.85) {
-            // Check if this regex result matches a known card for the user?
-            // Step 3 fuzzy match does this. We should probably return regex result 
-            // but maybe verify it later.
-            // Actually Strategy 3 handles matching against DB.
-            // So here we just return the raw extraction if high confidence 
-            // BUT Strategy 3 says "fuzzy matches existing card".
-            // Let's flow through: regex -> then check if it matches existing card strictly or fuzzy.
-        }
+        let regexResult = this.extractViaRegex(combined, email.from);
 
-        // STRATEGY 2: Extract from sender domain (if email is from bank)
-        const bankDomainResult = this.extractFromBankDomain(email.from);
+        if (!regexResult) {
+            // STRATEGY 2: Extract bank name and last4 from email hints
+            // "HDFC Bank RuPay Credit Card XX0614" → HDFC + 0614
+            const bankMatch = combined.match(/(?:hdfc|axis|sbi|icici|yes bank|idfc)/i);
+            const last4Match = combined.match(/(?:card|account).*?xx(\d{4})/i) ||
+                combined.match(/(?:ending\s+)?(\d{4})(?!\d)/i);
 
-        // Combine Regex + Bank Domain
-        if (bankDomainResult && regexResult) {
-            // Cross-validate: regex last4 matches domain hint?
-            // Domain doesn't usually give last4. 
-            // But if regex found a bank name that mismatches domain bank, we have a problem.
-            if (regexResult.bankName && regexResult.bankName !== bankDomainResult.bankName) {
-                // Mismatch!
-                console.warn(`[CardDetection] Mismatch: Regex found ${regexResult.bankName} but domain is ${bankDomainResult.bankName}`);
-                // Trust Domain for bank name, but regex for last4?
-                // Usually regex is specific "HDFC Card ending...".
-                // If email is from HDFC but regex says "SBI Card ending...", it might be a payment to SBI?
-                // We should proceed with caution.
-            }
-        }
-
-        // Prepare candidate to match against DB
-        const candidateLast4 = regexResult?.last4Digits;
-        const candidateBank = regexResult?.bankName || extractedBankName || bankDomainResult?.bankName;
-
-        if (candidateLast4) {
-            // STRATEGY 3: Fuzzy match against user's existing cards
-            const fuzzyMatch = await this.fuzzyMatchExistingCard(
-                userId,
-                candidateLast4,
-                candidateBank
-            );
-
-            if (fuzzyMatch) {
-                // Found an existing card!
-                return {
-                    last4Digits: candidateLast4,
-                    bankName: candidateBank || 'Unknown',
-                    cardName: fuzzyMatch.cardName,
-                    confidence: 0.95,
-                    detectionMethod: 'fuzzy',
-                    raw: { extractedLast4: candidateLast4 }
+            if (bankMatch && last4Match) {
+                regexResult = {
+                    last4Digits: last4Match[1],
+                    bankName: this.normalizeBankName(bankMatch[0]),
+                    confidence: 0.65,
+                    detectionMethod: 'heuristic',
+                    raw: {
+                        extractedLast4: last4Match[0]
+                    }
                 };
             }
-
-            // If no fuzzy match but we have a valid regex extraction
-            if (regexResult) {
-                return regexResult;
-            }
         }
 
-        // STRATEGY 4: Manual mapping check / Fallback
-        // If we only know bank but no last4, or nothing.
+        if (!regexResult) {
+            // Cannot extract - return pending for manual review
+            throw new Error('Could not detect card number from email');
+        }
 
-        if (regexResult?.last4Digits) {
+        // STRATEGY 3: Match against existing cards
+        const existingCard = await cardsQueries.findCardByBankAndLastFour(
+            userId,
+            regexResult.bankName,
+            regexResult.last4Digits
+        );
+
+        if (existingCard) {
             return {
-                ...regexResult,
-                confidence: 0.30,
-                detectionMethod: 'manual'
+                last4Digits: regexResult.last4Digits,
+                cardName: existingCard.card_name,
+                bankName: existingCard.bank_name,
+                confidence: 0.95,
+                detectionMethod: regexResult.detectionMethod,
+                status: 'FOUND'
             };
         }
 
-        throw new Error('Could not detect card number from email');
+        // STRATEGY 4: Auto-create card if extraction confident enough
+        if (regexResult.confidence >= 0.65) {
+            return {
+                status: 'CREATE_CARD',
+                bankName: regexResult.bankName,
+                last4: regexResult.last4Digits,
+            };
+        }
+
+        throw new Error(
+            `Cannot reliably detect card (confidence: ${regexResult.confidence}). Please manually map.`
+        );
+    }
+
+    private normalizeBankName(bank: string): string {
+        const mapping: Record<string, string> = {
+            'hdfc': 'HDFC',
+            'axis': 'AXIS',
+            'sbi': 'SBI',
+            'icici': 'ICICI',
+            'yes bank': 'YES Bank',
+            'idfc': 'IDFC',
+        };
+
+        const lower = bank.toLowerCase();
+        for (const [key, val] of Object.entries(mapping)) {
+            if (lower.includes(key)) return val;
+        }
+        return 'Unknown';
     }
 
     /**
@@ -107,55 +112,41 @@ export class CardDetectionService {
         emailText: string,
         fromAddress: string
     ): CardDetectionResult | null {
-        // Patterns for different banks
+        // EXPANDED patterns covering all formats seen in CSV
         const patterns: Record<string, RegExp[]> = {
-            'HDFC': [
+            HDFC: [
+                /credit card (?:xx|ending\s+)?(\d{4})/i,
+                /card ending (\d{4})/i,
+                /card xx(\d{4})/i,
                 /card ending in (\d{4})/i,
-                /card (?:number |XXXX)?(\d{4})/i,
-                /(\d{4})\s+(?:has been charged|was charged|spent)/i,
-                /card \*{4}(\d{4})/i,
+                /(?:hdfc|credit card).*?(\d{4})/i,
                 /ending : (\d{4})/i
             ],
-            'ICICI': [
-                /card \*+(\d{4})/i,
+            AXIS: [
+                /axis.*?card.*?(\d{4})/i,
+                /card no\.?\s*(?:xx)?(\d{4})/i,
+                /(?:axis|credit card).*?(\d{4})/i,
+                /ending (\d{4})/i
+            ],
+            SBI: [
+                /sbi.*?card.*?(?:xx|ending\s+)?(\d{4})/i,
+                /sbi.*?(\d{4})/i,
                 /card ending (\d{4})/i,
-                /credit.*?(\d{4})/i,
-                /(\d{4})\s+(?:debited|charged|spent)/i,
-                /acct XX(\d{4})/i
-            ],
-            'AXIS': [
-                /ending (\d{4})/i,
-                /(\d{4})\s+(?:has been charged|was charged)/i,
-                /card \*+(\d{4})/i,
-                /card no.*?(\d{4})/i
-            ],
-            'SBI': [
-                /card ending in (\d{4})/i,
-                /(\d{4})\s+(?:charged|debited)/i,
                 /ending with (\d{4})/i
             ],
-            'AMEX': [
-                /card ending (\d{5})/i, // Amex uses 5 sometimes? No, standard display is often last 5 in some regions, but let's stick to 4 if user asked for 4. User asked for 4. 
-                /card ending (\d{4})/i
+            GENERIC: [
+                /(?:card|credit)\s+(?:xx|ending\s+in\s+)?(\d{4})/i,
+                /card\s+(\d{4})/i,
+                /ending\s+(\d{4})/i,
+                /xx(\d{4})/i,
             ]
         };
 
         // Identify bank from sender
         const bank = this.identifyBank(fromAddress);
-        // If bank identified, define specific patterns + generic
-        // If not, just generic.
+        const bankPatterns = bank && patterns[bank] ? patterns[bank] : patterns.GENERIC;
 
-        let applicablePatterns = [
-            /(?:card|credit).*?(\d{4})/i,
-            /(\d{4})\s+(?:charged|spent|debited)/i,
-            /ending (?:in|with)?\s*(\d{4})/i
-        ];
-
-        if (bank && patterns[bank]) {
-            applicablePatterns = [...patterns[bank], ...applicablePatterns];
-        }
-
-        for (const pattern of applicablePatterns) {
+        for (const pattern of bankPatterns) {
             const match = emailText.match(pattern);
             if (match && match[1]) {
                 const last4 = match[1];
@@ -165,7 +156,7 @@ export class CardDetectionService {
                     return {
                         last4Digits: last4,
                         bankName: bank || 'Unknown',
-                        confidence: bank ? 0.90 : 0.60,
+                        confidence: bank ? 0.90 : 0.70,
                         detectionMethod: 'regex',
                         raw: {
                             extractedLast4: last4,
@@ -180,67 +171,13 @@ export class CardDetectionService {
     }
 
     /**
-     * Fuzzy match extracted last4 against user's existing cards
-     * Prevents duplicate card entries
-     */
-    private async fuzzyMatchExistingCard(
-        userId: string,
-        extractedLast4: string,
-        bankName?: string
-    ): Promise<{ cardName?: string; confidence: number } | null> {
-        // Get all user's cards
-        const cards = await pool.query(
-            `SELECT id, card_name, card_number_last4, bank_name FROM credit_cards 
-       WHERE user_id = $1 AND is_active = TRUE`,
-            [userId]
-        );
-
-        // EXACT match on last4 + bank
-        const exactMatch = cards.rows.find(
-            (card: any) => card.card_number_last4 === extractedLast4 &&
-                (!bankName || (card.bank_name && bankName && card.bank_name.toLowerCase().includes(bankName.toLowerCase())))
-        );
-
-        if (exactMatch) {
-            return {
-                cardName: exactMatch.card_name,
-                confidence: 0.95
-            };
-        }
-
-        // Match on last4 only (if bank is unknown or slightly different)
-        const last4Matches = cards.rows.filter((card: any) => card.card_number_last4 === extractedLast4);
-
-        if (last4Matches.length === 1) {
-            // High confidence if only one card has this last4
-            return {
-                cardName: last4Matches[0].card_name,
-                confidence: 0.85
-            };
-        }
-
-        // If multiple cards from same bank, require exact match
-        const sameBank = cards.rows.filter(
-            (card: any) => card.bank_name === bankName && card.card_number_last4 !== extractedLast4
-        );
-
-        if (sameBank.length > 0 && !exactMatch) {
-            // Ambiguous: user has multiple cards from same bank
-            // Return null to trigger manual mapping
-            return null;
-        }
-
-        return null;
-    }
-
-    /**
      * Identify bank from email sender domain
      */
     private identifyBank(fromAddress: string): string | null {
         const bankDomains: Record<string, string> = {
-            'hdfcbank': 'HDFC',
+            'hdfc': 'HDFC',
             'icici': 'ICICI',
-            'axisbank': 'AXIS',
+            'axis': 'AXIS',
             'sbi': 'SBI',
             'indusind': 'INDUSIND',
             'kotak': 'KOTAK',

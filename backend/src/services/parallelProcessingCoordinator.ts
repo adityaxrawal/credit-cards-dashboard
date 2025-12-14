@@ -3,6 +3,7 @@ import { ruleBasedWorkerPool } from './ruleBasedWorkerPool';
 import { gptQueueManager } from './gptQueueManager';
 // Import gptBatchProcessor to ensure it's initialized and listening
 import { gptProcessor } from './gptBatchProcessor';
+import { broadcastProcessingUpdate } from './webSocketService';
 
 export class ParallelProcessingCoordinator {
 
@@ -39,6 +40,10 @@ export class ParallelProcessingCoordinator {
 
         const startTime = Date.now();
 
+        let completedCount = 0;
+        let successCount = 0;
+        let failedCount = 0;
+
         const results = await Promise.all(emails.map(async (email, index) => {
             // Round robin worker assignment based on available workers
             const workerId = (index % 4) + 1; // Assuming 4 workers
@@ -49,16 +54,38 @@ export class ParallelProcessingCoordinator {
 
             const result = await ruleBasedWorkerPool.processEmail(userId, email, workerId);
 
-            if (result.status === 'success') return 'success';
-            if (result.status === 'ignored' || result.status === 'already_processed' || result.status === 'duplicate') return 'ignored';
+            completedCount++;
 
-            // If failed, route to GPT queue
-            if (result.queueId) {
+            let status = 'unknown';
+
+            if (result.status === 'success') {
+                status = 'success';
+                successCount++;
+            } else if (result.status === 'ignored' || result.status === 'already_processed' || result.status === 'duplicate') {
+                status = 'ignored';
+            } else if (result.queueId) {
+                // If failed, route to GPT queue
                 await gptQueueManager.enqueue(email, result.workerId, userId);
-                return 'queued';
+                status = 'queued';
+                failedCount++; // Counting queued as failed/pending for now
             }
 
-            return 'unknown';
+            // Emit progress update every 5 items or on completion
+            if (completedCount % 5 === 0 || completedCount === emails.length) {
+                const queueStats = gptQueueManager.getQueueStats();
+                broadcastProcessingUpdate(jobId, {
+                    totalProcessed: completedCount,
+                    totalTransactions: successCount,
+                    totalErrors: failedCount,
+                    queueStatus: {
+                        queue1: queueStats.queue1,
+                        queue2: queueStats.queue2,
+                        queue3: queueStats.queue3
+                    }
+                });
+            }
+
+            return status;
         }));
 
         const duration = Date.now() - startTime;
