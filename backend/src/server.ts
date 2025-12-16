@@ -2,7 +2,8 @@ import 'dotenv/config';
 import app from './app';
 import pool from './lib/db';
 import { env } from './config/env';
-import './services/gptBatchProcessor'; // Initialize background worker
+// import './services/gptBatchProcessor'; // Removed
+
 import { createServer } from 'http';
 import { initializeWebSocket } from './services/webSocketService';
 

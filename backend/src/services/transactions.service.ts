@@ -3,7 +3,8 @@ import * as cardsQueries from '../db/queries/cards.queries';
 import dayjs from 'dayjs';
 import { cardDetectionService } from './extraction/cardDetectionService';
 import { cardAutoCreationService } from './extraction/cardAutoCreation';
-import { ExtractionResult } from './extraction.service'; // Assuming this type is exported or we need to redefine simplified version
+// import { ExtractionResult } from './extraction.service'; // Removed
+
 import pool from '../lib/db'; // For pool.query if needed or use queries
 // Actually the provided code uses db.query directly. I should use the repositories/queries or pool.
 // The provided code: await db.query(...)

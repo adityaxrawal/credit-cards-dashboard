@@ -2,11 +2,13 @@ import * as gmailClient from '../lib/gmailClient';
 import pool from '../lib/db';
 import { runHistoricalScan } from '../jobs/historicalScanner';
 import * as cardsQueries from '../db/queries/cards.queries';
-import * as extractionService from '../services/extraction.service';
 import * as transactionsService from '../services/transactions.service';
 import { randomUUID } from 'crypto';
 import { env } from '../config/env';
 import logger from '../utils/logger';
+import { encrypt, decrypt } from '../utils/encryption';
+import { TerminatorService } from './terminator/terminator';
+import { gptQueue } from './queue/gptQueue';
 
 /**
  * Get Gmail connection status
@@ -36,8 +38,6 @@ export async function getConnectionStatus(userId: string) {
     historyId: user.gmail_history_id,
   };
 }
-
-import { encrypt, decrypt } from '../utils/encryption';
 
 /**
  * Connect Gmail (setup watch)
@@ -183,11 +183,8 @@ export async function getHistoricalScanStatus(userId: string, jobId: string) {
 /**
  * Get terminator report
  */
-import { EmailProcessingLogService } from './emailProcessingLog.service';
-
 export async function getTerminatorReport(userId: string, startDate: Date, endDate: Date) {
-  const logService = new EmailProcessingLogService(pool);
-  return await logService.getTerminatorReport(userId, startDate, endDate);
+  return await TerminatorService.getReport(userId, startDate, endDate);
 }
 
 /**
@@ -241,6 +238,10 @@ export async function getLastSuccessfulSync(userId: string) {
   return rows.length > 0 ? rows[0].completed_at : null;
 }
 
+
+import { SanitizerService } from './sanitize/sanitizer';
+import { RuleProcessor } from './rules/ruleProcessor';
+
 /**
  * Manual map a message to a card
  */
@@ -279,21 +280,53 @@ export async function manualMap(userId: string, messageId: string, cardInfo: {
       const { rows } = await pool.query('SELECT google_refresh_token FROM users WHERE id = $1', [userId]);
       const refreshToken = rows[0]?.google_refresh_token;
       if (!refreshToken) throw new Error('Gmail not connected');
+      // Decrypt
+      const rawToken = decrypt(refreshToken);
 
-      const message = await gmailClient.getMessage(refreshToken, messageId);
+      const message = await gmailClient.getMessage(rawToken, messageId);
       if (!message) throw new Error('Message not found');
 
-      // 3. Extract (forcing the card context if possible, but our extractor is generic)
-      const result = await extractionService.extractTransactionFromEmail(userId, message);
+      // 3. New Architecture Process
+      // Parse
+      const simpleEmail = {
+        messageId: message.id,
+        threadId: message.threadId,
+        from: message.from,
+        to: message.to,
+        subject: message.subject,
+        body: message.bodyText || message.snippet,
+        internalDate: message.date.getTime(),
+        bodyText: message.bodyText,
+        bodyHtml: message.bodyHtml,
+        attachments: message.attachments
+      };
 
-      if (result.status === 'success' && result.transaction) {
+      const fetchAttachment = async (msgId: string, attId: string) =>
+        gmailClient.getAttachment(rawToken, msgId, attId);
+
+      const cleanEmail = await SanitizerService.sanitize(simpleEmail, fetchAttachment);
+
+      // Try Rule
+      const ruleResult = await RuleProcessor.process(cleanEmail);
+
+      let txnData = ruleResult.transaction;
+
+      if (ruleResult.status !== 'passed' || !txnData) {
+        const { gptProcessor } = await import('./gpt/gptProcessor'); // Dynamic import
+        const gptResults = await gptProcessor.processBatch([cleanEmail], userId);
+        if (gptResults.length > 0 && gptResults[0].status === 'success') {
+          txnData = gptResults[0].transaction;
+        }
+      }
+
+      if (txnData) {
+        // Force Card ID override (User provided cardInfo)
+        txnData.cardId = card.id;
+
         await transactionsService.insertFromEmail(userId, {
-          cardId: card.id,
-          amount: result.transaction.amount,
-          transactionDate: result.transaction.transactionDate,
-          merchant: result.transaction.merchant,
-          category: result.transaction.category,
-          emailMessageId: messageId,
+          ...txnData,
+          cardId: card.id, // Explicitly use the manual card
+          emailMessageId: messageId
         });
 
         await pool.query(
@@ -303,7 +336,7 @@ export async function manualMap(userId: string, messageId: string, cardInfo: {
           [jobId]
         );
       } else {
-        throw new Error('Could not extract transaction details even with manual trigger');
+        throw new Error('Could not extract transaction details via Rules or GPT');
       }
 
     } catch (error) {
@@ -323,16 +356,9 @@ export async function manualMap(userId: string, messageId: string, cardInfo: {
 /**
  * Get Pipeline Statistics (Queue depths, etc)
  */
-import { gptQueueManager } from './gptQueueManager';
-
 export async function getPipelineStats(userId: string) {
-  // Get connection status
   const connection = await getConnectionStatus(userId);
-
-  // Get GPT queue stats
-  const queueStats = gptQueueManager.getQueueStats();
-
-  // Get active job if any
+  const queueStats = { queue1: gptQueue.length }; // Simplified for new queue
   const latestJob = await getLatestJob(userId);
   const isJobRunning = latestJob?.status === 'pending' || latestJob?.status === 'running';
 

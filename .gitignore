@@ -13,3 +13,4 @@ backend/deploy.sh
 backend/logs
 .md
 *.md
+*.png

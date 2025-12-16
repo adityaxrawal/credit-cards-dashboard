@@ -1,7 +1,11 @@
 import { decrypt } from '../utils/encryption';
 import pool from '../lib/db';
 import * as gmailClient from '../lib/gmailClient';
-import * as extractionService from '../services/extraction.service';
+import { SanitizerService } from '../services/sanitize/sanitizer';
+import { FilterService } from '../services/filters/filterService';
+import { RuleProcessor } from '../services/rules/ruleProcessor';
+import { TerminatorService } from '../services/terminator/terminator';
+import { gptQueue } from '../services/queue/gptQueue';
 import * as transactionsService from '../services/transactions.service';
 import * as cardsQueries from '../db/queries/cards.queries';
 
@@ -11,8 +15,7 @@ interface PubSubPayload {
 }
 
 /**
- * Gmail Pub/Sub Handler
- * Processes real-time Gmail notifications
+ * Gmail Pub/Sub Handler (Architecture V2)
  */
 export async function handleGmailPubSubMessage(payload: PubSubPayload) {
   console.log('[GmailPubSubHandler] Processing notification:', payload);
@@ -20,7 +23,6 @@ export async function handleGmailPubSubMessage(payload: PubSubPayload) {
   const { emailAddress, historyId } = payload;
 
   try {
-    // Find user by email
     const { rows: users } = await pool.query(
       'SELECT id, google_refresh_token, gmail_history_id FROM users WHERE email = $1',
       [emailAddress]
@@ -32,144 +34,97 @@ export async function handleGmailPubSubMessage(payload: PubSubPayload) {
     }
 
     const user = users[0];
-
-    // ... (in handleGmailPubSubMessage)
-
-    if (!user.google_refresh_token) {
-      console.log('[GmailPubSubHandler] User has no refresh token');
-      return;
-    }
+    if (!user.google_refresh_token) return;
 
     const refreshToken = decrypt(user.google_refresh_token);
 
-    // Fetch history since last known historyId
+    // Fetch history
     const history = await gmailClient.fetchHistory(
       refreshToken,
       user.gmail_history_id || '0'
     );
 
-
     const messageIds = history.messages.map(m => m.id);
     console.log(`[GmailPubSubHandler] Found ${messageIds.length} new messages`);
 
     if (messageIds.length > 0) {
-      // Batch fetch messages
+      // Fetch Raw
       const rawMessages = await gmailClient.batchGetMessages(refreshToken, messageIds);
 
       for (const rawMessage of rawMessages) {
         if (!rawMessage) continue;
 
         try {
-          const message = gmailClient.parseMessage(rawMessage);
+          // Parse raw for simplified access
+          const parsedEmail = gmailClient.parseMessage(rawMessage);
+          const simpleEmail = {
+            messageId: parsedEmail.id,
+            threadId: parsedEmail.threadId,
+            from: parsedEmail.from,
+            to: parsedEmail.to,
+            subject: parsedEmail.subject,
+            body: parsedEmail.bodyText || parsedEmail.snippet,
+            internalDate: parsedEmail.date.getTime(),
+            bodyText: parsedEmail.bodyText,
+            bodyHtml: parsedEmail.bodyHtml,
+            attachments: parsedEmail.attachments
+          };
 
-          // Check if it's a potential transaction email
-          if (!isPotentialTransactionEmail(message)) {
-            console.log(`[GmailPubSubHandler] Message ${message.id} is not a transaction email`);
+          // 1. Sanitize
+          const fetchAttachment = async (msgId: string, attId: string) =>
+            gmailClient.getAttachment(refreshToken, msgId, attId);
+
+          const cleanEmail = await SanitizerService.sanitize(simpleEmail, fetchAttachment);
+
+          // 2. Filter
+          const filterResult = FilterService.filter(cleanEmail);
+          if (!filterResult.shouldProcess) {
+            await TerminatorService.terminate(user.id, cleanEmail.id, filterResult.reason, 'filter');
             continue;
           }
 
-          // Extract transaction
-          const result = await extractionService.extractTransactionFromEmail(user.id, message);
+          // 3. Rule Logic
+          const ruleResult = await RuleProcessor.process(cleanEmail);
 
-          // Log processing
-          await logEmailProcessing(user.id, message.id, result);
-
-          if (result.status === 'success' && result.transaction) {
-            // Find matching card
-            const card = await cardsQueries.findCardByBankAndLastFour(
-              user.id,
-              result.transaction.bankName,
-              result.transaction.lastFourDigits
-            );
-
-            if (card) {
-              // Insert transaction
-              const tx = await transactionsService.insertFromEmail(user.id, {
-                cardId: card.id,
-                amount: result.transaction.amount,
-                transactionDate: result.transaction.transactionDate,
-                merchant: result.transaction.merchant,
-                category: result.transaction.category,
-                emailMessageId: message.id,
-                exactTimestamp: result.transaction.exactTimestamp,
-                emailSubject: result.transaction.emailSubject,
-                gmailThreadId: result.transaction.gmailThreadId,
-                gmailAccountIndex: 1,
-                currencyCode: result.transaction.currencyCode,
-                originalAmount: result.transaction.originalAmount,
-                referenceNumber: result.transaction.referenceNumber,
-                transactionSubtype: result.transaction.transactionType,
+          if (ruleResult.status === 'passed' && ruleResult.transaction) {
+            // Insert
+            try {
+              await transactionsService.createTransactionFromExtraction(user.id, {
+                ...ruleResult.transaction,
+                extractionMethod: 'rule_based_realtime',
+                confidence: ruleResult.confidenceScore || 1.0
+              }, {
+                id: cleanEmail.id,
+                subject: cleanEmail.subject,
+                body: cleanEmail.cleanedBody,
+                from: cleanEmail.from
               });
-
-              console.log(`[GmailPubSubHandler] Created transaction ${tx?.id}`);
-            } else {
-              console.warn(`[GmailPubSubHandler] No card found for ${result.transaction.bankName} ${result.transaction.lastFourDigits}`);
+              console.log(`[PubSub] Transaction created for ${cleanEmail.id}`);
+            } catch (err: any) {
+              if (err.code !== '23505') console.error(`[PubSub] Insert failed:`, err);
             }
+          } else {
+            // 4. Queue for GPT
+            console.log(`[PubSub] Queuing ${cleanEmail.id} for GPT`);
+            gptQueue.enqueue({
+              ...cleanEmail,
+              userId: user.id
+            });
           }
+
         } catch (error) {
           console.error(`[GmailPubSubHandler] Error processing message ${rawMessage.id}:`, error);
         }
       }
     }
 
-    // Update user's historyId
+    // Update historyId
     await pool.query(
       'UPDATE users SET gmail_history_id = $1, updated_at = NOW() WHERE id = $2',
       [historyId, user.id]
     );
 
-    console.log('[GmailPubSubHandler] Completed');
   } catch (error) {
     console.error('[GmailPubSubHandler] Error:', error);
-  }
-}
-
-/**
- * Check if email is potentially a transaction notification
- */
-function isPotentialTransactionEmail(message: { from: string; subject: string }): boolean {
-  const bankPatterns = [
-    /sbi|state bank/i,
-    /hdfc/i,
-    /icici/i,
-    /axis/i,
-    /idfc/i,
-    /indusind/i,
-    /yes bank/i,
-  ];
-
-  const subjectPatterns = [
-    /transaction/i,
-    /spent/i,
-    /purchase/i,
-    /card.*used/i,
-  ];
-
-  const isBank = bankPatterns.some(pattern => pattern.test(message.from));
-  const isTransaction = subjectPatterns.some(pattern => pattern.test(message.subject));
-
-  return isBank && isTransaction;
-}
-
-/**
- * Log email processing
- */
-async function logEmailProcessing(
-  userId: string,
-  emailMessageId: string,
-  result: { status: string; error?: string; transaction?: unknown }
-) {
-  try {
-    await pool.query(
-      `INSERT INTO email_processing_log (user_id, email_message_id, processing_status, error_message, processed_at)
-       VALUES ($1, $2, $3, $4, NOW())
-       ON CONFLICT (email_message_id) DO UPDATE SET
-         processing_status = EXCLUDED.processing_status,
-         error_message = EXCLUDED.error_message,
-         processed_at = EXCLUDED.processed_at`,
-      [userId, emailMessageId, result.status, result.error || null]
-    );
-  } catch (error) {
-    console.error('[GmailPubSubHandler] Error logging email processing:', error);
   }
 }

@@ -1,17 +1,19 @@
 import { decrypt } from '../utils/encryption';
 import pool from '../lib/db';
 import * as gmailClient from '../lib/gmailClient';
-import { CreditCardMailDetector } from '../services/creditCardMailDetector';
-import { SimplifiedEmail } from '../types';
-import { parallelProcessingCoordinator } from '../services/parallelProcessingCoordinator';
-import { gptQueueManager } from '../services/gptQueueManager';
+import { GmailFetcherService } from '../services/gmail/fetcher';
+import { SanitizerService } from '../services/sanitize/sanitizer';
+import { FilterService } from '../services/filters/filterService';
+import { RuleProcessor } from '../services/rules/ruleProcessor';
+import { TerminatorService } from '../services/terminator/terminator';
+import { gptQueue } from '../services/queue/gptQueue';
+import { gptProcessor } from '../services/gpt/gptProcessor';
+import * as transactionsService from '../services/transactions.service';
 import dayjs from 'dayjs';
 import logger from '../utils/logger';
-import { EmailProcessingLogService } from '../services/emailProcessingLog.service';
-import * as extractionService from '../services/extraction.service';
 
 /**
- * Historical Email Scanner (Parallel Version)
+ * Historical Email Scanner (Refactored for Architecture V2)
  */
 export async function runHistoricalScan(
   userId: string,
@@ -19,10 +21,10 @@ export async function runHistoricalScan(
   fromDate?: Date,
   toDate?: Date
 ) {
-  logger.info(`[HistoricalScanner] Starting PARALLEL scan ${jobId} for user:`, userId);
+  logger.info(`[HistoricalScanner] Starting NEW ARCHITECTURE scan ${jobId} for user:`, userId);
 
   try {
-    // ... (User check and Gmail token check same as before) ...
+    // 1. Validate User & Token
     const { rows: users } = await pool.query(
       'SELECT id, email, google_refresh_token FROM users WHERE id = $1',
       [userId]
@@ -30,16 +32,13 @@ export async function runHistoricalScan(
     if (users.length === 0) throw new Error('User not found');
     const user = users[0];
     if (!user.google_refresh_token) throw new Error('Gmail not connected');
-
-    // Decrypt token
     const refreshToken = decrypt(user.google_refresh_token);
 
-    // ... (Date range and Query building same as before) ...
-    const fixedStartDate = dayjs().subtract(90, 'day');
-    const fromDateToUse = fromDate ? dayjs(fromDate) : fixedStartDate;
+    // 2. Setup Query
+    const fromDateToUse = fromDate ? dayjs(fromDate) : dayjs().subtract(90, 'day');
     const from = fromDateToUse.format('YYYY/MM/DD');
     const to = toDate ? dayjs(toDate).format('YYYY/MM/DD') : dayjs().format('YYYY/MM/DD');
-    const senderFilter = CreditCardMailDetector.SENDER_DOMAINS.map(d => `from:"${d}"`).join(' OR ');
+    const senderFilter = FilterService['SENDER_DOMAINS'].map(d => `from:"${d}"`).join(' OR ');
     const query = `after:${from} before:${to} (${senderFilter})`;
 
     await pool.query(
@@ -49,156 +48,109 @@ export async function runHistoricalScan(
       [jobId]
     );
 
-    const FETCH_BATCH_SIZE = 200; // Spec: 200 emails per batch for optimal throughput
+    const FETCH_BATCH_SIZE = 200;
+    const PARALLEL_LIMIT = 20;
     let pageToken: string | undefined = undefined;
     let totalFetched = 0;
-    let ruleBasedSuccessCount = 0;
-    let ruleBasedFailureCount = 0; // effectively queued for GPT
-    let terminatorCount = 0;
-    let queuedForGptCount = 0;
-    let batchIndex = 0;
+    let stats = { success: 0, failed: 0, queuedGpt: 0, terminated: 0 };
 
-    // Fetch Loop
+    // 3. Main Loop
     do {
-      batchIndex++;
-      logger.info(`[HistoricalScanner] Fetching batch ${batchIndex}...`);
+      logger.info(`[HistoricalScanner] Fetching batch...`);
+      const { messages, nextPageToken } = await GmailFetcherService.fetchBatch(refreshToken, query, FETCH_BATCH_SIZE, pageToken);
+      pageToken = nextPageToken;
 
-      const response = await gmailClient.listMessages(refreshToken, query, FETCH_BATCH_SIZE, pageToken);
-      const messages = response.messages;
-      pageToken = response.nextPageToken;
+      if (messages.length === 0) continue;
+      totalFetched += messages.length;
 
+      // Split into chunks of 20 for Parallel Processing
+      for (let i = 0; i < messages.length; i += PARALLEL_LIMIT) {
+        const chunk = messages.slice(i, i + PARALLEL_LIMIT);
 
-      // Fetch Content
-      const messageIds = messages.map(m => m.id);
-      const rawMessages = await gmailClient.batchGetMessages(refreshToken, messageIds, 50);
+        await Promise.all(chunk.map(async (rawEmail) => {
+          try {
+            const fetchAttachment = async (msgId: string, attId: string) => {
+              return gmailClient.getAttachment(refreshToken, msgId, attId);
+            };
 
-      // Prepare for Coordinator and DB Log
-      const emailsToProcess: extractionService.ExtractionInput[] = [];
-      const messagesToLog: any[] = [];
+            const cleanEmail = await SanitizerService.sanitize(rawEmail, fetchAttachment);
+            const filterResult = FilterService.filter(cleanEmail);
 
-      for (const raw of rawMessages) {
-        if (!raw) continue;
-        try {
-          const parsedEmail = gmailClient.parseMessage(raw);
-          const simplifiedEmail = {
-            messageId: parsedEmail.id,
-            threadId: parsedEmail.threadId,
-            from: parsedEmail.from,
-            to: parsedEmail.to,
-            subject: parsedEmail.subject,
-            body: parsedEmail.bodyText || parsedEmail.bodyHtml || parsedEmail.snippet,
-            internalDate: parsedEmail.date.getTime()
-          };
+            if (!filterResult.shouldProcess) {
+              stats.terminated++;
+              await TerminatorService.terminate(userId, cleanEmail.id, filterResult.reason, 'filter');
+              return;
+            }
 
-          // Collect for Bulk Insert
-          messagesToLog.push([
-            userId,
-            jobId,
-            simplifiedEmail.messageId,
-            simplifiedEmail.from.substring(0, 500),
-            simplifiedEmail.subject.substring(0, 1000),
-            simplifiedEmail.body.substring(0, 500),
-            simplifiedEmail.internalDate,
-            new Date() // scanned_at matches NOW()
-          ]);
+            const ruleResult = await RuleProcessor.process(cleanEmail);
 
-          // Convert to ExtractionInput
-          emailsToProcess.push({
-            id: parsedEmail.id,
-            subject: parsedEmail.subject,
-            from: parsedEmail.from,
-            bodyText: parsedEmail.bodyText || '',
-            bodyHtml: parsedEmail.bodyHtml,
-            date: parsedEmail.date,
-            threadId: parsedEmail.threadId,
-            attachments: parsedEmail.attachments?.map(a => ({ ...a, id: a.id || '', filename: a.filename || '', mimeType: a.mimeType || '' }))
-          });
+            if (ruleResult.status === 'passed' && ruleResult.transaction) {
+              try {
+                await transactionsService.createTransactionFromExtraction(userId, {
+                  ...ruleResult.transaction,
+                  extractionMethod: 'rule_based',
+                  confidence: ruleResult.confidenceScore || 1.0
+                }, {
+                  id: cleanEmail.id,
+                  subject: cleanEmail.subject,
+                  body: cleanEmail.cleanedBody,
+                  from: cleanEmail.from
+                });
+                stats.success++;
+                await pool.query(
+                  `INSERT INTO email_processing_log (user_id, email_message_id, processing_status, reason, created_at)
+                               VALUES ($1, $2, 'success', 'Rule-based success', NOW()) ON CONFLICT (email_message_id) DO UPDATE SET processing_status='success'`,
+                  [userId, cleanEmail.id]
+                );
+              } catch (insertErr: any) {
+                if (insertErr.code === '23505') { // Duplicate
+                  stats.terminated++;
+                } else {
+                  console.error(`[Scanner] Insert failed:`, insertErr);
+                  stats.failed++;
+                }
+              }
+            } else {
+              stats.queuedGpt++;
+              gptQueue.enqueue({
+                ...cleanEmail,
+                userId: userId
+              });
+            }
 
-        } catch (e) {
-          logger.warn(`Failed to parse/prep message ${raw.id}`, e);
-        }
+          } catch (e) {
+            console.error(`[Scanner] Error processing email ${rawEmail.messageId}`, e);
+            stats.failed++;
+          }
+        }));
       }
 
-      // BULK INSERT logs
-      if (messagesToLog.length > 0) {
-        try {
-          // Construct param place holders: ($1, $2, ..), ($9, $10...)
-          const values: any[] = [];
-          const placeholders = messagesToLog.map((_, i) => {
-            const offset = i * 8;
-            return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`;
-          }).join(', ');
-
-          messagesToLog.forEach(row => values.push(...row));
-
-          await pool.query(
-            `INSERT INTO gmail_scanned_emails 
-                  (user_id, scan_job_id, message_id, sender, subject, snippet, internal_date, scanned_at)
-                  VALUES ${placeholders}
-                  ON CONFLICT (user_id, message_id) DO NOTHING`,
-            values
-          );
-        } catch (e) {
-          logger.error('Bulk insert failed for scanned emails', e);
-        }
-      }
-
-      // PARALLEL PROCESSING
-      if (emailsToProcess.length > 0) {
-        logger.info(`[HistoricalScanner] Sending ${emailsToProcess.length} emails to Parallel Coordinator...`);
-        const stats = await parallelProcessingCoordinator.processEmails(emailsToProcess, userId, jobId);
-
-        // Update stats
-        totalFetched += emailsToProcess.length;
-        ruleBasedSuccessCount += stats.success;
-        terminatorCount += stats.ignored; // Ignored = not processed/skipped
-        queuedForGptCount += stats.queued;
-        ruleBasedFailureCount += stats.queued;
-
-        // Update Job using calculated stats
-        await pool.query(
-          `UPDATE gmail_sync_jobs 
-               SET total_messages = $1, 
-                   rule_based_success = $2,
-                   rule_based_failure = $3,
-                   queued_for_gpt = $4,
-                   terminated_count = $5,
-                   last_update_at = NOW()
-               WHERE id = $6`,
-          [totalFetched, ruleBasedSuccessCount, ruleBasedFailureCount, queuedForGptCount, terminatorCount, jobId]
-        );
-      }
+      await pool.query(
+        `UPDATE gmail_sync_jobs 
+           SET total_messages = $1, rule_based_success = $2, rule_based_failure = $3, queued_for_gpt = $4, terminated_count = $5, last_update_at = NOW()
+           WHERE id = $6`,
+        [totalFetched, stats.success, stats.failed, stats.queuedGpt, stats.terminated, jobId]
+      );
 
     } while (pageToken);
 
-    logger.info(`[HistoricalScanner] Fetching complete. Waiting for GPT queues...`);
+    logger.info(`[HistoricalScanner] Fetching complete. Flushing GPT queue...`);
 
-    // NOTE: In the new architecture, GPT processing is asynchronous via events.
-    // If the scanner script exits, the GPT processor (if running in same process) might die.
-    // We should probably wait until queues are drained if we are running as a script.
+    (gptQueue as any).flush();
 
-    // Check queues
-    let queueStats = gptQueueManager.getQueueStats();
     let retries = 0;
-    while ((queueStats.queue1 > 0 || queueStats.queue2 > 0 || queueStats.queue3 > 0) && retries < 30) {
-      logger.info(`[HistoricalScanner] Waiting for queues to drain:`, queueStats);
-      await new Promise(r => setTimeout(r, 2000));
-      queueStats = gptQueueManager.getQueueStats();
+    while ((gptQueue.length > 0) && retries < 60) {
+      await new Promise(r => setTimeout(r, 1000));
       retries++;
     }
 
-    // Also wait for active batches? gptProcessor doesn't expose active count easily unless we add getter.
-    // Ideally the main process keeps running.
-
-    // Update to PROCESSING state (for UI)
     await pool.query(
-      `UPDATE gmail_sync_jobs 
-         SET current_step = 'PROCESSING', last_update_at = NOW()
-         WHERE id = $1`,
+      `UPDATE gmail_sync_jobs SET status = 'completed', current_step = 'COMPLETED', progress = 100, last_update_at = NOW() WHERE id = $1`,
       [jobId]
     );
 
     return { total: totalFetched };
+
   } catch (error) {
     logger.error(`[HistoricalScanner] Failed:`, error);
     await pool.query(
