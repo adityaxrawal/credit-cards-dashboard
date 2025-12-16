@@ -1,5 +1,4 @@
 import * as cheerio from 'cheerio';
-import { PdfParser } from '../../services/extraction/pdfParser'; // Temporary import until moved
 import { SimplifiedEmail } from '../../types';
 
 export interface CleanEmailContent {
@@ -9,7 +8,11 @@ export interface CleanEmailContent {
     date: Date;
     cleanedBody: string;
     hasAttachments: boolean;
-    pdfContent?: string[]; // Array of text from PDF attachments
+    attachments?: {
+        filename: string;
+        mimeType: string;
+        data: Buffer;
+    }[];
     raw: SimplifiedEmail; // Keep generic reference if needed, but prefer specific fields
 }
 
@@ -26,16 +29,24 @@ export class SanitizerService {
         // 1. Sanitize Body
         let cleanedBody = this.processBody(rawEmail.body, rawEmail.bodyHtml);
 
-        // 2. Process Attachments (PDFs only) - Convert to text
-        const pdfContent: string[] = [];
+        // 2. Extract Raw Attachments (No Parsing)
+        const attachments: { filename: string; mimeType: string; data: Buffer }[] = [];
+
         if (rawEmail.attachments && rawEmail.attachments.length > 0 && fetchAttachment) {
             for (const att of rawEmail.attachments) {
+                // Only fetch PDF attachments
                 if (att.mimeType === 'application/pdf' || att.filename.toLowerCase().endsWith('.pdf')) {
-                    const buffer = await fetchAttachment(rawEmail.messageId, att.id);
-                    if (buffer) {
-                        const text = await PdfParser.extractText(buffer);
-                        const cleanPdf = PdfParser.cleanText(text);
-                        pdfContent.push(cleanPdf);
+                    try {
+                        const buffer = await fetchAttachment(rawEmail.messageId, att.id);
+                        if (buffer) {
+                            attachments.push({
+                                filename: att.filename,
+                                mimeType: att.mimeType,
+                                data: buffer
+                            });
+                        }
+                    } catch (err) {
+                        console.warn(`[Sanitizer] Failed to fetch attachment ${att.filename} for email ${rawEmail.messageId}`, err);
                     }
                 }
             }
@@ -47,8 +58,8 @@ export class SanitizerService {
             from: rawEmail.from,
             date: new Date(rawEmail.internalDate),
             cleanedBody,
-            hasAttachments: pdfContent.length > 0,
-            pdfContent: pdfContent.length > 0 ? pdfContent : undefined,
+            hasAttachments: attachments.length > 0,
+            attachments: attachments.length > 0 ? attachments : undefined,
             raw: rawEmail
         };
     }

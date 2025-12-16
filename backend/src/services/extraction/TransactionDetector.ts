@@ -140,6 +140,28 @@ export class TransactionDetector {
     }
 
     /**
+     * Check if email is likely a bank statement
+     */
+    public isBankStatement(sender: string, subject: string, bodySnippet: string): boolean {
+        // 1. Must be from a known bank
+        const bankName = this.identifyBank(sender);
+        if (!bankName) return false;
+
+        // 2. Look for explicit statement keywords in Subject or Body
+        const STATEMENT_KEYWORDS = [
+            /statement/i,
+            /account\s+summary/i,
+            /transaction\s+history/i,
+            /consolidated/i,
+            /e-?statement/i
+        ];
+
+        const textToCheck = (subject + ' ' + bodySnippet).toLowerCase();
+
+        return STATEMENT_KEYWORDS.some(pattern => pattern.test(textToCheck));
+    }
+
+    /**
      * Stage 3: Keyword Analysis
      */
     public analyzeKeywords(content: string, pattern: BankPattern): number {
@@ -354,6 +376,91 @@ export class TransactionDetector {
         if (m.match(/linkedin|insurance|mutual|investment|stocks/)) return 'Finance';
 
         return 'Shopping'; // Default
+    }
+
+    /**
+     * Extract multiple transactions from a Statement Text (PDF content)
+     */
+    public extractFromStatement(
+        text: string,
+        bankName: string,
+        defaultDate: string
+    ): Partial<ExtractedTransaction>[] {
+        const lines = text.split('\n');
+        const transactions: Partial<ExtractedTransaction>[] = [];
+
+        // Simple Heuristic for Statement Lines:
+        // DATE ... DESCRIPTION ... AMOUNT
+        // Regex to find a date at start, and a number at end (or near end)
+
+        // Date formats: DD/MM/YYYY, DD-MMM-YYYY, DD MMM
+        const dateStartRegex = /^(\d{1,2}[-\/\s](?:\w{3}|\d{1,2})[-\/\s]?\d{2,4})/;
+        // Amount: 1,234.56 or 1234.56. (Dr/Cr suffix optional)
+        const amountRegex = /([\d,]+\.\d{2})(?:\s*(?:Cr|Dr))?$/i;
+
+        for (const line of lines) {
+            const cleanLine = line.trim();
+            if (!cleanLine) continue;
+
+            // 1. Check for Date
+            const dateMatch = cleanLine.match(dateStartRegex);
+            if (!dateMatch) continue;
+
+            const rawDate = dateMatch[1];
+
+            // 2. Check for Amount
+            const amountMatch = cleanLine.match(amountRegex);
+            if (!amountMatch) continue;
+
+            let amount = parseFloat(amountMatch[1].replace(/,/g, ''));
+            if (isNaN(amount) || amount === 0) continue;
+
+            // 3. Extract Description (Text between Date and Amount)
+            // Remove Date from start
+            let description = cleanLine.substring(rawDate.length).trim();
+            // Remove Amount from end
+            const lastIndex = description.lastIndexOf(amountMatch[0]); // Be careful if amount appears in desc
+            // Simpler: just remove the amount match string from the end of description if it matches
+            if (description.endsWith(amountMatch[0])) {
+                description = description.substring(0, description.length - amountMatch[0].length).trim();
+            } else if (amountMatch.index && amountMatch.index > rawDate.length) {
+                // If regex matched at specific index in original line
+                // This is hard to map back to substring logic perfectly without more complex parsing
+                // Let's rely on removal from end or regex replace
+                description = description.replace(amountMatch[0], '').trim();
+            }
+
+            // Cleanup description
+            description = description.replace(/\s*(?:Cr|Dr)$/i, '').trim();
+            description = this.cleanMerchant(description);
+
+            if (description.length < 3) continue; // too short
+
+            const date = this.parseDate(rawDate);
+
+            // Construct Transaction
+            // Note: We might miss some fields like Card Number if not on every line.
+            transactions.push({
+                amount,
+                date: date || defaultDate,
+                merchant: description,
+                bank: bankName,
+                currency: 'INR',
+                category: this.categorizeTransaction(description),
+                detectionMethod: 'rule_based',
+                confidence: 0.9, // High confidence for statement lines
+                needsReview: false,
+                evidence: {
+                    amountMatch: amount.toString(),
+                    merchantMatch: description,
+                    dateMatch: rawDate,
+                    cardMatch: '',
+                    bank: bankName
+                }
+            });
+        }
+
+        return transactions;
     }
 
     public generateFingerprint(amount: number, merchant: string, date: string, cardLast4: string): string {

@@ -9,20 +9,23 @@ const pool = new Pool({
   },
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
-  idleTimeoutMillis: 20000, // Close idle clients after 20s (Supabase pooler timeout is 60s)
+  idleTimeoutMillis: 60000, // Close idle clients after 60s
   connectionTimeoutMillis: 10000, // 10s connection timeout
-  max: 10, // Limit max connections to avoid pool exhaustion
+  max: 10, // Limit max connections
   allowExitOnIdle: false, // Keep pool alive even when idle
 });
 
 // Log pool status periodically in development
 if (env.NODE_ENV === 'development') {
   setInterval(() => {
-    logger.debug('[DB Pool] Status', {
-      total: pool.totalCount,
-      idle: pool.idleCount,
-      waiting: pool.waitingCount
-    });
+    // Only log if we have active clients to reduce empty noise
+    if (pool.totalCount > 0) {
+      logger.debug('[DB Pool] Status', {
+        total: pool.totalCount,
+        idle: pool.idleCount,
+        waiting: pool.waitingCount
+      });
+    }
   }, 60000); // Every minute
 }
 
@@ -44,14 +47,14 @@ pool.on('error', (err, client) => {
   // Don't exit process - pool will automatically reconnect
 });
 
-// Handle pool connect events
-pool.on('connect', (client) => {
-  logger.debug('[DB Pool] New client connected');
-});
+// Handle pool connect events - SILENCED to reduce noise
+// pool.on('connect', (client) => {
+//   logger.debug('[DB Pool] New client connected');
+// });
 
-pool.on('remove', (client) => {
-  logger.debug('[DB Pool] Client removed from pool');
-});
+// pool.on('remove', (client) => {
+//   logger.debug('[DB Pool] Client removed from pool');
+// });
 
 export const query = async (text: string, params?: any[]) => {
   const start = Date.now();

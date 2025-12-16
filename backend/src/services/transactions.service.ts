@@ -159,6 +159,8 @@ export async function insertFromEmail(
     originalAmount?: number;
     referenceNumber?: string;
     transactionSubtype?: string;
+    scanJobId?: string;
+    rawEmailId?: string;
   }
 ) {
   // Create fingerprint for deduplication
@@ -192,6 +194,8 @@ export async function insertFromEmail(
     originalAmount: data.originalAmount,
     referenceNumber: data.referenceNumber,
     transactionSubtype: data.transactionSubtype,
+    scanJobId: data.scanJobId,
+    rawEmailId: data.rawEmailId
   });
 }
 
@@ -271,7 +275,8 @@ export async function createTransactionFromExtraction(
     confidence?: number;
     [key: string]: any;
   },
-  email: { id: string; subject: string; body: string; from: string }
+  email: { id: string; subject: string; body: string; from: string },
+  context?: { scanJobId?: string; rawEmailId?: string }
 ) {
 
   // DETECT CARD FIRST
@@ -292,22 +297,7 @@ export async function createTransactionFromExtraction(
       cardName: undefined
     });
     cardId = autoCard.cardId;
-    // Fetch full card object for later usage if needed (like fingerprinting with card.id)
-    // Actually autoCard.cardId is enough for transaction creation.
   } else if ('status' in cardDetection && cardDetection.status === 'FOUND') {
-    // It was found by regex + DB lookup inside detection service
-    // But detection service returns "cardName" not ID?
-    // Wait, my previous edit to cardDetectionService RETURNED { ... matched properties }
-    // but didn't return ID.
-    // I should have returned ID in cardDetectionService?
-    // Strategy 3 in cardDetectionService calls findCardByBankAndLastFour which returns Card.
-    // cardDetectionService returns CardDetectionResult which DOES NOT have ID.
-    // This is a disconnect.
-
-    // I should update cardDetectionService to include cardId in the result if found.
-    // OR I lookup again here.
-    // Looking up again is safer if I don't want to change CardDetectionResult interface too much right now.
-
     const existing = await cardsQueries.findCardByBankAndLastFour(
       userId,
       cardDetection.bankName,
@@ -321,11 +311,6 @@ export async function createTransactionFromExtraction(
     }
   } else {
     // Confidence low, or no card found.
-    // Try to auto-create logic wrapper?
-    // User's request says: use autoCreateOrFindCard.
-
-    // Let's just use autoCreateOrFindCard for ALL cases where we have bank+last4?
-
     const bankName = 'bankName' in cardDetection ? cardDetection.bankName : undefined;
     const last4 = 'last4Digits' in cardDetection ? cardDetection.last4Digits :
       ('last4' in cardDetection ? (cardDetection as any).last4 : undefined);
@@ -364,9 +349,7 @@ export async function createTransactionFromExtraction(
   const finalBankName = 'bankName' in cardDetection ? cardDetection.bankName : ('bankName' in cardDetection ? (cardDetection as any).bankName : 'Unknown');
   const finalLast4 = 'last4Digits' in cardDetection ? cardDetection.last4Digits : ('last4' in cardDetection ? (cardDetection as any).last4 : 'Unknown');
 
-  const fingerprint = crypto.createHash('sha256')
-    .update(`${card.id}:${extractedData.amount}:${extractedData.merchant}:${extractedData.date}`)
-    .digest('hex');
+  // const fingerprint = crypto.createHash('sha256')  // Calculated inside query/service now
 
   const metadata = {
     card_detection_method: detectionMethod,
@@ -374,12 +357,7 @@ export async function createTransactionFromExtraction(
     last4: finalLast4
   };
 
-  // Insert using existing query helper or direct SQL
-  // existing helper `insertFromEmail` does a lot of this.
-  // I will reuse `insertFromEmail` logic but bypass its card resolution?
-  // `insertFromEmail` takes `cardId`.
-
-  // So I can just call:
+  // Insert using helper
   return await insertFromEmail(userId, {
     cardId: card.id,
     amount: extractedData.amount,
@@ -388,6 +366,8 @@ export async function createTransactionFromExtraction(
     category: 'Uncategorized',
     emailMessageId: email.id,
     metadata: metadata,
-    emailSubject: email.subject
+    emailSubject: email.subject,
+    scanJobId: context?.scanJobId,
+    rawEmailId: context?.rawEmailId
   });
 }

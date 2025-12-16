@@ -30,9 +30,9 @@ export class GmailFetcherService {
         // So Fetcher should return RAW or close to raw.
         // SimplifiedEmail is a good interchange format.
 
-        // Using batch size of 50 for API calls to avoid limits
+        // Using batch size of 200 for API calls to maximize throughput
         const messageIds = messageStubs.map(m => m.id);
-        const rawMessages = await gmailClient.batchGetMessages(refreshToken, messageIds, 50);
+        const rawMessages = await gmailClient.batchGetMessages(refreshToken, messageIds, 200);
 
         const validEmails: SimplifiedEmail[] = [];
 
@@ -51,6 +51,7 @@ export class GmailFetcherService {
                     // We need full body info for sanitizer
                     bodyText: parsed.bodyText,
                     bodyHtml: parsed.bodyHtml,
+                    snippet: parsed.snippet,
                     attachments: parsed.attachments
                 } as any); // Type cast if SimplifiedEmail doesn't match fully?
                 // I need to check SimplifiedEmail type in types/index.ts.

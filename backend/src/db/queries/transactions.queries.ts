@@ -196,6 +196,8 @@ export async function createTransaction(data: {
   originalAmount?: number;
   referenceNumber?: string;
   transactionSubtype?: string;
+  scanJobId?: string;
+  rawEmailId?: string;
 }): Promise<Transaction | null> {
   // Truncate fields to match database VARCHAR limits
   const truncatedMerchant = data.merchant?.substring(0, 255) || data.merchant;
@@ -210,8 +212,9 @@ export async function createTransaction(data: {
       amount, transaction_type, description, bill_month, bill_year,
       email_message_id, txn_fingerprint, is_manually_added, metadata,
       exact_timestamp, email_subject, gmail_thread_id, gmail_account_index,
-      currency_code, original_amount, reference_number, transaction_subtype
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+      currency_code, original_amount, reference_number, transaction_subtype,
+      scan_job_id, raw_email_id
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
     ON CONFLICT (email_message_id, txn_fingerprint) DO NOTHING
     RETURNING *`,
     [
@@ -237,6 +240,8 @@ export async function createTransaction(data: {
       data.originalAmount || null,
       truncatedReferenceNumber,
       data.transactionSubtype || null,
+      data.scanJobId || null,
+      data.rawEmailId || null
     ]
   );
   return rows[0] || null;
@@ -269,6 +274,8 @@ export async function createTransactionsBulk(dataList: Array<{
   originalAmount?: number;
   referenceNumber?: string;
   transactionSubtype?: string;
+  scanJobId?: string;
+  rawEmailId?: string;
 }>): Promise<Transaction[]> {
   if (dataList.length === 0) return [];
 
@@ -289,7 +296,7 @@ export async function createTransactionsBulk(dataList: Array<{
       const truncatedReferenceNumber = data.referenceNumber?.substring(0, 100) || data.referenceNumber;
 
       placeholders.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13}, $${paramIndex + 14}, $${paramIndex + 15}, $${paramIndex + 16}, $${paramIndex + 17}, $${paramIndex + 18}, $${paramIndex + 19}, $${paramIndex + 20}, $${paramIndex + 21})`
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13}, $${paramIndex + 14}, $${paramIndex + 15}, $${paramIndex + 16}, $${paramIndex + 17}, $${paramIndex + 18}, $${paramIndex + 19}, $${paramIndex + 20}, $${paramIndex + 21}, $${paramIndex + 22}, $${paramIndex + 23})`
       );
       values.push(
         data.userId,
@@ -313,9 +320,11 @@ export async function createTransactionsBulk(dataList: Array<{
         data.currencyCode || null,
         data.originalAmount || null,
         truncatedReferenceNumber,
-        data.transactionSubtype || null
+        data.transactionSubtype || null,
+        data.scanJobId || null,
+        data.rawEmailId || null
       );
-      paramIndex += 22;
+      paramIndex += 24;
     }
 
     const query = `
@@ -324,7 +333,8 @@ export async function createTransactionsBulk(dataList: Array<{
         amount, transaction_type, description, bill_month, bill_year,
         email_message_id, txn_fingerprint, is_manually_added, metadata,
         exact_timestamp, email_subject, gmail_thread_id, gmail_account_index,
-        currency_code, original_amount, reference_number, transaction_subtype
+        currency_code, original_amount, reference_number, transaction_subtype,
+        scan_job_id, raw_email_id
       ) VALUES ${placeholders.join(', ')}
       ON CONFLICT (email_message_id, txn_fingerprint) DO NOTHING
       RETURNING *

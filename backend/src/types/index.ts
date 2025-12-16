@@ -9,6 +9,7 @@ export interface SimplifiedEmail {
     // New fields for architecture
     bodyText?: string;
     bodyHtml?: string;
+    snippet?: string;
     attachments?: {
         id: string;
         filename: string;

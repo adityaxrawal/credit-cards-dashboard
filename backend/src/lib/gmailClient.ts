@@ -2,7 +2,6 @@ import { google, gmail_v1 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import pLimit from 'p-limit';
 import { env } from '../config/env';
-import { CircuitBreaker } from '../utils/circuitBreaker';
 
 const oauth2Client = new OAuth2Client(
   env.GOOGLE_CLIENT_ID,
@@ -10,86 +9,28 @@ const oauth2Client = new OAuth2Client(
   env.GOOGLE_REDIRECT_URI
 );
 
-const gmailCircuitBreaker = new CircuitBreaker('GmailAPI', {
-  failureThreshold: 10, // Higher threshold for Gmail as it's chatty
-  resetTimeout: 30000 // 30s backoff
-});
+// --- Simple Retry Utility ---
 
-// --- Rate Limiter & Retry Utilities ---
-
-class RateLimiter {
-  private queue: Array<() => void> = [];
-  private processing = false;
-  private lastRequestTime = 0;
-  // Google Gmail Quota varies, but ~250 quota units/sec/user is a safe-ish baseline for high load,
-  // but "Queries per minute" (QPM) is often around 600-1200 depending on tier.
-  // Let's hold to ~5 requests/sec = 300 QPM to be very safe and avoid locking.
-  private minIntervalMs = 200; // 5 req/sec
-
-  async schedule<T>(fn: () => Promise<T>): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      this.queue.push(async () => {
-        try {
-          const result = await fn();
-          resolve(result);
-        } catch (error) {
-          reject(error);
-        }
-      });
-      this.processQueue();
-    });
-  }
-
-  private async processQueue() {
-    if (this.processing) return;
-    this.processing = true;
-
-    while (this.queue.length > 0) {
-      const task = this.queue.shift();
-      if (!task) break;
-
-      const now = Date.now();
-      const timeSinceLast = now - this.lastRequestTime;
-      const waitTime = Math.max(0, this.minIntervalMs - timeSinceLast);
-
-      if (waitTime > 0) {
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-      }
-
-      this.lastRequestTime = Date.now();
-
-      // Execute task without awaiting results to prevent head-of-line blocking
-      // The promise resolution is handled inside the task wrapper
-      task();
-    }
-
-    this.processing = false;
-  }
-}
-
-const gmailRateLimiter = new RateLimiter();
-
-async function retryWithBackoff<T>(fn: () => Promise<T>, retries = 3, initialDelay = 1000): Promise<T> {
+async function retryWithBackoff<T>(fn: () => Promise<T>, retries = 2, initialDelay = 1000): Promise<T> {
   let attempt = 0;
   while (true) {
     try {
-      // Add 20s timeout per attempt
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Request timed out')), 20000)
-      );
-
-      return await Promise.race([fn(), timeoutPromise]) as T;
+      return await fn();
     } catch (error: any) {
       attempt++;
       if (attempt > retries) {
         throw error;
       }
 
-      // Retry on 429 (Too Many Requests) or 403 (Rate Limit Exceeded) or 5xx (Server Error)
+      // Retry on 429 (Too Many Requests), 403 (Rate Limit), or 5xx (Server Error)
       const status = error.code || error.response?.status;
       if (status === 429 || status === 403 || (status >= 500 && status < 600)) {
         const delay = initialDelay * Math.pow(2, attempt - 1);
-        console.warn(`[GmailClient] Rate limit/Error encountered (Status: ${status}). Retrying in ${delay}ms... (Attempt ${attempt}/${retries})`);
+        if (status === 429) {
+          console.warn(`[GmailClient] Rate limit hit (429). Backing off ${delay}ms...`);
+        } else {
+          console.warn(`[GmailClient] Error ${status}. Retrying in ${delay}ms... (Attempt ${attempt}/${retries})`);
+        }
         await new Promise(resolve => setTimeout(resolve, delay));
       } else {
         throw error;
@@ -98,9 +39,11 @@ async function retryWithBackoff<T>(fn: () => Promise<T>, retries = 3, initialDel
   }
 }
 
-// Wrapper for API calls to apply rate limit + retry + circuit breaker
+/**
+ * Execute a Gmail API call with retry logic.
+ */
 async function callGmailApi<T>(fn: () => Promise<T>): Promise<T> {
-  return gmailCircuitBreaker.execute(() => gmailRateLimiter.schedule(() => retryWithBackoff(fn)));
+  return retryWithBackoff(fn);
 }
 
 // --------------------------------------
@@ -128,7 +71,6 @@ function getGmailClient(refreshToken: string) {
     env.GOOGLE_REDIRECT_URI
   );
   client.setCredentials({ refresh_token: refreshToken });
-  // Type assertion needed due to version mismatch between googleapis and google-auth-library
   return google.gmail({ version: 'v1', auth: client as any });
 }
 
@@ -138,7 +80,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_CACHE_SIZE = 1000;
 
 /**
- * Fetch raw Gmail message (for CreditCardMailDetector)
+ * Fetch raw Gmail message
  */
 export async function getRawMessage(
   refreshToken: string,
@@ -153,10 +95,11 @@ export async function getRawMessage(
   try {
     const gmail = getGmailClient(refreshToken);
 
+    // No concurrency limit here - caller handles it
     const response = await callGmailApi(() => gmail.users.messages.get({
       userId: 'me',
       id: messageId,
-      format: 'full',
+      format: 'full', // We need full to parse properly
     }));
 
     // Cache the result
@@ -256,20 +199,29 @@ export async function getMessage(
 
 /**
  * Batch fetch Gmail messages
- * Optimized with concurrency limit on top of rate limiting.
+ * Optimized for High Throughput (Target: 200/sec)
  */
 export async function batchGetMessages(
   refreshToken: string,
   messageIds: string[],
-  concurrency: number = 10
+  concurrency: number = 200
 ): Promise<Array<gmail_v1.Schema$Message | null>> {
-  // We use p-limit to control concurrency of *invoking* the getRawMessage function.
-  // getRawMessage itself is rate-limited, so even if we launch 50, they will queue up.
-  // But limiting concurrency here helps managing memory and event loop.
+  // Use p-limit to control concurrency. 
+  // With HTTP/2 or modern Node, 200 concurrent requests is fine.
   const limit = pLimit(concurrency);
 
+  const start = Date.now();
+  console.log(`[GmailClient] Batch fetching ${messageIds.length} messages with concurrency ${concurrency}...`);
+
   const tasks = messageIds.map(id => limit(() => getRawMessage(refreshToken, id)));
-  return Promise.all(tasks);
+
+  const results = await Promise.all(tasks);
+
+  const duration = Date.now() - start;
+  const validCount = results.filter(r => r !== null).length;
+  console.log(`[GmailClient] Batch complete. ${validCount}/${messageIds.length} fetched in ${duration}ms (~${Math.round((validCount / duration) * 1000)}/sec)`);
+
+  return results;
 }
 
 /**

@@ -5,16 +5,18 @@ export class TerminatorService {
      * Terminate an email processing workflow.
      * Logs the termination reason and stage.
      */
-    static async terminate(userId: string, emailId: string, reason: string, stage: 'filter' | 'rule' | 'gpt') {
+    static async terminate(userId: string, emailId: string, reason: string, stage: 'filter' | 'rule' | 'gpt', category?: string, scanJobId?: string) {
         await pool.query(
-            `INSERT INTO email_processing_log (user_id, email_message_id, processing_status, reason, stage, created_at)
-         VALUES ($1, $2, 'terminated', $3, $4, NOW())
+            `INSERT INTO email_processing_log (user_id, email_message_id, processing_status, reason, stage, status_category, scan_job_id, created_at)
+         VALUES ($1, $2, 'terminated', $3, $4, $5, $6, NOW())
          ON CONFLICT (email_message_id) DO UPDATE SET 
             processing_status = 'terminated',
             reason = EXCLUDED.reason,
             stage = EXCLUDED.stage,
+            status_category = EXCLUDED.status_category,
+            scan_job_id = COALESCE(EXCLUDED.scan_job_id, email_processing_log.scan_job_id),
             created_at = NOW()`,
-            [userId, emailId, reason, stage]
+            [userId, emailId, reason, stage, category || null, scanJobId || null]
         );
     }
 

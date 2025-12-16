@@ -28,7 +28,16 @@ app.use(metricsMiddleware);
 app.use('/api', apiLimiter);
 
 // Logging & Parsing
-app.use(morgan('dev'));
+// Logging & Parsing
+app.use(morgan('dev', {
+  skip: (req, res) => {
+    // Skip logging for polling endpoints if they return 304 (Not Modified)
+    if (req.originalUrl.includes('/api/gmail/jobs/') && res.statusCode === 304) {
+      return true;
+    }
+    return false;
+  }
+}));
 app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
