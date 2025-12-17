@@ -110,58 +110,58 @@ export class FilterService {
 
     private static isOtp(text: string): boolean {
         const patterns = [
-            /\b(OTP|ONE[\s-]?TIME[\s-]?PASSWORD)\b/,
-            /\b(VERIFICATION|VERIFY)\s+CODE\b/,
-            /\b\d{4,6}\b.*?(valid|expires?|use)/,
-            /enter.*?\d{4,6}.*?to.*?(verify|confirm)/
+            /\b(OTP|ONE[\s-]?TIME[\s-]?PASSWORD)\b/i,
+            /\b(VERIFICATION|VERIFY)\s+CODE\b/i,
+            /\b\d{4,6}\b.*?(valid|expires?|use)/i,
+            /enter.*?\d{4,6}.*?to.*?(verify|confirm)/i
         ];
         return patterns.some(p => p.test(text));
     }
 
     private static isPaymentSuccess(text: string): boolean {
         const patterns = [
-            /\b(PAYMENT|BILL)\s+(RECEIVED|SUCCESS|CONFIRMED)\b/,
-            /\b(PAYMENT|BILL)\s+OF\s+₹/,
-            /\byour.*?payment\s+(has been|was|is)\s+(received|processed|confirmed)/,
-            /\bthank you for (paying|clearing)/
+            /\b(PAYMENT|BILL)\s+(RECEIVED|SUCCESS|CONFIRMED)\b/i,
+            /\b(PAYMENT|BILL)\s+OF\s+₹/i,
+            /\byour.*?payment\s+(has been|was|is)\s+(received|processed|confirmed)/i,
+            /\bthank you for (paying|clearing)/i
         ];
         return patterns.some(p => p.test(text));
     }
 
     private static isPromotional(text: string): boolean {
         const patterns = [
-            /\b(OFFER|PROMOTION|PROMO|DISCOUNT|CASHBACK|REWARDS?)\b/,
-            /\blimit.*?time.*?(offer|deal)/,
-            /\bapply now|register|sign up/,
-            /\bpersonal loan\b/
+            /\b(OFFER|PROMOTION|PROMO|DISCOUNT|CASHBACK|REWARDS?)\b/i,
+            /\blimit.*?time.*?(offer|deal)/i,
+            /\bapply now|register|sign up/i,
+            /\bpersonal loan\b/i
         ];
         return patterns.some(p => p.test(text));
     }
 
     private static hasTransactionKeywords(text: string): boolean {
-        return /(?:charged|debited|spent|transaction|purchase)/.test(text) && /₹|INR|Rs/.test(text);
+        return /(?:charged|debited|spent|transaction|purchase)/i.test(text) && /₹|INR|Rs/i.test(text);
     }
 
     private static isAlert(text: string): boolean {
         const patterns = [
-            /\blimit.*?(reached|exceeded|approaching)/,
-            /\b(security|fraud|suspicious)\b/,
-            /\b(unusual|abnormal)\s+activity\b/,
-            /\bcard.*?(activated|locked|blocked|disabled|closed)/
+            /\blimit.*?(reached|exceeded|approaching)/i,
+            /\b(security|fraud|suspicious)\b/i,
+            /\b(unusual|abnormal)\s+activity\b/i,
+            /\bcard.*?(activated|locked|blocked|disabled|closed)/i
         ];
         return patterns.some(p => p.test(text));
     }
 
     private static isStatement(text: string): boolean {
         // Strict statement check
-        return /\b(STATEMENT|BILL STATEMENT)\b/.test(text) || /\bstatement for.*?(january|february)/.test(text);
+        return /\b(STATEMENT|BILL STATEMENT)\b/i.test(text) || /\bstatement for.*?(january|february)/i.test(text);
     }
 
     private static isTransaction(text: string): boolean {
         // Must have amount AND keyword
-        const amount = /(?:Rs|INR|₹)\s*[\d,]+/;
-        const debit = /\b(transaction|txn|purchase|spent|charged|swipe|debited)\b/;
-        const refund = /\b(refund|reversal|reversed)\b/;
+        const amount = /(?:Rs|INR|₹)\s*[\d,]+/i;
+        const debit = /\b(transaction|txn|purchase|spent|charged|swipe|debited)\b/i;
+        const refund = /\b(refund|reversal|reversed)\b/i;
 
         // Also support "Credit" alerts (money added) if it's transaction related (refund/reward), 
         // but the prompt says "Only credit card spend transactions".

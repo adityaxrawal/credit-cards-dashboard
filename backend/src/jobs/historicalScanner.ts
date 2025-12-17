@@ -14,6 +14,7 @@ import { WorkflowLogger } from '../utils/workflowLogger';
 import { PdfParser } from '../services/extraction/pdfParser';
 import { TransactionDetector } from '../services/extraction/TransactionDetector';
 import { SimplifiedEmail } from '../types';
+import '../services/gpt/gptProcessor'; // Import Side-effect: Attaches listener to gptQueue
 
 /**
  * Historical Email Scanner (Optimized for 200/sec Throughput)
@@ -112,6 +113,7 @@ export async function runHistoricalScan(
 
     // --- CONSUMER LOOP (PROCESS) ---
     const processLoop = async () => {
+      logger.info(`[PROCESS] Starting consumer loop for job ${jobId}`);
       while (isFetching || processingQueue.length > 0) {
         if (processingQueue.length === 0) {
           // Wait briefly for producer
@@ -121,6 +123,7 @@ export async function runHistoricalScan(
 
         // Take a chunk off the queue
         const batch = processingQueue.splice(0, 50); // Process 50 at a time
+        logger.info(`[PROCESS] Processing batch of ${batch.length} emails. Queue size: ${processingQueue.length}`);
 
         // Process this batch in parallel
         await Promise.all(batch.map(async (email) => {
@@ -135,10 +138,13 @@ export async function runHistoricalScan(
         // Update DB periodically (approx every batch)
         await updateJobStats(jobId, totalFetched, stats);
       }
+      logger.info(`[PROCESS] Consumer loop finished. Queue empty and fetch complete.`);
     };
 
     // --- PROCESS SINGLE EMAIL ---
     const processSingleEmail = async (cleanEmail: SimplifiedEmail) => {
+      // logger.debug(`[PROCESS] Processing single email ${cleanEmail.messageId}`);
+
       const fetchAttachment = async (msgId: string, attId: string) => {
         return gmailClient.getAttachment(refreshToken, msgId, attId);
       };
@@ -151,6 +157,9 @@ export async function runHistoricalScan(
 
       const fullyCleaned = await SanitizerService.sanitize(cleanEmail as any, fetchAttachment);
       const filterResult = FilterService.filter(fullyCleaned);
+
+      logger.info(`[FILTER] Email ${fullyCleaned.id} -> ShouldProcess: ${filterResult.shouldProcess} (${filterResult.reason})`);
+
 
       // 1. Raw Log (Background this? No, it's safer to await or race but we want speed)
       // Let's await it but it's fast.
@@ -244,6 +253,7 @@ export async function runHistoricalScan(
       }
 
       // 3. Rule Processing
+      logger.info(`[RULE] Checking ${fullyCleaned.id}`);
       const ruleResult = await RuleProcessor.process(fullyCleaned);
       if (ruleResult.status === 'passed' && ruleResult.transaction) {
         try {
