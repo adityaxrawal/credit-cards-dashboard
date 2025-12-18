@@ -194,11 +194,17 @@ export const BankParsers: BankParser[] = [
     bankName: 'HDFC',
     identifiers: ['hdfcbank.net', 'hdfcbank.com', 'hdfc'],
     parse: (text, subject, sender, emailDate) => {
+      const isUPI = /linked to UPI/i.test(text) || /UPI/i.test(subject);
       const cleanText = text.replace(/linked to UPI/i, '').replace(/\s+/g, ' ');
 
       const amountMatch = cleanText.match(/(?:Rs\.?|INR|₹|USD|EUR|GBP)\s*([0-9,]+\.?[0-9]*)/i);
-      const cardMatch = extractCardDigits(cleanText);
+      let cardMatch = extractCardDigits(cleanText);
       const merchant = extractMerchant(cleanText);
+
+      // UPI Fallback for card digits
+      if (!cardMatch && isUPI) {
+        cardMatch = 'UPI'; // Special marker
+      }
 
       // Detect specific HDFC card types
       let cardNameHint = 'HDFC Credit Card';

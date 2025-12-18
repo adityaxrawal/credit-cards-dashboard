@@ -1,9 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import pool from '../lib/db';
-import { RuleBasedProcessor } from '../services/extraction/RuleBasedProcessor';
+import { TransactionExtractor } from '../services/extraction/transaction.extractor';
 import { createTransactionsBulk, createTransaction } from '../db/queries/transactions.queries';
-
-const processor = new RuleBasedProcessor();
 
 /**
  * Endpoint 1: POST /api/extraction/process-csv
@@ -18,45 +16,95 @@ export async function processCsv(req: Request, res: Response, next: NextFunction
             return res.status(400).json({ error: 'Invalid or empty csvRows' });
         }
 
-        // Process
-        const result = await processor.processEmailRows(userId, csvRows);
+        // Process directly here using TransactionExtractor
+        const result = {
+            autoSave: [] as any[],
+            needsReview: [] as any[],
+            terminated: [] as any[],
+            stats: { total: csvRows.length, saved: 0, review: 0, terminated: 0 }
+        };
+
+        for (const row of csvRows) {
+            try {
+                // Normalize typical input formats
+                const subject = row.subject || '';
+                const sender = row.sender || row.from || '';
+                const snippet = row.snippet || '';
+                const messageId = row.message_id || row.id || `temp_${Date.now()}_${Math.random()}`;
+                const internalDate = row.internal_date ? parseInt(row.internal_date) : Date.now();
+                const fullContent = row.cleaned_text || row.bodyText || row.body || '';
+
+                // Construct mock email for Extractor
+                const mockEmail = {
+                    id: messageId,
+                    subject,
+                    from: sender,
+                    cleanedBody: fullContent || snippet,
+                    date: new Date(internalDate),
+                    raw: { snippet }
+                };
+
+                const extracted = await TransactionExtractor.extract(mockEmail);
+
+                if (extracted) {
+                    // Map to output format expected by frontend/logic
+                    const txn = {
+                        userId,
+                        cardId: row.cardLast4 || extracted.lastFourDigits, // CSV might have card hint
+                        transactionDate: extracted.transactionDate,
+                        merchant: extracted.merchant,
+                        category: extracted.category || 'Uncategorized',
+                        amount: extracted.amount,
+                        transactionType: extracted.transactionType,
+                        txnFingerprint: `csv-${messageId}`, // Simple fingerprint
+                        emailMessageId: extracted.emailMessageId,
+                        confidence: extracted.confidenceScore,
+                        detectionMethod: 'rule_based',
+                        needsReview: false,
+                        // Add extra fields if needed by UI
+                        cardLast4Digit: extracted.lastFourDigits,
+                        bank: extracted.bankName
+                    };
+
+                    result.autoSave.push(txn);
+                } else {
+                    // Not found
+                    result.terminated.push({
+                        emailId: messageId,
+                        reason: 'No transaction detected (Rule-based)'
+                    });
+                }
+
+            } catch (error) {
+                result.terminated.push({
+                    emailId: row.message_id || 'unknown',
+                    reason: `Error: ${error instanceof Error ? error.message : String(error)}`
+                });
+            }
+        }
+
+        result.stats.saved = result.autoSave.length;
+        result.stats.terminated = result.terminated.length;
 
         // Save auto-approved
         if (result.autoSave.length > 0) {
             // Map ExtractedTransaction to DB schema
             const txnsToSave = result.autoSave.map((t) => ({
                 userId: t.userId,
-                cardId: t.cardLast4Digit === '0000' ? '' : t.cardLast4Digit, // Placeholder, usually need real cardId. 
-                // Note: The system needs cardId (UUID). 
-                // Transactions table usually requires card_id FK.
-                // We might need to find card by last4 digits. 
-                // For bulk insert, this is tricky. We'll use a placeholder or handle it.
-                // Queries `createTransactionsBulk` expects cardId.
-                // Existing logic in `extraction.service.ts` finds card or creates.
-                // Here we might need a "findCards" setup.
-                // For implementation plan Phase 2.3, simply map.
-                // We will pass empty string and let query handle or fail? 
-                // `transactions.queries.ts` insert expects `card_id`. If UUID, empty string fails.
-                // Let's assume we fetch cards first or use a default.
-                // Actually, `createTransactionsBulk` takes cardId.
-                // We really should resolve card_ids.
-                // For now, I'll fetch user's cards and map.
-                transactionDate: new Date(t.date),
+                cardId: t.cardLast4Digit === '0000' ? '' : t.cardLast4Digit,
+                transactionDate: t.transactionDate,
                 merchant: t.merchant,
-                category: t.category || 'Uncategorized',
+                category: t.category,
                 amount: t.amount,
                 transactionType: 'debit',
                 txnFingerprint: t.txnFingerprint,
-                emailMessageId: t.messageId,
+                emailMessageId: t.emailMessageId,
                 confidence: t.confidence,
                 detectionMethod: t.detectionMethod,
                 needsReview: false
             }));
 
             // TODO: Improve Card ID mapping. For now relying on a known card or failure if card_id is rigid.
-            // We will skip card_id mapping to avoid complexity in this step and proceed with the defined scope.
-            // But `createTransactionsBulk` signature requires `cardId`.
-            // I'll fetch one card for user and use it as default, or fix later.
             const cardsRes = await pool.query('SELECT id, card_number_last4 FROM credit_cards WHERE user_id = $1', [userId]);
             const cards = cardsRes.rows;
 
@@ -74,44 +122,9 @@ export async function processCsv(req: Request, res: Response, next: NextFunction
             }
         }
 
-        // Queue review
-        if (result.needsReview.length > 0) {
-            // Insert into gpt_processing_queue
-            // Need to construct BULK INSERT manually or one by one
-            // Using simple loop for now (or pool client unnest)
-            const client = await pool.connect();
-            try {
-                await client.query('BEGIN');
-                const query = `
-          INSERT INTO gpt_processing_queue 
-          (user_id, message_id, transaction_data, status) 
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (user_id, message_id) DO NOTHING
-        `;
-                for (const t of result.needsReview) {
-                    await client.query(query, [
-                        t.userId,
-                        t.messageId,
-                        JSON.stringify({
-                            amount: t.amount,
-                            merchant: t.merchant,
-                            date: t.date,
-                            bank: t.bank,
-                            cardLast4: t.cardLast4Digit,
-                            confidence: t.confidence,
-                            evidence: t.evidence
-                        }),
-                        'pending'
-                    ]);
-                }
-                await client.query('COMMIT');
-            } catch (e) {
-                await client.query('ROLLBACK');
-                throw e;
-            } finally {
-                client.release();
-            }
-        }
+        // Removed "needsReview" queue logic for CSV upload for simplicity unless strictly required, 
+        // as TransactionExtractor only returns high confidence or null. 
+        // If we want review logic, we'd need to lower threshold in Extractor or handle "partial" matches.
 
         // Log job
         await pool.query(

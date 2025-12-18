@@ -20,36 +20,43 @@ export class PdfParser {
   /**
    * Parse PDF with automatic password fallback
    */
-  static async parseWithFallback(buffer: Buffer): Promise<ExtractedPdfData | null> {
+  /**
+   * Parse PDF with provided passwords (or default fallback)
+   */
+  static async parseWithPasswords(buffer: Buffer, passwords: string[] = []): Promise<ExtractedPdfData | null> {
+    const candidates = [...passwords, ...this.KNOWN_PASSWORDS]; // Try custom first, then known
+
     // 1. Try without password
     try {
       return await this.parsePdf(buffer, '');
     } catch (err: any) {
       if (this.isPasswordError(err)) {
-        // 2. Try known passwords
-        for (const pwd of this.KNOWN_PASSWORDS) {
+        // 2. Try candidate passwords
+        for (const pwd of candidates) {
           try {
-            // console.log(`[PdfParser] Trying password: ${pwd}`);
             const result = await this.parsePdf(buffer, pwd);
             result.usedPassword = pwd;
             return result;
           } catch (pwdErr) {
-            // Continue if password error, else throw?
-            // If it's a password error, just continue to next password
             if (!this.isPasswordError(pwdErr)) {
               console.warn(`[PdfParser] Non-password error with pwd ${pwd}:`, pwdErr);
             }
           }
         }
-        // All passwords failed
-        console.warn('[PdfParser] Failed to decrypt PDF with known passwords.');
+        console.warn('[PdfParser] Failed to decrypt PDF with provided passwords.');
         return null;
       } else {
-        // Non-password error
         console.warn('[PdfParser] Error parsing PDF (not password related):', err);
         return null;
       }
     }
+  }
+
+  /**
+   * Parse PDF with automatic password fallback (Legacy)
+   */
+  static async parseWithFallback(buffer: Buffer): Promise<ExtractedPdfData | null> {
+    return this.parseWithPasswords(buffer, []);
   }
 
   private static async parsePdf(buffer: Buffer, password?: string): Promise<ExtractedPdfData> {

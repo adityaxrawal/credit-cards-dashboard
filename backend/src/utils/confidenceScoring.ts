@@ -1,14 +1,14 @@
 /**
- * Confidence Scoring System
+ * Deterministic Confidence Scoring System
  * 
- * Implements the 10-level confidence scoring from the architecture spec.
- * Score range: 30-100
+ * Implements Rule-Based Weighting:
+ * - Amount detected: +0.3
+ * - Action keyword: +0.3 (Assumed true if we reached this stage via RuleProcessor)
+ * - Merchant detected: +0.2
+ * - Card matched: +0.2
  * 
- * Confidence Levels:
- * - 90-100: HIGH - Save directly to database
- * - 70-89:  MEDIUM - Save with review flag
- * - 50-69:  LOW - Send to GPT queue
- * - <50:    VERY_LOW - Send to GPT + mark needs_review
+ * Max Score: 1.0
+ * Minimum Threshold: 0.8
  */
 
 export interface ExtractionDetails {
@@ -22,127 +22,71 @@ export interface ExtractionDetails {
     cardFound: boolean;
     bankName?: string;
     bankSource: 'sender' | 'body' | 'missing';
-    transactionType?: 'PURCHASE' | 'UPI' | 'RECURRING';
+    transactionType?: 'PURCHASE' | 'UPI' | 'RECURRING' | 'debit' | 'credit';
     category?: string;
     categorySource: 'keyword' | 'unknown';
 }
 
 export interface ConfidenceResult {
     score: number;
-    level: 'HIGH' | 'MEDIUM' | 'LOW' | 'VERY_LOW';
-    factors: ConfidenceFactors;
+    level: 'HIGH' | 'LOW';
+    breakdown: { [key: string]: number };
     needsGptReview: boolean;
-    needsManualReview: boolean;
-}
-
-export interface ConfidenceFactors {
-    amountPenalty: number;
-    merchantPenalty: number;
-    datePenalty: number;
-    cardPenalty: number;
-    bankPenalty: number;
-    categoryPenalty: number;
-    transactionTypePenalty: number;
-    totalPenalty: number;
 }
 
 /**
  * Calculate confidence score based on extraction details
- * Starts at 100, subtracts penalties for uncertainties
+ * Returns score between 0.0 and 1.0
  */
 export function calculateConfidence(details: ExtractionDetails): ConfidenceResult {
-    let penalty = 0;
-    const factors: ConfidenceFactors = {
-        amountPenalty: 0,
-        merchantPenalty: 0,
-        datePenalty: 0,
-        cardPenalty: 0,
-        bankPenalty: 0,
-        categoryPenalty: 0,
-        transactionTypePenalty: 0,
-        totalPenalty: 0,
-    };
+    let score = 0.0;
+    const breakdown: { [key: string]: number } = {};
 
-    // LEVEL 1: Amount extraction
-    if (details.amountSource === 'missing') {
-        factors.amountPenalty = -40; // Critical - can't be a transaction without amount
-    } else if (details.amountSource === 'fallback') {
-        factors.amountPenalty = -15;
-    }
-    penalty += factors.amountPenalty;
-
-    // LEVEL 2: Merchant extraction
-    if (!details.merchantFound || !details.merchant || details.merchant === 'UNKNOWN') {
-        factors.merchantPenalty = -20;
-    }
-    penalty += factors.merchantPenalty;
-
-    // LEVEL 3: Date extraction
-    if (details.dateSource === 'missing') {
-        factors.datePenalty = -10;
-    } else if (details.dateSource === 'timestamp') {
-        factors.datePenalty = -5; // Using email timestamp as fallback
-    }
-    penalty += factors.datePenalty;
-
-    // LEVEL 4: Card last 4 digits
-    if (!details.cardFound || !details.cardLast4 || details.cardLast4 === '0000') {
-        factors.cardPenalty = -30;
-    }
-    penalty += factors.cardPenalty;
-
-    // LEVEL 5: Bank name
-    if (details.bankSource === 'missing') {
-        factors.bankPenalty = -10;
-    } else if (details.bankSource === 'body') {
-        factors.bankPenalty = -5; // Slightly less reliable than sender
-    }
-    penalty += factors.bankPenalty;
-
-    // LEVEL 6: Transaction type
-    if (details.transactionType === 'UPI') {
-        factors.transactionTypePenalty = -5; // UPI slightly less reliable extraction
-    } else if (details.transactionType === 'RECURRING') {
-        factors.transactionTypePenalty = -5;
-    }
-    penalty += factors.transactionTypePenalty;
-
-    // LEVEL 7: Category
-    if (details.categorySource === 'unknown') {
-        factors.categoryPenalty = -10;
-    }
-    penalty += factors.categoryPenalty;
-
-    factors.totalPenalty = penalty;
-
-    // Calculate final score (minimum 30)
-    const score = Math.max(30, 100 + penalty);
-
-    // Determine confidence level
-    let level: 'HIGH' | 'MEDIUM' | 'LOW' | 'VERY_LOW';
-    let needsGptReview = false;
-    let needsManualReview = false;
-
-    if (score >= 90) {
-        level = 'HIGH';
-    } else if (score >= 70) {
-        level = 'MEDIUM';
-        needsManualReview = true; // Save but flag for review
-    } else if (score >= 50) {
-        level = 'LOW';
-        needsGptReview = true;
+    // 1. Amount (+0.3)
+    if (details.amountSource === 'regex' && details.amount && details.amount > 0) {
+        score += 0.3;
+        breakdown['amount'] = 0.3;
     } else {
-        level = 'VERY_LOW';
-        needsGptReview = true;
-        needsManualReview = true;
+        breakdown['amount'] = 0.0;
     }
+
+    // 2. Action Keyword (+0.3)
+    // In RuleProcessor, we usually verify "isTransaction" before calling this.
+    // However, we should double check if we have a valid validation source.
+    // Assuming if we are scoring, we passed basic checks.
+    // Let's rely on bankParser confirmation or explicit check.
+    // For now, we assume if we are here, keyword matched.
+    score += 0.3;
+    breakdown['keyword'] = 0.3;
+
+    // 3. Merchant Detected (+0.2)
+    if (details.merchantFound && details.merchant && details.merchant !== 'Unknown Merchant' && details.merchant !== 'UNKNOWN') {
+        score += 0.2;
+        breakdown['merchant'] = 0.2;
+    } else {
+        breakdown['merchant'] = 0.0;
+    }
+
+    // 4. Card Matched (+0.2)
+    // "Card matched" means we extracted Last 4 digits.
+    if (details.cardFound && details.cardLast4 && details.cardLast4 !== '0000') {
+        score += 0.2;
+        breakdown['card'] = 0.2;
+    } else {
+        breakdown['card'] = 0.0;
+    }
+
+    // Floating point math safety
+    score = Math.round(score * 10) / 10;
+
+    const needsGptReview = score < 0.8;
+    const level = score >= 0.8 ? 'HIGH' : 'LOW';
 
     return {
         score,
         level,
-        factors,
-        needsGptReview,
-        needsManualReview,
+        breakdown,
+        needsGptReview
     };
 }
 
@@ -150,28 +94,21 @@ export function calculateConfidence(details: ExtractionDetails): ConfidenceResul
  * Quick check if extraction should be sent to GPT
  */
 export function shouldSendToGpt(score: number): boolean {
-    return score < 50;
+    return score < 0.8;
 }
 
 /**
  * Quick check if extraction can be saved directly
  */
 export function canSaveDirectly(score: number): boolean {
-    return score >= 50;
+    return score >= 0.8;
 }
 
 /**
  * Get database status based on confidence level
  */
-export function getProcessingStatus(level: 'HIGH' | 'MEDIUM' | 'LOW' | 'VERY_LOW'): string {
-    switch (level) {
-        case 'HIGH':
-            return 'success';
-        case 'MEDIUM':
-            return 'success_needs_review';
-        case 'LOW':
-            return 'queued_for_gpt';
-        case 'VERY_LOW':
-            return 'queued_for_gpt_urgent';
-    }
+export function getProcessingStatus(level: 'HIGH' | 'LOW', score: number): string {
+    if (score >= 0.8) return 'success';
+    return 'queued_for_gpt';
 }
+

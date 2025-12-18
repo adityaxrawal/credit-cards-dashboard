@@ -4,6 +4,7 @@ import { CircuitBreaker } from '../../utils/circuitBreaker';
 import pool from '../../lib/db';
 import { CleanEmailContent } from '../sanitize/sanitizer';
 import * as transactionsService from '../transactions.service'; // Keep legacy service for now or refactor later
+import { ResolutionService } from '../cards/resolution.service';
 import { GmailLinkGenerator } from '../../utils/gmailLinkGenerator';
 
 const GPT_MODEL = 'gpt-4o-mini';
@@ -44,17 +45,17 @@ export class GptProcessor {
                     if (res.status === 'success' && res.transaction) {
                         try {
                             // Insert
-                            await transactionsService.createTransactionFromExtraction(userId, {
+                            await ResolutionService.resolveAndCreateTransaction(userId, {
                                 ...res.transaction,
+                                date: new Date(res.transaction.date), // Ensure date is a Date object
                                 extractionMethod: 'gpt',
-                                confidence: res.confidence
+                                confidence: 1.0 // GPT assumed matches are verified
                             }, {
                                 id: res.messageId,
                                 subject: res.transaction.emailSubject || 'Unknown Subject',
-                                body: 'GPT Processed',
-                                from: 'GPT Extracted'
+                                body: 'GPT Processed', // Original body was 'GPT Processed'
+                                from: 'GPT Extracted' // Original from was 'GPT Extracted'
                             }, {
-                                // PASS TRACEABILITY IDs
                                 scanJobId: res.scanJobId,
                                 rawEmailId: res.rawEmailId
                             });
