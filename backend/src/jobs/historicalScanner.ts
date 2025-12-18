@@ -11,8 +11,9 @@ import * as transactionsService from '../services/transactions.service';
 import dayjs from 'dayjs';
 import logger from '../utils/logger';
 import { WorkflowLogger } from '../utils/workflowLogger';
+import { PipelineService } from '../services/pipeline/pipeline.service';
 import { PdfParser } from '../services/extraction/pdfParser';
-import { TransactionDetector } from '../services/extraction/TransactionDetector';
+
 import { SimplifiedEmail } from '../types';
 import '../services/gpt/gptProcessor'; // Import Side-effect: Attaches listener to gptQueue
 
@@ -46,7 +47,7 @@ export async function runHistoricalScan(
     const fromDateToUse = fromDate ? dayjs(fromDate) : dayjs().subtract(90, 'day');
     const from = fromDateToUse.format('YYYY/MM/DD');
     const to = toDate ? dayjs(toDate).format('YYYY/MM/DD') : dayjs().format('YYYY/MM/DD');
-    const senderFilter = FilterService['SENDER_DOMAINS'].map(d => `from:"${d}"`).join(' OR ');
+    const senderFilter = FilterService.SENDER_DOMAINS.map(d => `from:"${d}"`).join(' OR ');
     const query = `after:${from} before:${to} (${senderFilter})`;
 
     await pool.query(
@@ -143,153 +144,18 @@ export async function runHistoricalScan(
 
     // --- PROCESS SINGLE EMAIL ---
     const processSingleEmail = async (cleanEmail: SimplifiedEmail) => {
-      // logger.debug(`[PROCESS] Processing single email ${cleanEmail.messageId}`);
-
       const fetchAttachment = async (msgId: string, attId: string) => {
         return gmailClient.getAttachment(refreshToken, msgId, attId);
       };
-      // Sanitizer already called in Fetcher? 
-      // Wait, GmailFetcherService.fetchBatch ALREADY calls parseMessage -> return SimplifiedEmail.
-      // It does NOT call SanitizerService.sanitize. 
-      // We need to verify if SimplifiedEmail from fetcher is enough or if we need sanitize.
-      // Looking at SanitizerService, it does HTML cleaning etc.
-      // Let's assume we run Sanitizer here.
 
-      const fullyCleaned = await SanitizerService.sanitize(cleanEmail as any, fetchAttachment);
-      const filterResult = FilterService.filter(fullyCleaned);
+      // Delegate to Unified Pipeline
+      const result = await PipelineService.processEmail(userId, cleanEmail, jobId, fetchAttachment);
 
-      logger.info(`[FILTER] Email ${fullyCleaned.id} -> ShouldProcess: ${filterResult.shouldProcess} (${filterResult.reason})`);
-
-
-      // 1. Raw Log (Background this? No, it's safer to await or race but we want speed)
-      // Let's await it but it's fast.
-      let rawEmailId: string;
-      const rawInsert = await pool.query(
-        `INSERT INTO gmail_scanned_emails (user_id, message_id, internal_date, raw_snippet, scan_job_id, scanned_at)
-                 VALUES ($1, $2, $3, $4, $5, NOW())
-                 ON CONFLICT (user_id, message_id) DO UPDATE SET 
-                   scan_job_id = EXCLUDED.scan_job_id
-                 RETURNING id`,
-        [userId, fullyCleaned.id, fullyCleaned.date.getTime(), fullyCleaned.raw.snippet || '', jobId]
-      );
-      rawEmailId = rawInsert.rows[0].id;
-
-      if (!filterResult.shouldProcess) {
-        stats.terminated++;
-        await TerminatorService.terminate(
-          userId,
-          fullyCleaned.id,
-          filterResult.reason,
-          'filter',
-          filterResult.category,
-          jobId
-        );
-        return;
-      }
-
-      // 2. PDF Check
-      const detector = new TransactionDetector();
-      const isBankStatement = detector.isBankStatement(
-        fullyCleaned.from,
-        fullyCleaned.subject,
-        fullyCleaned.raw.snippet || ''
-      );
-
-      if (isBankStatement && fullyCleaned.attachments && fullyCleaned.attachments.length > 0) {
-        for (const att of fullyCleaned.attachments) {
-          try {
-            const pdfData = await PdfParser.parseWithFallback(att.data);
-            if (pdfData && pdfData.text) {
-              const bankName = detector.identifyBank(fullyCleaned.from) || 'Unknown Bank';
-
-              const extractedTxns = detector.extractFromStatement(
-                pdfData.text,
-                bankName,
-                dayjs(fullyCleaned.date).format('YYYY-MM-DD')
-              );
-
-              for (const txn of extractedTxns) {
-                if (!txn.amount) continue;
-                await transactionsService.createTransactionFromExtraction(userId, {
-                  messageId: fullyCleaned.id,
-                  userId,
-                  amount: txn.amount!,
-                  currency: 'INR',
-                  merchant: txn.merchant || 'Unknown',
-                  date: new Date(txn.date || Date.now()),
-                  confidence: txn.confidence || 0.9,
-                  bank: txn.bank || bankName,
-                  cardLast4Digit: txn.cardLast4Digit || '0000',
-                  category: txn.category,
-                  detectionMethod: 'rule_based',
-                  evidence: txn.evidence || {
-                    amountMatch: String(txn.amount), merchantMatch: txn.merchant || '', dateMatch: txn.date || '', cardMatch: '', bank: bankName
-                  },
-                  needsReview: false,
-                  txnFingerprint: txn.evidence ? detector.generateFingerprint(txn.amount, txn.merchant || '', txn.date || '', '0000') : 'pdf-gen-' + Date.now(),
-                  extractionMethod: 'rule_based',
-                  // @ts-ignore
-                  source: 'PDF_STATEMENT'
-                }, {
-                  id: fullyCleaned.id,
-                  subject: fullyCleaned.subject,
-                  body: fullyCleaned.cleanedBody,
-                  from: fullyCleaned.from
-                }, { scanJobId: jobId, rawEmailId: rawEmailId });
-                stats.success++;
-              }
-
-              await pool.query(
-                `INSERT INTO email_processing_log (user_id, email_message_id, processing_status, reason, stage, status_category, scan_job_id, created_at)
-                           VALUES ($1, $2, 'success', $3, 'pdf_processing', 'TRANSACTION', $4, NOW()) 
-                           ON CONFLICT (email_message_id) DO UPDATE SET processing_status='success'`,
-                [userId, fullyCleaned.id, `PDF Extracted ${extractedTxns.length} txns`, jobId]
-              );
-            }
-          } catch (err) {
-            console.error(`[PDF] Error:`, err);
-          }
-        }
-      }
-
-      // 3. Rule Processing
-      logger.info(`[RULE] Checking ${fullyCleaned.id}`);
-      const ruleResult = await RuleProcessor.process(fullyCleaned);
-      if (ruleResult.status === 'passed' && ruleResult.transaction) {
-        try {
-          await transactionsService.createTransactionFromExtraction(userId, {
-            ...ruleResult.transaction,
-            extractionMethod: 'rule_based',
-            confidence: ruleResult.confidenceScore || 1.0
-          }, {
-            id: fullyCleaned.id,
-            subject: fullyCleaned.subject,
-            body: fullyCleaned.cleanedBody,
-            from: fullyCleaned.from
-          }, { scanJobId: jobId, rawEmailId: rawEmailId });
-          stats.success++;
-
-          await pool.query(
-            `INSERT INTO email_processing_log (user_id, email_message_id, processing_status, reason, stage, status_category, scan_job_id, created_at)
-                       VALUES ($1, $2, 'success', 'Rule-based success', 'rule_processing', 'TRANSACTION', $3, NOW()) 
-                       ON CONFLICT (email_message_id) 
-                       DO UPDATE SET processing_status='success', stage='rule_processing'`,
-            [userId, fullyCleaned.id, jobId]
-          );
-        } catch (insertErr: any) {
-          if (insertErr.code === '23505') stats.terminated++; // Duplicate
-          else stats.failed++;
-        }
-      } else {
-        // 4. GPT Queue
-        stats.queuedGpt++;
-        gptQueue.enqueue({
-          ...fullyCleaned,
-          userId: userId,
-          scanJobId: jobId,
-          rawEmailId: rawEmailId
-        });
-      }
+      // Update Stats based on result
+      if (result === 'success') stats.success++;
+      else if (result === 'terminated') stats.terminated++;
+      else if (result === 'queued_gpt') stats.queuedGpt++;
+      else if (result === 'failed') stats.failed++;
     };
 
     const updateJobStats = async (jid: string, total: number, curStats: any) => {
