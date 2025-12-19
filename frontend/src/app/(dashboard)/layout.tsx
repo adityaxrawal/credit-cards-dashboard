@@ -20,12 +20,16 @@ async function fetchUser(): Promise<User | null> {
 
   try {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
     const response = await fetch(`${apiUrl}/api/auth/me`, {
       headers: {
         Cookie: `accessToken=${accessToken}`,
       },
       cache: "no-store",
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
 
     if (!response.ok) {
       return null;

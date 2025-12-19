@@ -107,7 +107,7 @@ export async function triggerHistoricalScan(userId: string, fromDate?: Date, toD
   // Create job record in database
   await pool.query(
     `INSERT INTO gmail_sync_jobs (id, user_id, status, current_step, started_at)
-     VALUES ($1, $2, 'pending', 'INITIALIZING', NOW())`,
+     VALUES ($1, $2, 'PENDING', 'INITIALIZING', NOW())`,
     [jobId, userId]
   );
 
@@ -121,7 +121,7 @@ export async function triggerHistoricalScan(userId: string, fromDate?: Date, toD
       // Update job status to failed
       pool.query(
         `UPDATE gmail_sync_jobs 
-         SET status = 'failed', errors = $1, completed_at = NOW(), last_update_at = NOW()
+         SET status = 'FAILED', errors = $1, completed_at = NOW(), last_update_at = NOW()
          WHERE id = $2`,
         [JSON.stringify([{ error: error.message }]), jobId]
       ).catch(dbError => {
@@ -131,7 +131,7 @@ export async function triggerHistoricalScan(userId: string, fromDate?: Date, toD
 
   return {
     jobId,
-    status: 'pending',
+    status: 'PENDING',
     fromDate,
     toDate,
   };
@@ -143,7 +143,7 @@ export async function triggerHistoricalScan(userId: string, fromDate?: Date, toD
 export async function getHistoricalScanStatus(userId: string, jobId: string) {
   const { rows } = await pool.query(
     `SELECT id, status, current_step, total_messages, processed_count, saved_count, error_count, errors,
-            started_at, completed_at, last_update_at, metadata,
+            started_at, completed_at, last_update_at, metadata, emails_fetched, progress,
             rule_based_success, rule_based_failure, queued_for_gpt, terminated_count
      FROM gmail_sync_jobs
      WHERE id = $1 AND user_id = $2`,
@@ -161,6 +161,8 @@ export async function getHistoricalScanStatus(userId: string, jobId: string) {
     status: job.status,
     currentStep: job.current_step,
     total: job.total_messages || 0,
+    fetched: job.emails_fetched || 0,
+    progress: job.progress || 0,
     processed: job.processed_count || 0,
     inserted: job.saved_count || 0,
     errors: job.error_count || 0,
@@ -212,6 +214,8 @@ export async function getLatestJob(userId: string) {
     status: job.status,
     currentStep: job.current_step,
     total: job.total_messages || 0,
+    fetched: job.emails_fetched || 0,
+    progress: job.progress || 0,
     processed: job.processed_count || 0,
     inserted: job.saved_count || 0,
     errors: job.error_count || 0,
@@ -240,7 +244,6 @@ export async function getLastSuccessfulSync(userId: string) {
 
 
 import { SanitizerService } from './sanitize/sanitizer';
-import { RuleProcessor } from './rules/ruleProcessor';
 
 /**
  * Manual map a message to a card
@@ -255,7 +258,7 @@ export async function manualMap(userId: string, messageId: string, cardInfo: {
   // Create job record
   await pool.query(
     `INSERT INTO gmail_sync_jobs (id, user_id, status, current_step, started_at, metadata)
-     VALUES ($1, $2, 'running', 'MANUAL_MAPPING', NOW(), $3)`,
+     VALUES ($1, $2, 'PROCESSING', 'MANUAL_MAPPING', NOW(), $3)`,
     [jobId, userId, JSON.stringify({ messageId, cardInfo })]
   );
 
@@ -307,11 +310,34 @@ export async function manualMap(userId: string, messageId: string, cardInfo: {
       const cleanEmail = await SanitizerService.sanitize(simpleEmail, fetchAttachment);
 
       // Try Rule
-      const ruleResult = await RuleProcessor.process(cleanEmail);
+      const { CreditCardSpendEvaluatorV3 } = await import('./rules/CreditCardSpendEvaluatorV3');
+      const { StrictExtractor } = await import('./extraction/StrictExtractor');
 
-      let txnData = ruleResult.transaction;
+      // For manual map, we trust it's a transaction, but we need details.
+      // Evaluator finds amount/merchant/date
+      const evalResult = CreditCardSpendEvaluatorV3.evaluate(cleanEmail);
 
-      if (ruleResult.status !== 'passed' || !txnData) {
+      let txnData: any = null;
+
+      if (evalResult.metadata.amount) {
+        const text = cleanEmail.subject + ' ' + cleanEmail.cleanedBody;
+
+        // Use Strict Extractor for bank/last4 if possible, else use provided cardInfo
+        const extractedLast4 = StrictExtractor.extractLast4(text) || evalResult.metadata.cardLast4;
+        const extractedBank = StrictExtractor.extractBankName(text, cleanEmail.from);
+
+        txnData = {
+          amount: evalResult.metadata.amount,
+          transactionDate: evalResult.metadata.date || new Date(cleanEmail.date),
+          merchant: evalResult.metadata.merchant || 'Unknown Merchant',
+          description: evalResult.metadata.merchant || 'Manual Map Transaction',
+          bankName: extractedBank || cardInfo.bankName,
+          lastFourDigits: extractedLast4 || cardInfo.last4,
+          confidenceScore: evalResult.score
+        };
+      }
+
+      if (!txnData) {
         const { gptProcessor } = await import('./gpt/gptProcessor'); // Dynamic import
         const gptResults = await gptProcessor.processBatch([cleanEmail], userId);
         if (gptResults.length > 0 && gptResults[0].status === 'success') {
@@ -326,12 +352,16 @@ export async function manualMap(userId: string, messageId: string, cardInfo: {
         await transactionsService.insertFromEmail(userId, {
           ...txnData,
           cardId: card.id, // Explicitly use the manual card
-          emailMessageId: messageId
+          emailMessageId: messageId,
+          metadata: {
+            source: 'manual_map',
+            confidence: txnData.confidenceScore
+          }
         });
 
         await pool.query(
           `UPDATE gmail_sync_jobs 
-           SET status = 'completed', current_step = 'COMPLETED', processed_count = 1, saved_count = 1, completed_at = NOW()
+           SET status = 'COMPLETED', current_step = 'COMPLETED', processed_count = 1, saved_count = 1, completed_at = NOW()
            WHERE id = $1`,
           [jobId]
         );
@@ -343,7 +373,7 @@ export async function manualMap(userId: string, messageId: string, cardInfo: {
       logger.error('Manual map failed:', error);
       await pool.query(
         `UPDATE gmail_sync_jobs 
-         SET status = 'failed', errors = $1, completed_at = NOW()
+         SET status = 'FAILED', errors = $1, completed_at = NOW()
          WHERE id = $2`,
         [JSON.stringify([{ error: error instanceof Error ? error.message : String(error) }]), jobId]
       );
@@ -360,7 +390,8 @@ export async function getPipelineStats(userId: string) {
   const connection = await getConnectionStatus(userId);
   const queueStats = { queue1: gptQueue.length }; // Simplified for new queue
   const latestJob = await getLatestJob(userId);
-  const isJobRunning = latestJob?.status === 'pending' || latestJob?.status === 'running';
+  // Status check MUST match the new UPPERCASE states
+  const isJobRunning = latestJob?.status === 'PENDING' || latestJob?.status === 'PROCESSING' || latestJob?.status === 'FETCHING' || latestJob?.status === 'GPT_PROCESSING';
 
   return {
     connection,

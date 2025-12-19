@@ -9,10 +9,12 @@ export interface GmailConnectionStatus {
 
 export interface ScanStatus {
   jobId: string;
-  status: "pending" | "processing" | "running" | "completed" | "failed";
+  status: string; // Allow flexible status strings (PENDING, PROCESSING, COMPLETED, FAILED, etc)
   currentStep?: string;
   processed: number;
   total: number;
+  fetched?: number;
+  progress?: number;
   inserted?: number;
   errors?: number;
   errorList?: any[];
@@ -70,7 +72,6 @@ export const gmailApi = {
    */
   getScanStatus: async (jobId: string): Promise<ScanStatus> => {
     const response = await apiGet<{ data: ScanStatus }>(`/api/gmail/jobs/${jobId}`);
-    // Backend returns { data: {...} }, so we need to unwrap it
     return response.data || response as any;
   },
 

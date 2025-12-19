@@ -41,21 +41,29 @@ export class StatementExtractor {
             const cleanLine = line.trim();
             if (!cleanLine) continue;
 
+            const lower = cleanLine.toLowerCase();
+            // EXCLUSIONS: Summaries, Balances, Rewards
+            if (lower.includes('total') || lower.includes('balance') || lower.includes('opening') || lower.includes('closing') || lower.includes('payment received') || lower.includes('reward') || lower.includes('due date')) {
+                continue;
+            }
+
             // 1. Check for Date
             const dateMatch = cleanLine.match(dateStartRegex);
             if (!dateMatch) continue;
 
             const rawDate = dateMatch[1];
             const date = this.parseDate(rawDate);
-            // If date parsing fails completely, skip? Or use default?
-            // If it returns raw string, it might be invalid.
-            // parseDate returns YYYY-MM-DD if valid, or original string if not.
-            // Check formatted validity
             if (!dayjs(date).isValid()) continue;
 
             // 2. Check for Amount
             const amountMatch = cleanLine.match(amountRegex);
             if (!amountMatch) continue;
+
+            // Check if explicitly Credit
+            if (cleanLine.match(/[\d,]+\.\d{2}\s*Cr/i) || cleanLine.toLowerCase().includes(' cr')) {
+                // Skip Credits (Payments/Refunds)
+                continue;
+            }
 
             let amount = parseFloat(amountMatch[1].replace(/,/g, ''));
             if (isNaN(amount) || amount <= 0) continue;
@@ -80,11 +88,11 @@ export class StatementExtractor {
                 amount,
                 date: date,
                 merchant: cleanMerchantName,
-                description: description, // Keep original desc just in case
+                description: description,
                 bank: bankName,
                 currency: 'INR',
                 category: this.categorizeTransaction(cleanMerchantName),
-                confidence: 0.9, // High confidence for statement lines
+                confidence: 0.9,
                 evidence: {
                     rawLine: cleanLine
                 }

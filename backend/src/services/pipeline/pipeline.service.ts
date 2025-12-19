@@ -1,16 +1,11 @@
 import { SanitizerService } from '../sanitize/sanitizer';
-import { FilterService } from '../filters/filterService';
+// import { FilterService } from '../filters/filterService';
 import { TerminatorService } from '../terminator/terminator';
-import { StatementExtractor } from '../extraction/statement.extractor';
-import { TransactionExtractor } from '../extraction/transaction.extractor';
-import { PdfParser } from '../extraction/pdfParser';
 import pool from '../../lib/db';
 import logger from '../../utils/logger';
 import { gptQueue } from '../queue/gptQueue'; // Legacy queue for fallback
 import { ResolutionService } from '../cards/resolution.service';
-import * as transactionsService from '../transactions.service';
 import { SimplifiedEmail } from '../../types';
-import dayjs from 'dayjs';
 
 interface PipelineStats {
     processed: number;
@@ -21,7 +16,6 @@ interface PipelineStats {
 }
 
 export class PipelineService {
-    private static statementExtractor = new StatementExtractor();
 
     /**
      * Process a single email through the unified pipeline
@@ -33,10 +27,9 @@ export class PipelineService {
         fetchAttachmentFn: (msgId: string, attId: string) => Promise<Buffer | null>
     ): Promise<'success' | 'terminated' | 'queued_gpt' | 'failed'> {
 
-        // 1. SAVE RAW (Audit Trail)
-        // We do this first to ensure we have the record even if processing fails
         let rawEmailId: string;
         try {
+            // 1. SAVE RAW (Audit Trail)
             const rawInsert = await pool.query(
                 `INSERT INTO gmail_scanned_emails (user_id, message_id, internal_date, raw_snippet, scan_job_id, scanned_at)
                  VALUES ($1, $2, $3, $4, $5, NOW())
@@ -48,46 +41,96 @@ export class PipelineService {
             rawEmailId = rawInsert.rows[0].id;
         } catch (e) {
             logger.error(`[Pipeline] Failed to save raw email ${rawEmail.messageId}`, e);
-            throw e; // Critical failure
+            throw e;
         }
+
+        const emailInfo = `[${rawEmail.messageId}] "${rawEmail.subject}" (${new Date(rawEmail.internalDate).toISOString()})`;
+        logger.info(`[Pipeline] Processing ${emailInfo}`);
 
         try {
             // 2. SANITIZE
-            // Clean HTML, extract clear body
             const cleanEmail = await SanitizerService.sanitize(rawEmail, fetchAttachmentFn);
 
-            // 3. FILTER & CLASSIFY
-            // Determine Intent: TRANSACTION, STATEMENT, or NON_FINANCIAL
-            const filterResult = FilterService.filter(cleanEmail);
+            // 3. STATEMENT CHECK (Part 6)
+            // PDF + Keywords (statement, billing cycle, payment due date, total amount due)
+            const textLower = (cleanEmail.subject + ' ' + cleanEmail.cleanedBody).toLowerCase();
+            const isStatement = cleanEmail.hasAttachments &&
+                cleanEmail.attachments?.some(a => a.mimeType === 'application/pdf' || a.filename.endsWith('.pdf')) &&
+                (
+                    textLower.includes('statement') ||
+                    textLower.includes('billing cycle') ||
+                    textLower.includes('payment due date') ||
+                    textLower.includes('total amount due')
+                );
 
-            logger.info(`[Pipeline] ${cleanEmail.id} -> ${filterResult.intent} (${filterResult.reason})`);
+            if (isStatement) {
+                logger.debug(`[Pipeline] Detected Statement: ${cleanEmail.id}`);
+                return await this.processStatement(userId, cleanEmail, jobId, rawEmailId);
+            }
 
-            // 4. ROUTE
-            if (filterResult.intent === 'NON_FINANCIAL') {
+            logger.debug(`[Pipeline] Checks - Statement: ${isStatement}, Financial: Checking...`);
+
+            // 4. SPEND EVALUATION (Part 2, 3, 4)
+            const { BroadTransactionDetector } = await import('../rules/BroadTransactionDetector');
+            const { CreditCardSpendEvaluatorV3 } = await import('../rules/CreditCardSpendEvaluatorV3');
+
+            const text = cleanEmail.subject + ' ' + cleanEmail.cleanedBody;
+
+            const isFinancial = BroadTransactionDetector.isFinancialEmail(text);
+            logger.debug(`[Pipeline] Broad Filter: ${isFinancial ? 'PASS' : 'FAIL'}`);
+
+            if (!isFinancial) {
                 await TerminatorService.terminate(
                     userId,
                     cleanEmail.id,
-                    filterResult.reason,
-                    'filter',
-                    filterResult.category,
+                    "Not a financial email",
+                    "broad_filter",
+                    "NON_FINANCIAL",
                     jobId
                 );
                 return 'terminated';
             }
 
-            if (filterResult.intent === 'CREDIT_CARD_STATEMENT') {
-                return await this.processStatement(userId, cleanEmail, jobId, rawEmailId);
+            const evalResult = CreditCardSpendEvaluatorV3.evaluate(cleanEmail);
+
+            logger.info(`[Pipeline] Rule Evaluator: ${evalResult.decision} (Score: ${evalResult.score}). Reasons: ${evalResult.reasons.join(', ')}`);
+
+            // Discards are silent to prevent log noise (TerminatorService logs them if needed)
+
+            // 5. ROUTING
+            if (evalResult.decision === 'DISCARD') {
+                await TerminatorService.terminate(
+                    userId,
+                    cleanEmail.id,
+                    `Score ${evalResult.score}: ${evalResult.reasons.join(', ')}`,
+                    'evaluator',
+                    'LOW_CONFIDENCE',
+                    jobId
+                );
+                return 'terminated';
             }
 
-            if (filterResult.intent === 'CREDIT_CARD_TRANSACTION') {
-                return await this.processTransaction(userId, cleanEmail, jobId, rawEmailId);
+            if (evalResult.decision === 'ACCEPT') {
+                return await this.processTransaction(userId, cleanEmail, evalResult, jobId, rawEmailId);
             }
 
-            return 'terminated'; // Default safe fallback
+            if (evalResult.decision === 'REVIEW') {
+                // < 0.60 is discard (handled above). 
+                // 0.60 - 0.79 is Review. We use GPT as the "Review" mechanism for now to see if it can extract better.
+                logger.info(`[Pipeline] Queuing for GPT Review (Score ${evalResult.score})`);
+                gptQueue.enqueue({
+                    ...cleanEmail.raw, // Pass raw for GPT
+                    userId,
+                    scanJobId: jobId,
+                    rawEmailId
+                });
+                return 'queued_gpt';
+            }
+
+            return 'terminated';
 
         } catch (error) {
             logger.error(`[Pipeline] Error processing ${rawEmail.messageId}`, error);
-            // Log error to DB
             await pool.query(
                 `INSERT INTO email_processing_log (user_id, email_message_id, processing_status, reason, stage, scan_job_id, created_at)
                  VALUES ($1, $2, 'failed', $3, 'pipeline', $4, NOW())
@@ -98,7 +141,81 @@ export class PipelineService {
         }
     }
 
-    // --- SUB-PIPELINES ---
+    private static async processTransaction(
+        userId: string,
+        email: any, // cleanEmail
+        evalResult: any,
+        jobId: string,
+        rawEmailId: string
+    ): Promise<'success'> {
+        const { StrictExtractor } = await import('../extraction/StrictExtractor');
+
+        // 1. Strict Extraction (Part 5)
+        const text = email.subject + ' ' + email.cleanedBody;
+
+        // Prefer metadata from evaluator, but refine with strict extractor
+        let last4 = StrictExtractor.extractLast4(text) || evalResult.metadata.cardLast4;
+        let bankName = StrictExtractor.extractBankName(text, email.from) || 'Unknown Bank';
+
+        // 2. Resolve Card
+        // If we don't have last4, we can't link to a card safely.
+        // But "Card Presence" passed, so maybe we have partial info?
+        // With ACCEPT, we expect high quality.
+
+        let cardId: string | undefined;
+        if (last4 && bankName) {
+            const card = await ResolutionService.resolveCard(userId, bankName, last4);
+            if (card) cardId = card.id;
+        }
+
+        // 3. Create Transaction - Validate amount first
+        const amount = evalResult.metadata.amount;
+        if (!amount || amount <= 0) {
+            logger.debug(`[Pipeline] Skipping transaction with invalid amount: ${amount}`);
+            // Log as terminated instead of creating invalid transaction
+            await TerminatorService.terminate(
+                userId,
+                email.id,
+                `Invalid amount: ${amount}`,
+                'rule_processing',
+                'INVALID_AMOUNT',
+                jobId
+            );
+            return 'success'; // Return success to not break the flow
+        }
+
+        await ResolutionService.createTransaction(userId, {
+            amount: amount,
+            currency: 'INR', // Default to INR if missing
+            date: evalResult.metadata.date || new Date(),
+            description: evalResult.metadata.merchant || 'Unknown Merchant',
+            merchant: evalResult.metadata.merchant || 'Unknown Merchant',
+            cardId: cardId,
+            externalId: email.id,
+            type: 'debit'
+        }, {
+            gmailMessageId: email.id,
+            gmailThreadId: email.raw?.threadId || '',
+            rawEmailId: rawEmailId,
+            confidence: evalResult.score,
+            extractionMethod: 'deterministic_v2'
+        });
+
+        // 4. Log Success
+        await pool.query(
+            `INSERT INTO email_processing_log (user_id, email_message_id, processing_status, reason, stage, status_category, scan_job_id, created_at)
+             VALUES ($1, $2, 'success', $3, 'rule_processing', 'TRANSACTION', $4, NOW()) 
+             ON CONFLICT (email_message_id) 
+             DO UPDATE SET processing_status='success'`,
+            [userId, email.id, `Accepted Score: ${evalResult.score}`, jobId]
+        );
+
+        return 'success';
+    }
+
+    // Circuit Breaker for PDF Failures
+    private static jobPdfFailureCounts = new Map<string, number>();
+    private static readonly MAX_PDF_FAILURES = 5;
 
     private static async processStatement(
         userId: string,
@@ -106,107 +223,64 @@ export class PipelineService {
         jobId: string,
         rawEmailId: string
     ): Promise<'success' | 'failed'> {
-        const { StatementProcessor } = require('../extraction/statement');
-        const { ResolutionService } = require('../cards/resolution.service');
-
-        if (!email.attachments || email.attachments.length === 0) {
-            logger.info(`[Pipeline] Statement ${email.id} has no attachments. Skipping.`);
-            return 'success';
+        // 1. Circuit Breaker Check
+        const failureCount = this.jobPdfFailureCounts.get(jobId) || 0;
+        if (failureCount >= this.MAX_PDF_FAILURES) {
+            // Log only once when we first cross the threshold, or just debug
+            if (failureCount === this.MAX_PDF_FAILURES) {
+                logger.warn(`[Pipeline] PDF Circuit Breaker TRIPPED for job ${jobId}. Skipping future statements.`);
+                this.jobPdfFailureCounts.set(jobId, failureCount + 1); // Increment to avoid spamming this warn
+            } else {
+                logger.debug(`[Pipeline] Skipping Statement PDF (Circuit Breaker) for ${email.id}`);
+            }
+            return 'success'; // Gracefully skip
         }
 
-        let extractedCount = 0;
+        const { StatementProcessor } = require('../extraction/statement'); // Dynamic to avoid circular
 
+        if (!email.attachments || email.attachments.length === 0) return 'success';
+
+        let extractedCount = 0;
         for (const att of email.attachments) {
             try {
-                // Use StatementProcessor which handles PDF + Password + Extraction
-                // We assume att.data is Buffer (Sanitizer provides it)
                 const txns = await StatementProcessor.process(email, att.data);
-
-                // Persist
                 for (const txn of txns) {
-                    await ResolutionService.resolveAndCreateTransaction(userId, {
+                    await ResolutionService.createTransaction(userId, {
                         ...txn,
-                        date: txn.transactionDate,
-                        extractionMethod: 'rule_based',
-                        confidence: 0.9 // Statement confidence is high
+                        type: 'debit',
+                        description: txn.description || 'Statement Txn'
                     }, {
-                        id: email.id,
-                        subject: email.subject,
-                        body: email.cleanedBody,
-                        from: email.from
-                    }, { scanJobId: jobId, rawEmailId });
+                        gmailMessageId: email.id,
+                        gmailThreadId: email.raw?.threadId || '',
+                        rawEmailId: rawEmailId,
+                        confidence: 0.95,
+                        extractionMethod: 'statement_pdf'
+                    });
                     extractedCount++;
                 }
-            } catch (err) {
-                logger.error(`[Pipeline] Statement Error on ${email.id}`, err);
+
+                if (extractedCount > 0) {
+                    await pool.query(
+                        `INSERT INTO email_processing_log (user_id, email_message_id, processing_status, reason, stage, status_category, scan_job_id, created_at)
+                         VALUES ($1, $2, 'success', $3, 'pdf_processing', 'STATEMENT', $4, NOW())
+                         ON CONFLICT (email_message_id) DO UPDATE SET processing_status='success'`,
+                        [userId, email.id, `Extracted ${extractedCount} txns`, jobId]
+                    );
+                }
+            } catch (e: any) {
+                // Circuit Breaker Update
+                const currentFailures = this.jobPdfFailureCounts.get(jobId) || 0;
+                this.jobPdfFailureCounts.set(jobId, currentFailures + 1);
+
+                // Reduce Log Noise: Log stack only if it's the first few failures
+                if (currentFailures < 3) {
+                    logger.error(`[Pipeline] Statement PDF fail for ${email.id}: ${e.message}`, e);
+                } else {
+                    logger.warn(`[Pipeline] Statement PDF fail for ${email.id}: ${e.message} (Failure ${currentFailures + 1})`);
+                }
             }
         }
 
-        if (extractedCount > 0) {
-            await pool.query(
-                `INSERT INTO email_processing_log (user_id, email_message_id, processing_status, reason, stage, status_category, scan_job_id, created_at)
-                 VALUES ($1, $2, 'success', $3, 'pdf_processing', 'STATEMENT', $4, NOW()) 
-                 ON CONFLICT (email_message_id) DO UPDATE SET processing_status='success'`,
-                [userId, email.id, `Extracted ${extractedCount} txns`, jobId]
-            );
-        }
-
         return 'success';
-    }
-
-    private static async processTransaction(
-        userId: string,
-        email: any,
-        jobId: string,
-        rawEmailId: string
-    ): Promise<'success' | 'queued_gpt'> {
-
-        // 1. Try Rule-Based Extraction
-        const txn = await TransactionExtractor.extract(email);
-
-        if (txn) {
-            // Success! Save it.
-            await ResolutionService.resolveAndCreateTransaction(userId, {
-                ...txn,
-                date: txn.transactionDate,
-                extractionMethod: 'rule_based',
-                confidence: txn.confidenceScore
-            }, {
-                id: email.id,
-                subject: email.subject,
-                body: email.cleanedBody,
-                from: email.from
-            }, { scanJobId: jobId, rawEmailId });
-
-            await pool.query(
-                `INSERT INTO email_processing_log (user_id, email_message_id, processing_status, reason, stage, status_category, scan_job_id, created_at)
-                 VALUES ($1, $2, 'success', 'Rule-based success', 'rule_processing', 'TRANSACTION', $3, NOW()) 
-                 ON CONFLICT (email_message_id) 
-                 DO UPDATE SET processing_status='success', stage='rule_processing'`,
-                [userId, email.id, jobId]
-            );
-
-            return 'success';
-        } else {
-            // 2. Fallback to GPT
-            // Enqueue
-            gptQueue.enqueue({
-                ...email,
-                userId: userId,
-                scanJobId: jobId,
-                rawEmailId: rawEmailId
-            });
-            return 'queued_gpt';
-        }
-    }
-
-    private static inferBankFromSender(sender: string): string | null {
-        // Simple helper, or reuse centralized one? 
-        // For now, mapping inline to keep it self-contained or import from BankParsers? 
-        // BankParsers has identifiers.
-        // Let's iterate BankParsers
-        const { BankParsers } = require('../extraction/bankParsers');
-        const match = BankParsers.find((p: any) => p.identifiers.some((id: string) => sender.toLowerCase().includes(id)));
-        return match ? match.bankName : null;
     }
 }

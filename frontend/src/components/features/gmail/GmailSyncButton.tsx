@@ -72,10 +72,12 @@ export function GmailSyncModal({
         setProgress(status);
 
         // Check if job is complete
-        if (status.status === "completed") {
+        // Check if job is complete (Case insensitive)
+        const s = status.status.toUpperCase();
+        if (s === "COMPLETED") {
           clearPolling();
           handleCompletion(status);
-        } else if (status.status === "failed") {
+        } else if (s === "FAILED") {
           clearPolling();
           handleFailure(status);
         }
@@ -189,7 +191,9 @@ export function GmailSyncModal({
   if (!isOpen) return null;
 
   const progressPercent =
-    progress && progress.total > 0
+    progress?.progress !== undefined
+      ? progress.progress
+      : progress && progress.total > 0
       ? Math.round((progress.processed / progress.total) * 100)
       : 0;
 
@@ -300,6 +304,7 @@ export function GmailSyncModal({
                           <p className="text-xs text-secondary-text">
                             {progress.currentStep === 'FETCHING_BATCH' ? `Fetching Batch ${progress.currentBatch || 1}...` : 
                              progress.currentStep === 'PROCESSING_BATCH' ? `Processing Batch ${progress.currentBatch || 1}...` : 
+                             progress.status === 'FETCHING' ? `Fetching emails... (${progress.fetched || 0})` :
                              progress.currentStep}
                           </p>
                           {progress.currentBatch && (
@@ -317,11 +322,18 @@ export function GmailSyncModal({
                             {progress.inserted || 0}
                           </p>
                         </div>
+
                         <div className="bg-hover-bg rounded-lg p-3">
                           <p className="text-xs text-secondary-text">Errors</p>
                           <p className="text-2xl font-bold text-primary-text mt-1">
                             {progress.errors || 0}
                           </p>
+                        </div>
+                        <div className="bg-hover-bg rounded-lg p-3 col-span-2">
+                           <p className="text-xs text-secondary-text">Emails Scanned</p>
+                           <p className="text-xl font-bold text-primary-text mt-1">
+                             {progress.fetched || progress.total || 0}
+                           </p>
                         </div>
                       </div>
                     </>

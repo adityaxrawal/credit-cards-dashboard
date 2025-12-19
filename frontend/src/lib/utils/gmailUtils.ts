@@ -3,14 +3,14 @@ export const GmailUtils = {
      * Generate direct link to a specific Gmail message
      */
     getMailLink(messageId: string): string {
-        return `https://mail.google.com/mail/u/0/#inbox/${messageId}`;
+        return `https://mail.google.com/mail/u/1/#inbox/${messageId}`;
     },
 
     /**
      * Generate direct link to a Gmail thread
      */
     getThreadLink(threadId: string): string {
-        return `https://mail.google.com/mail/u/0/#inbox/${threadId}`;
+        return `https://mail.google.com/mail/u/1/#inbox/${threadId}`;
     },
 
     /**
