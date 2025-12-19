@@ -1,6 +1,10 @@
 // rules/CreditCardSpendEvaluatorV3.ts
 
 import { CleanEmailContent } from '../sanitize/sanitizer';
+import { HardNegativeGate } from './gates/HardNegativeGate';
+import { CreditCardPhraseGate } from './gates/CreditCardPhraseGate';
+import { SpendTypeGate } from './gates/SpendTypeGate';
+import { InstrumentGate } from './gates/InstrumentGate';
 
 export interface EvaluationResult {
     decision: 'ACCEPT' | 'REVIEW' | 'DISCARD';
@@ -16,30 +20,6 @@ export interface EvaluationResult {
 
 export class CreditCardSpendEvaluatorV3 {
 
-    // --- HARD NEGATIVES ---
-    private static HARD_EXCLUDE = [
-        'otp', 'authorization', 'statement generated',
-        'emi schedule', 'emi conversion',
-        'limit increase', 'card blocked'
-    ];
-
-    // --- SOFT NEGATIVES ---
-    private static SOFT_EXCLUDE = [
-        'available balance', 'credit limit',
-        'minimum due', 'total due',
-        'payment successful', 'bill payment'
-    ];
-
-    // --- POSITIVE SIGNALS ---
-    private static SPEND_VERBS = [
-        'spent', 'debited', 'charged',
-        'purchase', 'used at', 'txn of'
-    ];
-
-    private static CARD_MARKERS = [
-        'credit card', 'card ending', 'ending in'
-    ];
-
     private static CURRENCY = /(?:₹|rs\.?|inr|\$|usd)\s*([\d,]+(?:\.\d{1,2})?)/i;
     private static MASKED_CARD = /(?:\*{2,}|x{2,}|ending\s+)(\d{4})/i;
 
@@ -51,72 +31,96 @@ export class CreditCardSpendEvaluatorV3 {
         const text = `${email.subject} ${email.cleanedBody}`.toLowerCase();
         const reasons: string[] = [];
         const metadata: any = {};
-        let score = 0;
 
-        // 1. HARD EXCLUDE
-        if (this.HARD_EXCLUDE.some(k => text.includes(k))) {
+        // --- GATE 1: HARD NEGATIVES (Salary, OTP, EMI, etc.) ---
+        const gate1 = HardNegativeGate.check(text);
+        if (!gate1.passed) {
             return {
                 decision: 'DISCARD',
                 score: 0,
-                reasons: ['Hard negative detected'],
+                reasons: [`Gate 1 Fail: ${gate1.reason}`],
                 metadata: {}
             };
         }
 
-        // 2. AMOUNT + VERB (MANDATORY)
+        // --- GATE 2: CREDIT CARD PHRASE (Must have "credit card" OR trusted sender) ---
+        const gate2 = CreditCardPhraseGate.check(text, email.from);
+        if (!gate2.passed) {
+            return {
+                decision: 'DISCARD',
+                score: 0,
+                reasons: [`Gate 2 Fail: ${gate2.reason}`],
+                metadata: {}
+            };
+        }
+
+        // --- GATE 3: SPEND TYPE (Must be debit/spent, not refund) ---
+        const gate3 = SpendTypeGate.check(text);
+        if (!gate3.passed) {
+            return {
+                decision: 'DISCARD',
+                score: 0,
+                reasons: [`Gate 3 Fail: ${gate3.reason}`],
+                metadata: {}
+            };
+        }
+
+        // --- GATE 4: INSTRUMENT TYPE (No Debit Card / Account Debit) ---
+        const gate4 = InstrumentGate.check(text);
+        if (!gate4.passed) {
+            return {
+                decision: 'DISCARD',
+                score: 0,
+                reasons: [`Gate 4 Fail: ${gate4.reason}`],
+                metadata: {}
+            };
+        }
+
+        // --- IF ALL GATES PASSED -> IT IS A VALID CREDIT CARD SPEND ---
+        // Now we just score it to confirm extraction quality and extract metadata
+
+        let score = 0.5; // Base score for passing all gates
+        reasons.push('Passed all 4 hard gates');
+
+        // Extract Amount (Critical)
         const amountMatch = text.match(this.CURRENCY);
-        const hasVerb = this.SPEND_VERBS.some(v => text.includes(v));
-
-        if (!amountMatch || !hasVerb) {
+        if (amountMatch) {
+            metadata.amount = parseFloat(amountMatch[1].replace(/,/g, ''));
+            score += 0.25;
+        } else {
+            // Even if gates passed, if no amount, it's useless
             return {
                 decision: 'DISCARD',
                 score: 0,
-                reasons: ['Missing debit signal'],
+                reasons: ['Passed gates but no amount found'],
                 metadata: {}
             };
         }
 
-        metadata.amount = parseFloat(amountMatch[1].replace(/,/g, ''));
-        score += 0.35;
-        reasons.push('Debit amount + verb');
-
-        // 3. CARD CONFIRMATION
-        const cardMatch = text.match(this.MASKED_CARD);
-        if (
-            this.CARD_MARKERS.some(k => text.includes(k)) ||
-            cardMatch
-        ) {
-            score += 0.25;
-            reasons.push('Credit card reference');
-            if (cardMatch) metadata.cardLast4 = cardMatch[1];
-        }
-
-        // 4. MERCHANT (PROXIMITY-BASED)
+        // Extract Merchant
         const merchantMatch = text.match(this.MERCHANT_NEAR_SPEND);
         if (merchantMatch) {
             metadata.merchant = merchantMatch[2].trim();
-            score += 0.25;
-            reasons.push('Merchant near spend verb');
+            score += 0.15;
         }
 
-        // 5. DATE
-        if (email.date) {
-            score += 0.05;
-        }
-
-        // 6. SOFT NEGATIVES
-        if (this.SOFT_EXCLUDE.some(k => text.includes(k))) {
-            score -= 0.15;
-            reasons.push('Soft negative context');
+        // Extract Card Last 4
+        const cardMatch = text.match(this.MASKED_CARD);
+        if (cardMatch) {
+            metadata.cardLast4 = cardMatch[1];
+            score += 0.10;
         }
 
         // Normalize
-        score = Math.max(0, Math.min(1, Math.round(score * 100) / 100));
+        score = Math.min(1, score);
 
-        // Decision
-        let decision: EvaluationResult['decision'] = 'DISCARD';
-        if (score >= 0.75) decision = 'ACCEPT';
-        else if (score >= 0.55) decision = 'REVIEW';
+        // Final Decision
+        // Since we have hard gates, if we reached here, we are pretty confident.
+        // We set decision to ACCEPT if score is high, or REVIEW if something is slightly off but gates passed.
+
+        let decision: EvaluationResult['decision'] = 'ACCEPT';
+        // If we want to be safe, maybe 0.75? But gates are strict now.
+        if (score < 0.70) decision = 'REVIEW';
 
         return { decision, score, reasons, metadata };
     }

@@ -72,7 +72,7 @@ export class PipelineService {
 
             // 4. SPEND EVALUATION (Part 2, 3, 4)
             const { BroadTransactionDetector } = await import('../rules/BroadTransactionDetector');
-            const { CreditCardSpendEvaluatorV3 } = await import('../rules/CreditCardSpendEvaluatorV3');
+            const { CreditCardSpendEvaluatorV4 } = await import('../rules/CreditCardSpendEvaluatorV4');
 
             const text = cleanEmail.subject + ' ' + cleanEmail.cleanedBody;
 
@@ -91,7 +91,7 @@ export class PipelineService {
                 return 'terminated';
             }
 
-            const evalResult = CreditCardSpendEvaluatorV3.evaluate(cleanEmail);
+            const evalResult = CreditCardSpendEvaluatorV4.evaluate(cleanEmail);
 
             logger.info(`[Pipeline] Rule Evaluator: ${evalResult.decision} (Score: ${evalResult.score}). Reasons: ${evalResult.reasons.join(', ')}`);
 

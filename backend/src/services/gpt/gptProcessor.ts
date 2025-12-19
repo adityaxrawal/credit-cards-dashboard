@@ -154,7 +154,7 @@ export class GptProcessor {
             if (!content) throw new Error('Empty GPT response');
 
             const json = JSON.parse(content);
-            const results = json.results || [];
+            const results = (json.results || []) as any[]; // cast to any[]
 
             logger.info(`[GPT] Batch ${batchId} Success in ${duration}ms. Results: ${results.length}`);
 
@@ -188,80 +188,120 @@ export class GptProcessor {
         }
     }
 
-    private mapResults(emails: any[], rawResults: any[], batchId: string, userId: string): GptResult[] {
+    private mapResults(
+        emails: any[],
+        rawResults: any[],
+        batchId: string,
+        userId: string
+    ): GptResult[] {
         const emailMap = new Map(emails.map(e => [e.id, e]));
 
-        return rawResults.map((res: any) => {
-            const email = emailMap.get(res.id);
-            if (!email) return null;
+        return rawResults
+            .map((res: any) => {
+                const email = emailMap.get(res.id);
+                if (!email) return null;
 
-            const baseResult = {
-                messageId: res.id,
-                scanJobId: email.scanJobId,
-                rawEmailId: email.rawEmailId
-            };
+                // Only accept if confidence >= 0.60
+                if (res.confidence < 0.60) {
+                    return {
+                        messageId: res.id,
+                        scanJobId: email.scanJobId,
+                        rawEmailId: email.rawEmailId,
+                        status: 'ignored', // treating low confidence as ignored/terminated
+                        reason: `Confidence ${res.confidence} below 0.60`,
+                        confidence: res.confidence,
+                    };
+                }
 
-            if (res.isTransaction && (res.confidence || 0) >= 0.7) { // Confidence Threshold
-                // Construct transaction
+                // Build transaction object
                 const txn = {
                     userId,
-                    merchant: res.merchantName || 'Unknown',
-                    amount: res.amount,
-                    date: res.date ? new Date(res.date) : new Date(email.date),
-                    bankName: res.bankName,
-                    cardLast4: res.cardLast4,
+                    merchant: res.merchant || 'Unknown',
+                    amount: res.amount || 0,
+                    date: res.transactionDate
+                        ? new Date(res.transactionDate)
+                        : new Date(email.date),
+                    bankName: 'Unknown',
+                    cardLast4: res.cardLast4 || '0000',
                     transactionType: 'debit',
                     emailSubject: email.subject,
                     gmailMessageId: email.id,
-                    gmailThreadId: email.raw?.threadId || email.threadId, // Support both struct
-                    gmailLink: GmailLinkGenerator.generateLink(email.id),
+                    gmailThreadId: email.threadId,
                     confidenceScore: res.confidence,
-                    extractionMethod: 'gpt'
+                    extractionMethod: 'gpt',
                 };
+
                 return {
-                    ...baseResult,
+                    messageId: res.id,
+                    scanJobId: email.scanJobId,
+                    rawEmailId: email.rawEmailId,
                     status: 'success',
                     transaction: txn,
-                    confidence: res.confidence
+                    confidence: res.confidence,
                 };
-            } else {
-                return {
-                    ...baseResult,
-                    status: 'ignored',
-                    reason: res.reason || 'Low confidence or not a transaction',
-                    confidence: res.confidence
-                };
-            }
-        }).filter(Boolean) as GptResult[];
+            })
+            .filter(Boolean) as GptResult[];
     }
 
     private buildPrompt(emails: any[]): any[] {
-        // Safely extract email data - emails from queue may have different structure
-        const cleanEmails = emails.map(e => {
-            // Handle different email formats (CleanEmailContent vs raw email)
-            const body = e.cleanedBody || e.body || e.snippet || '';
-            const emailDate = e.date ? (e.date instanceof Date ? e.date : new Date(e.date)) : new Date();
+        const cleanEmails = emails.map(e => ({
+            id: e.id || e.messageId,
+            subject: e.subject || '',
+            body: (e.cleanedBody || e.body || '').substring(0, 500),
+            from: e.from || '',
+            date: e.date instanceof Date ? e.date.toISOString() : new Date(e.date).toISOString(),
+        }));
 
-            return {
-                id: e.id || e.messageId || 'unknown',
-                subject: e.subject || '',
-                body: typeof body === 'string' ? body.substring(0, 500) : '',
-                from: e.from || '',
-                date: emailDate.toISOString()
-            };
-        });
+        const system = `
+You are extracting TRANSACTION DETAILS from credit card spend emails.
 
-        const system = `Extract credit card spend transactions.Return JSON with "results": [{ id, isTransaction, merchantName, amount, currency, date, cardLast4, bankName, confidence, reason }].
-    Rules:
-- isTransaction: true ONLY for debits / spends.false for refunds, bills, otp, promos.
-     - cardLast4: Extract ONLY if explicit.
-     - confidence: 0.0 to 1.0.High confidence(> 0.8) required for automatic insert.
-     - date: ISO format.
-     `;
+IMPORTANT: The email has ALREADY been validated as a legitimate credit card spend.
+Your job is ONLY to extract details.
+DO NOT RE-EVALUATE or RE-CLASSIFY validity. Even if it looks like a refund or notification, extract the details as requested.
+
+**REQUIRED OUTPUT (JSON Array):**
+{
+  "results": [
+    {
+      "id": "email_id",
+      "merchant": "Merchant name or null",
+      "amount": number or null,
+      "currency": "INR",
+      "cardLast4": "last 4 digits or null",
+      "transactionDate": "YYYY-MM-DD or null",
+      "confidence": 0.0 to 1.0,
+      "extractedFields": ["merchant", "amount", "date"]
+    }
+  ]
+}
+
+**EXTRACTION LOGIC:**
+1. Merchant: Look for "at [merchant]", "to [merchant]", "payment to [merchant]"
+2. Amount: Extract numeric value, remove ₹, Rs., symbols
+3. Card Last 4: Find "ending in 1234", "****1234", or "ending 1234"
+4. Date: Prefer explicit date (10-Dec-2025, Dec 10, etc.)
+5. Confidence: number of fields extracted / 4.0
+
+**CRITICAL:**
+- Return ONLY valid JSON (no markdown)
+- All 6 fields required per object
+- Set null for missing fields
+- confidence 0.0-1.0
+
+**DO NOT:**
+- Reject or classify as invalid
+- Check for refunds, OTPs, promotions (just extract what you see)
+- Validate credit card phrase existence
+- Return 'ignored' or 'failed' status inside results - always return extraction objects`;
+
+        const userMessage = `Extract from these emails:\n\n${cleanEmails.map(e =>
+            `ID: ${e.id}\nFrom: ${e.from}\nSubject: ${e.subject}\nBody:\n${e.body}`
+        ).join('\n---\n')
+            }`;
 
         return [
             { role: 'system', content: system },
-            { role: 'user', content: JSON.stringify({ emails: cleanEmails }) }
+            { role: 'user', content: userMessage },
         ];
     }
 }
