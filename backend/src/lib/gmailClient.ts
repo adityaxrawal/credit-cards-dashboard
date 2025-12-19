@@ -79,6 +79,43 @@ const messageCache = new Map<string, { data: gmail_v1.Schema$Message | null; tim
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_CACHE_SIZE = 1000;
 
+// --- TOKEN BUCKET RATE LIMITER ---
+// Gmail API quota: ~250 requests per second per user for most operations
+// We target 50-80 requests/sec to leave headroom and prevent quota exhaustion
+class TokenBucket {
+  private tokens: number;
+  private lastRefill: number;
+  private readonly maxTokens: number;
+  private readonly refillRate: number; // tokens per second
+
+  constructor(maxTokens: number = 80, refillRate: number = 80) {
+    this.maxTokens = maxTokens;
+    this.tokens = maxTokens;
+    this.refillRate = refillRate;
+    this.lastRefill = Date.now();
+  }
+
+  async acquire(): Promise<void> {
+    // Refill tokens based on time passed
+    const now = Date.now();
+    const elapsed = (now - this.lastRefill) / 1000;
+    this.tokens = Math.min(this.maxTokens, this.tokens + elapsed * this.refillRate);
+    this.lastRefill = now;
+
+    if (this.tokens < 1) {
+      // Wait until we have a token
+      const waitMs = ((1 - this.tokens) / this.refillRate) * 1000;
+      await new Promise(r => setTimeout(r, waitMs));
+      this.tokens = 1;
+    }
+
+    this.tokens--;
+  }
+}
+
+// Singleton rate limiter for Gmail API
+const gmailRateLimiter = new TokenBucket(100, 100); // 100 tokens max, refill 100/sec (Target: High Throughput)
+
 /**
  * Fetch raw Gmail message
  */
@@ -93,6 +130,9 @@ export async function getRawMessage(
   }
 
   try {
+    // Acquire rate limit token before making request
+    await gmailRateLimiter.acquire();
+
     const gmail = getGmailClient(refreshToken);
 
     // No concurrency limit here - caller handles it
@@ -204,10 +244,11 @@ export async function getMessage(
 export async function batchGetMessages(
   refreshToken: string,
   messageIds: string[],
-  concurrency: number = 200
+  concurrency: number = 100 // High concurrency for throughput
 ): Promise<Array<gmail_v1.Schema$Message | null>> {
-  // Use p-limit to control concurrency. 
-  // With HTTP/2 or modern Node, 200 concurrent requests is fine.
+  // Use p-limit to control concurrency.
+  // RATIONALE: 100 concurrent requests provides good throughput while
+  // leaving headroom for rate limiting and other operations.
   const limit = pLimit(concurrency);
 
   const start = Date.now();

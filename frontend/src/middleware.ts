@@ -37,12 +37,16 @@ async function verifyToken(
 ): Promise<UserSecurityContext | null> {
   try {
     console.log(`[Middleware] Verifying token against: ${apiUrl}/api/auth/me`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
     const response = await fetch(`${apiUrl}/api/auth/me`, {
       headers: {
         Cookie: `accessToken=${accessToken}`,
       },
       cache: "no-store",
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
 
     if (!response.ok) {
       console.error(`[Middleware] Token verification failed with status: ${response.status}`);
@@ -130,28 +134,32 @@ export async function middleware(request: NextRequest) {
   // No access token - try to refresh using refresh token
   if (!accessToken) {
     const refreshToken = request.cookies.get("refreshToken")?.value;
-    
+
     if (refreshToken) {
       console.log("[Middleware] Access token missing, attempting refresh with refresh token");
       try {
         // Call backend to refresh token
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
         const refreshResponse = await fetch(`${apiUrl}/api/auth/refresh`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Cookie: `refreshToken=${refreshToken}`,
           },
-        });
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeoutId));
 
         if (refreshResponse.ok) {
           const data = await refreshResponse.json();
           const newAccessToken = data.accessToken;
-          
+
           console.log("[Middleware] Token refresh successful");
-          
+
           // Create response to continue to destination
           const response = NextResponse.next();
-          
+
           // Forward the Set-Cookie headers from backend to browser
           const setCookieHeader = refreshResponse.headers.get('set-cookie');
           if (setCookieHeader) {
@@ -165,28 +173,28 @@ export async function middleware(request: NextRequest) {
               path: '/',
               maxAge: 60 * 60 // 1 hour
             });
-            
+
             // Also update the request cookies for the downstream handler (layout/page)
             // This is crucial so the server component sees the new token immediately
             request.cookies.set("accessToken", newAccessToken);
-            
+
             // Re-verify with the new token to get user context
             const userContext = await verifyToken(newAccessToken, apiUrl);
-            
+
             if (userContext) {
-               // Check security level with new context
-               const hasAccess = checkSecurityLevel(userContext, requiredLevel);
-               if (!hasAccess) {
-                 // Handle access denial logic (same as below)
-                 if (requiredLevel === "gmailConnected" && !userContext.gmailConnected) {
-                    return NextResponse.redirect(new URL(getGmailConnectPath(pathname), request.url));
-                 } else if (requiredLevel === "admin" && !userContext.isAdmin) {
-                    return NextResponse.redirect(new URL("/dashboard", request.url));
-                 } else {
-                    return NextResponse.redirect(new URL(getSecurityRedirectPath(requiredLevel, pathname), request.url));
-                 }
-               }
-               return response;
+              // Check security level with new context
+              const hasAccess = checkSecurityLevel(userContext, requiredLevel);
+              if (!hasAccess) {
+                // Handle access denial logic (same as below)
+                if (requiredLevel === "gmailConnected" && !userContext.gmailConnected) {
+                  return NextResponse.redirect(new URL(getGmailConnectPath(pathname), request.url));
+                } else if (requiredLevel === "admin" && !userContext.isAdmin) {
+                  return NextResponse.redirect(new URL("/dashboard", request.url));
+                } else {
+                  return NextResponse.redirect(new URL(getSecurityRedirectPath(requiredLevel, pathname), request.url));
+                }
+              }
+              return response;
             }
           }
         } else {
