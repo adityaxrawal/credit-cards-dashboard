@@ -11,7 +11,7 @@ const pool = new Pool({
   keepAliveInitialDelayMillis: 10000,
   idleTimeoutMillis: 60000, // Close idle clients after 60s
   connectionTimeoutMillis: 10000, // 10s connection timeout
-  max: 10, // Limit max connections
+  max: 20, // Increase max connections for parallel processing
   allowExitOnIdle: false, // Keep pool alive even when idle
 });
 

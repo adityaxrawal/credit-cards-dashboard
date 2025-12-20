@@ -86,10 +86,11 @@ export class BankParserPatterns {
   static readonly CARD_MASKED = RegexCache.get('(?<!account\\s+)(?<!ac\\s+)(?<!a\\/c\\s+)(?<!order\\s+)(?<!ref\\s+)(?<!mobile\\s+)(?<!phone\\s+)(?:\\*{4}|\\*{6}|\\*{8}|\\*{12})(\\d{4})', 'i');
 
   // Merchant patterns
-  static readonly MERCHANT_AT = RegexCache.get('(?:at|@)\\s+([A-Za-z0-9\\s*&.\\-\\/()]+?)(?:\\s+on\\s+(?:\\d|[A-Za-z]{3})|\\s+dated|\\s+for\\s+Rs|\\.|,|\\n|$)', 'i');
-  static readonly MERCHANT_TO = RegexCache.get('(?:to|towards)\\s+([A-Za-z0-9\\s*&.\\-\\/()]+?)(?:\\s+on\\s+(?:\\d|[A-Za-z]{3})|\\s+dated|\\s+for\\s+Rs|\\.|,|\\n|$)', 'i');
-  static readonly MERCHANT_WITH = RegexCache.get('(?:with)\\s+([A-Za-z0-9\\s*&.\\-\\/()]+?)(?:\\s+on\\s+(?:\\d|[A-Za-z]{3})|\\s+dated|\\.|,|\\n|$)', 'i');
-  static readonly MERCHANT_FROM = RegexCache.get('(?:from)\\s+([A-Za-z0-9\\s*&.\\-\\/()]+?)(?:\\s+on\\s+(?:\\d|[A-Za-z]{3})|\\s+dated|\\.|,|\\n|$)', 'i');
+  static readonly MERCHANT_AT = RegexCache.get('(?:at|@)\\s+([A-Za-z0-9\\s*&.\\-\\/()]+?)(?:\\s+on\\s+(?:\\d|[A-Za-z]{3})|\\s+dated|\\s+for\\s+Rs|\\s+using|\\s+via|\\s+through|\\.|,|\\n|$)', 'i');
+  static readonly MERCHANT_TO = RegexCache.get('(?:to|towards)\\s+([A-Za-z0-9\\s*&.\\-\\/()]+?)(?:\\s+on\\s+(?:\\d|[A-Za-z]{3})|\\s+dated|\\s+for\\s+Rs|\\s+using|\\s+via|\\s+through|\\.|,|\\n|$)', 'i');
+  static readonly MERCHANT_WITH = RegexCache.get('(?:with)\\s+([A-Za-z0-9\\s*&.\\-\\/()]+?)(?:\\s+on\\s+(?:\\d|[A-Za-z]{3})|\\s+dated|\\s+using|\\s+via|\\s+through|\\.|,|\\n|$)', 'i');
+  static readonly MERCHANT_FROM = RegexCache.get('(?:from)\\s+([A-Za-z0-9\\s*&.\\-\\/()]+?)(?:\\s+on\\s+(?:\\d|[A-Za-z]{3})|\\s+dated|\\s+using|\\s+via|\\s+through|\\.|,|\\n|$)', 'i');
+  static readonly MERCHANT_BY = RegexCache.get('(?:by)\\s+([A-Za-z0-9\\s*&.\\-\\/()]+?)(?:\\s+on\\s+(?:\\d|[A-Za-z]{3})|\\s+dated|\\s+using|\\s+via|\\s+through|\\.|,|\\n|$)', 'i');
 
   // Reference patterns
   static readonly REF_NUMBER_1 = RegexCache.get('(?:Ref No|Reference No|Txn Ref|Transaction ID|Ref|Txn ID)\\b[:\\s]*([A-Za-z0-9]+)', 'i');

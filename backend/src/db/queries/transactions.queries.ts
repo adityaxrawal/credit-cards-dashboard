@@ -26,10 +26,22 @@ export interface Transaction {
   original_amount?: number;
   reference_number?: string;
   transaction_subtype?: string;
+  direction?: string;
+  instrument_type?: string;
+  instrument_id?: string;
+  classification_method?: string;
+  confidence_score?: number;
+  needs_review?: boolean;
+  review_reason?: string;
+  counterparty_name?: string;
+  counterparty_identifier?: string;
 }
 
 export interface TransactionFilters {
   cardId?: string;
+  instrumentType?: string;
+  instrumentId?: string;
+  direction?: string;
   from?: Date;
   to?: Date;
   billMonth?: number;
@@ -39,6 +51,19 @@ export interface TransactionFilters {
   merchant?: string;
   limit?: number;
   offset?: number;
+  needsReview?: boolean;
+  search?: string;
+}
+
+/**
+ * Get pending review transactions
+ */
+export async function getPendingReviewTransactions(
+  userId: string,
+  limit: number = 50,
+  offset: number = 0
+): Promise<{ data: Transaction[]; total: number }> {
+  return listTransactions(userId, { needsReview: true, limit, offset });
 }
 
 /**
@@ -59,7 +84,18 @@ export async function listTransactions(
     where.push(`t.card_id = $${paramIndex++}`);
     params.push(filters.cardId);
   }
-
+  if (filters.instrumentType) {
+    where.push(`t.instrument_type = $${paramIndex++}`);
+    params.push(filters.instrumentType);
+  }
+  if (filters.instrumentId) {
+    where.push(`t.instrument_id = $${paramIndex++}`);
+    params.push(filters.instrumentId);
+  }
+  if (filters.direction) {
+    where.push(`t.direction = $${paramIndex++}`);
+    params.push(filters.direction);
+  }
   if (filters.from) {
     where.push(`t.transaction_date >= $${paramIndex++}`);
     params.push(filters.from);
@@ -95,6 +131,17 @@ export async function listTransactions(
     params.push(`%${filters.merchant}%`);
   }
 
+  if (filters.needsReview !== undefined) {
+    where.push(`t.needs_review = $${paramIndex++}`);
+    params.push(filters.needsReview);
+  }
+  if (filters.search) {
+    where.push(`(t.merchant ILIKE $${paramIndex} OR t.description ILIKE $${paramIndex})`);
+    params.push(`%${filters.search}%`);
+    paramIndex++;
+  }
+
+
   const whereClause = where.join(' AND ');
 
   // Get total count
@@ -126,7 +173,7 @@ export async function listTransactions(
         'last_four', c.card_number_last4
       ) as card
      FROM transactions t
-     LEFT JOIN credit_cards c ON t.card_id = c.id
+     LEFT JOIN credit_cards c ON (t.card_id = c.id OR (t.instrument_type = 'credit_card' AND t.instrument_id = c.id))
      WHERE ${whereClause}
      ORDER BY ${sortColumn} ${orderDirection}
      LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
@@ -175,12 +222,18 @@ export async function findTransactionByFingerprint(
  */
 export async function createTransaction(data: {
   userId: string;
-  cardId: string;
+  instrumentType?: string;
+  instrumentId?: string;
+  cardId?: string; // Legacy
   transactionDate: Date;
   merchant: string;
   category: string;
   amount: number;
   transactionType: string;
+  direction?: string;
+  counterpartyName?: string;
+  counterpartyIdentifier?: string;
+  referenceNumber?: string;
   description?: string;
   billMonth?: number;
   billYear?: number;
@@ -190,12 +243,17 @@ export async function createTransaction(data: {
   metadata?: any;
   exactTimestamp?: Date;
   emailSubject?: string;
+  emailSender?: string;
   gmailThreadId?: string;
   gmailAccountIndex?: number;
   currencyCode?: string;
   originalAmount?: number;
-  referenceNumber?: string;
   transactionSubtype?: string;
+  classificationMethod?: string;
+  confidenceScore?: number;
+  needsReview?: boolean;
+  reviewReason?: string;
+  rawExtraction?: any;
   scanJobId?: string;
   rawEmailId?: string;
 }): Promise<Transaction | null> {
@@ -208,37 +266,51 @@ export async function createTransaction(data: {
 
   const { rows } = await pool.query(
     `INSERT INTO transactions (
-      user_id, card_id, transaction_date, merchant, category,
-      amount, transaction_type, description, bill_month, bill_year,
-      email_message_id, txn_fingerprint, is_manually_added, metadata,
-      exact_timestamp, email_subject, gmail_thread_id, gmail_account_index,
-      currency_code, original_amount, reference_number, transaction_subtype,
+      user_id, instrument_type, instrument_id, card_id, transaction_date, merchant, category,
+      amount, transaction_type, direction, counterparty_name, counterparty_identifier,
+      reference_number, description, bill_month, bill_year,
+      email_message_id, email_subject, email_sender, txn_fingerprint,
+      is_manually_added, metadata, raw_extraction, classification_method,
+      confidence_score, needs_review, review_reason, exact_timestamp,
+      gmail_thread_id, gmail_account_index,
+      currency_code, original_amount, transaction_subtype,
       scan_job_id, raw_email_id
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
     ON CONFLICT (email_message_id, txn_fingerprint) DO NOTHING
     RETURNING *`,
     [
       data.userId,
-      data.cardId,
+      data.instrumentType,
+      data.instrumentId,
+      data.cardId || null,
       data.transactionDate,
       truncatedMerchant,
       truncatedCategory,
       data.amount,
       data.transactionType,
+      data.direction,
+      data.counterpartyName,
+      data.counterpartyIdentifier,
+      truncatedReferenceNumber,
       data.description || null,
       data.billMonth || null,
       data.billYear || null,
       truncatedEmailMessageId,
+      truncatedEmailSubject,
+      data.emailSender || null,
       data.txnFingerprint || null,
       data.isManuallyAdded || false,
       data.metadata || null,
+      data.rawExtraction || null,
+      data.classificationMethod,
+      data.confidenceScore || null,
+      data.needsReview || false,
+      data.reviewReason || null,
       data.exactTimestamp || null,
-      truncatedEmailSubject,
       data.gmailThreadId || null,
       data.gmailAccountIndex || 1,
       data.currencyCode || null,
       data.originalAmount || null,
-      truncatedReferenceNumber,
       data.transactionSubtype || null,
       data.scanJobId || null,
       data.rawEmailId || null
@@ -253,27 +325,38 @@ export async function createTransaction(data: {
  */
 export async function createTransactionsBulk(dataList: Array<{
   userId: string;
-  cardId: string;
+  instrumentType?: string;
+  instrumentId?: string;
+  cardId?: string;
   transactionDate: Date;
   merchant: string;
   category: string;
   amount: number;
   transactionType: string;
+  direction?: string;
+  counterpartyName?: string;
+  counterpartyIdentifier?: string;
+  referenceNumber?: string;
   description?: string;
   billMonth?: number;
   billYear?: number;
   emailMessageId?: string;
+  emailSubject?: string;
+  emailSender?: string;
   txnFingerprint?: string;
   isManuallyAdded?: boolean;
   metadata?: any;
   exactTimestamp?: Date;
-  emailSubject?: string;
   gmailThreadId?: string;
   gmailAccountIndex?: number;
   currencyCode?: string;
   originalAmount?: number;
-  referenceNumber?: string;
   transactionSubtype?: string;
+  classificationMethod?: string;
+  confidenceScore?: number;
+  needsReview?: boolean;
+  reviewReason?: string;
+  rawExtraction?: any;
   scanJobId?: string;
   rawEmailId?: string;
 }>): Promise<Transaction[]> {
@@ -296,44 +379,58 @@ export async function createTransactionsBulk(dataList: Array<{
       const truncatedReferenceNumber = data.referenceNumber?.substring(0, 100) || data.referenceNumber;
 
       placeholders.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13}, $${paramIndex + 14}, $${paramIndex + 15}, $${paramIndex + 16}, $${paramIndex + 17}, $${paramIndex + 18}, $${paramIndex + 19}, $${paramIndex + 20}, $${paramIndex + 21}, $${paramIndex + 22}, $${paramIndex + 23})`
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13}, $${paramIndex + 14}, $${paramIndex + 15}, $${paramIndex + 16}, $${paramIndex + 17}, $${paramIndex + 18}, $${paramIndex + 19}, $${paramIndex + 20}, $${paramIndex + 21}, $${paramIndex + 22}, $${paramIndex + 23}, $${paramIndex + 24}, $${paramIndex + 25}, $${paramIndex + 26}, $${paramIndex + 27}, $${paramIndex + 28}, $${paramIndex + 29}, $${paramIndex + 30}, $${paramIndex + 31}, $${paramIndex + 32}, $${paramIndex + 33}, $${paramIndex + 34})`
       );
       values.push(
         data.userId,
-        data.cardId,
+        data.instrumentType || null,
+        data.instrumentId || null,
+        data.cardId || null,
         data.transactionDate,
         truncatedMerchant,
         truncatedCategory,
         data.amount,
         data.transactionType,
+        data.direction || null,
+        data.counterpartyName || null,
+        data.counterpartyIdentifier || null,
+        truncatedReferenceNumber || null,
         data.description || null,
         data.billMonth || null,
         data.billYear || null,
         truncatedEmailMessageId,
+        truncatedEmailSubject || null,
+        data.emailSender || null,
         data.txnFingerprint || null,
         data.isManuallyAdded || false,
         data.metadata || null,
+        data.rawExtraction || null,
+        data.classificationMethod || null,
+        data.confidenceScore || null,
+        data.needsReview || false,
+        data.reviewReason || null,
         data.exactTimestamp || null,
-        truncatedEmailSubject,
         data.gmailThreadId || null,
         data.gmailAccountIndex || 1,
         data.currencyCode || null,
         data.originalAmount || null,
-        truncatedReferenceNumber,
         data.transactionSubtype || null,
         data.scanJobId || null,
         data.rawEmailId || null
       );
-      paramIndex += 24;
+      paramIndex += 35;
     }
 
     const query = `
       INSERT INTO transactions (
-        user_id, card_id, transaction_date, merchant, category,
-        amount, transaction_type, description, bill_month, bill_year,
-        email_message_id, txn_fingerprint, is_manually_added, metadata,
-        exact_timestamp, email_subject, gmail_thread_id, gmail_account_index,
-        currency_code, original_amount, reference_number, transaction_subtype,
+        user_id, instrument_type, instrument_id, card_id, transaction_date, merchant, category,
+        amount, transaction_type, direction, counterparty_name, counterparty_identifier,
+        reference_number, description, bill_month, bill_year,
+        email_message_id, email_subject, email_sender, txn_fingerprint,
+        is_manually_added, metadata, raw_extraction, classification_method,
+        confidence_score, needs_review, review_reason, exact_timestamp,
+        gmail_thread_id, gmail_account_index,
+        currency_code, original_amount, transaction_subtype,
         scan_job_id, raw_email_id
       ) VALUES ${placeholders.join(', ')}
       ON CONFLICT (email_message_id, txn_fingerprint) DO NOTHING
@@ -449,7 +546,7 @@ export async function getSpendingAggregations(
   totalTransactions: number;
   byCategory: Array<{ category: string; total: number; count: number }>;
 }> {
-  const where: string[] = ['user_id = $1', "transaction_type = 'debit'"];
+  const where: string[] = ['user_id = $1', "direction = 'debit'"];
   const params: any[] = [userId];
   let paramIndex = 2;
 
@@ -470,30 +567,32 @@ export async function getSpendingAggregations(
 
   const whereClause = where.join(' AND ');
 
-  // Total spent
-  const totalResult = await pool.query(
-    `SELECT COALESCE(SUM(amount), 0) as total, COUNT(*) as count
-     FROM transactions WHERE ${whereClause}`,
-    params
-  );
-
-  // By category
-  const categoryResult = await pool.query(
-    `SELECT category, SUM(amount) as total, COUNT(*) as count
+  // Combined aggregation
+  const result = await pool.query(
+    `SELECT 
+      category, 
+      SUM(amount) as cat_total, 
+      COUNT(*) as cat_count,
+      SUM(SUM(amount)) OVER() as grand_total,
+      SUM(COUNT(*)) OVER() as grand_count
      FROM transactions 
      WHERE ${whereClause}
      GROUP BY category
-     ORDER BY total DESC`,
+     ORDER BY cat_total DESC`,
     params
   );
 
+  const rows = result.rows;
+  const totalSpent = rows.length > 0 ? parseFloat(rows[0].grand_total) : 0;
+  const totalTransactions = rows.length > 0 ? parseInt(rows[0].grand_count) : 0;
+
   return {
-    totalSpent: parseFloat(totalResult.rows[0].total),
-    totalTransactions: parseInt(totalResult.rows[0].count),
-    byCategory: categoryResult.rows.map(row => ({
+    totalSpent,
+    totalTransactions,
+    byCategory: rows.map(row => ({
       category: row.category,
-      total: parseFloat(row.total),
-      count: parseInt(row.count),
+      total: parseFloat(row.cat_total),
+      count: parseInt(row.cat_count),
     })),
   };
 }

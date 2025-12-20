@@ -10,11 +10,16 @@ import gmailRoutes from './gmail.routes';
 import rewardsRoutes from './rewards.routes';
 import extractionRoutes from './extraction.routes';
 import billsRoutes from './bills.routes';
+import monitoringRoutes from './monitoring.routes';
+import instrumentsRoutes from './instruments.routes';
 
 const router = Router();
 
 // Auth routes (no /api prefix needed, it's added in app.ts)
 router.use('/auth', authRoutes);
+
+// Monitoring routes
+router.use('/monitoring', monitoringRoutes);
 
 // Domain routes
 router.use('/cards', cardsRoutes);
@@ -27,6 +32,7 @@ router.use('/gmail', gmailRoutes);
 router.use('/rewards', rewardsRoutes);
 router.use('/extraction', extractionRoutes);
 router.use('/bills', billsRoutes);
+router.use('/', instrumentsRoutes);
 
 export default router;
 

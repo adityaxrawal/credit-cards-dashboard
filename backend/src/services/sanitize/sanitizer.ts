@@ -1,20 +1,7 @@
 import * as cheerio from 'cheerio';
-import { SimplifiedEmail } from '../../types';
+import { SimplifiedEmail, CleanEmail } from '../../types/transaction.types';
 
-export interface CleanEmailContent {
-    id: string;
-    subject: string;
-    from: string;
-    date: Date;
-    cleanedBody: string;
-    hasAttachments: boolean;
-    attachments?: {
-        filename: string;
-        mimeType: string;
-        data: Buffer;
-    }[];
-    raw: SimplifiedEmail; // Keep generic reference if needed, but prefer specific fields
-}
+export type CleanEmailContent = CleanEmail;
 
 export class SanitizerService {
     /**
@@ -24,7 +11,7 @@ export class SanitizerService {
     static async sanitize(
         rawEmail: SimplifiedEmail,
         fetchAttachment?: (msgId: string, attId: string) => Promise<Buffer | null>
-    ): Promise<CleanEmailContent> {
+    ): Promise<CleanEmail> {
 
         // 1. Sanitize Body
         let cleanedBody = this.processBody(rawEmail.body, rawEmail.bodyHtml);
@@ -33,22 +20,30 @@ export class SanitizerService {
         const attachments: { filename: string; mimeType: string; data: Buffer }[] = [];
 
         if (rawEmail.attachments && rawEmail.attachments.length > 0 && fetchAttachment) {
-            for (const att of rawEmail.attachments) {
-                // Only fetch PDF attachments
-                if (att.mimeType === 'application/pdf' || att.filename.toLowerCase().endsWith('.pdf')) {
-                    try {
-                        const buffer = await fetchAttachment(rawEmail.messageId, att.id);
-                        if (buffer) {
-                            attachments.push({
-                                filename: att.filename,
-                                mimeType: att.mimeType,
-                                data: buffer
-                            });
+            const pdfAttachments = rawEmail.attachments.filter(att =>
+                att.mimeType === 'application/pdf' || att.filename.toLowerCase().endsWith('.pdf')
+            );
+
+            if (pdfAttachments.length > 0) {
+                const results = await Promise.all(
+                    pdfAttachments.map(async (att) => {
+                        try {
+                            const buffer = await fetchAttachment(rawEmail.messageId, att.id);
+                            if (buffer) {
+                                return {
+                                    filename: att.filename,
+                                    mimeType: att.mimeType,
+                                    data: buffer
+                                };
+                            }
+                        } catch (err) {
+                            console.warn(`[Sanitizer] Failed to fetch attachment ${att.filename} for email ${rawEmail.messageId}`, err);
                         }
-                    } catch (err) {
-                        console.warn(`[Sanitizer] Failed to fetch attachment ${att.filename} for email ${rawEmail.messageId}`, err);
-                    }
-                }
+                        return null;
+                    })
+                );
+
+                attachments.push(...results.filter((res): res is NonNullable<typeof res> => res !== null));
             }
         }
 
@@ -56,11 +51,10 @@ export class SanitizerService {
             id: rawEmail.messageId,
             subject: rawEmail.subject,
             from: rawEmail.from,
-            date: new Date(rawEmail.internalDate),
+            internalDate: rawEmail.internalDate,
             cleanedBody,
             hasAttachments: attachments.length > 0,
             attachments: attachments.length > 0 ? attachments : undefined,
-            raw: rawEmail
         };
     }
 

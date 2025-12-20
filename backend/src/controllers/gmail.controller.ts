@@ -171,7 +171,7 @@ export async function getTerminatorReport(req: Request, res: Response, next: Nex
     res.json({
       success: true,
       data: report,
-      message: `${report.length} emails terminated in the requested period`,
+      message: `${report.totalTerminated} emails terminated in the requested period`,
     });
   } catch (error) {
     console.error('[GmailController] Terminator Report Error:', error);

@@ -33,6 +33,10 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1, "OPENAI_API_KEY is required"),
   GPT_MODEL: z.string().optional().default('gpt-4o-mini'),
 
+  // Feature Flags
+  USE_NEW_PIPELINE: z.string().optional().default('true'),
+  NEW_PIPELINE_ROLLOUT_PERCENTAGE: z.string().optional().default('100'),
+
   // Gmail
   GMAIL_PUBSUB_TOPIC: z.string().optional(),
 

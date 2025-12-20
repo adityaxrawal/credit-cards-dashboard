@@ -2,10 +2,9 @@ import 'dotenv/config';
 import app from './app';
 import pool from './lib/db';
 import { env } from './config/env';
-// import './services/gptBatchProcessor'; // Removed
-
 import { createServer } from 'http';
 import { initializeWebSocket } from './services/webSocketService';
+import { registerAll } from './services/classification';
 
 const PORT = env.PORT || 8000;
 
@@ -14,6 +13,10 @@ const startServer = async () => {
     // Test DB connection
     await pool.query('SELECT NOW()');
     console.log('✅ Database connected successfully');
+
+    // Register all classifiers and extractors
+    registerAll();
+    console.log('✅ Classifiers and Extractors registered');
 
     const server = createServer(app);
 
