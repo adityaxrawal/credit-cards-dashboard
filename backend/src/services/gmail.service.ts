@@ -7,8 +7,8 @@ import { randomUUID } from 'crypto';
 import { env } from '../config/env';
 import logger from '../utils/logger';
 import { encrypt, decrypt } from '../utils/encryption';
-import { TerminatorService } from './terminator/terminator';
-import { gptQueue } from './queue/gptQueue';
+import { TerminatorService } from './termination/TerminatorService';
+import { SimplifiedEmail } from '../types/transaction.types';
 
 /**
  * Get Gmail connection status
@@ -289,9 +289,8 @@ export async function manualMap(userId: string, messageId: string, cardInfo: {
       const message = await gmailClient.getMessage(rawToken, messageId);
       if (!message) throw new Error('Message not found');
 
-      // 3. New Architecture Process
-      // Parse
-      const simpleEmail = {
+      // 3. Process via Universal Pipeline
+      const simpleEmail: SimplifiedEmail = {
         messageId: message.id,
         threadId: message.threadId,
         from: message.from,
@@ -299,65 +298,31 @@ export async function manualMap(userId: string, messageId: string, cardInfo: {
         subject: message.subject,
         body: message.bodyText || message.snippet,
         internalDate: message.date.getTime(),
-        bodyText: message.bodyText,
-        bodyHtml: message.bodyHtml,
-        attachments: message.attachments
+        snippet: message.snippet
       };
 
       const fetchAttachment = async (msgId: string, attId: string) =>
         gmailClient.getAttachment(rawToken, msgId, attId);
 
-      const cleanEmail = await SanitizerService.sanitize(simpleEmail, fetchAttachment);
+      const { UniversalTransactionPipeline } = await import('./pipeline/UniversalTransactionPipeline');
+      const result = await UniversalTransactionPipeline.processEmail(userId, simpleEmail, jobId, fetchAttachment);
 
-      // Try Rule
-      const { CreditCardSpendEvaluatorV3 } = await import('./rules/CreditCardSpendEvaluatorV3');
-      const { StrictExtractor } = await import('./extraction/StrictExtractor');
+      if (result.status === 'success' || result.status === 'needs_review' || result.status === 'duplicate') {
+        // For manualMap, we ensure the transaction is linked to the user-provided card
+        // even if the pipeline resolved it differently or flagged it for review.
 
-      // For manual map, we trust it's a transaction, but we need details.
-      // Evaluator finds amount/merchant/date
-      const evalResult = CreditCardSpendEvaluatorV3.evaluate(cleanEmail);
-
-      let txnData: any = null;
-
-      if (evalResult.metadata.amount) {
-        const text = cleanEmail.subject + ' ' + cleanEmail.cleanedBody;
-
-        // Use Strict Extractor for bank/last4 if possible, else use provided cardInfo
-        const extractedLast4 = StrictExtractor.extractLast4(text) || evalResult.metadata.cardLast4;
-        const extractedBank = StrictExtractor.extractBankName(text, cleanEmail.from);
-
-        txnData = {
-          amount: evalResult.metadata.amount,
-          transactionDate: evalResult.metadata.date || new Date(cleanEmail.date),
-          merchant: evalResult.metadata.merchant || 'Unknown Merchant',
-          description: evalResult.metadata.merchant || 'Manual Map Transaction',
-          bankName: extractedBank || cardInfo.bankName,
-          lastFourDigits: extractedLast4 || cardInfo.last4,
-          confidenceScore: evalResult.score
-        };
-      }
-
-      if (!txnData) {
-        const { gptProcessor } = await import('./gpt/gptProcessor'); // Dynamic import
-        const gptResults = await gptProcessor.processBatch([cleanEmail], userId);
-        if (gptResults.length > 0 && gptResults[0].status === 'success') {
-          txnData = gptResults[0].transaction;
+        const txnId = (result as any).transactionId;
+        if (txnId) {
+          // Force link to the user-provided card
+          await pool.query(
+            `UPDATE transactions SET card_id = $1, instrument_id = (
+              SELECT id FROM user_instruments 
+              WHERE user_id = $2 AND bank_name = $3 AND instrument_type = 'credit_card' 
+              AND account_number_masked LIKE $4 LIMIT 1
+            ) WHERE id = $5`,
+            [card.id, userId, cardInfo.bankName, `%${cardInfo.last4}`, txnId]
+          );
         }
-      }
-
-      if (txnData) {
-        // Force Card ID override (User provided cardInfo)
-        txnData.cardId = card.id;
-
-        await transactionsService.insertFromEmail(userId, {
-          ...txnData,
-          cardId: card.id, // Explicitly use the manual card
-          emailMessageId: messageId,
-          metadata: {
-            source: 'manual_map',
-            confidence: txnData.confidenceScore
-          }
-        });
 
         await pool.query(
           `UPDATE gmail_sync_jobs 
@@ -366,7 +331,7 @@ export async function manualMap(userId: string, messageId: string, cardInfo: {
           [jobId]
         );
       } else {
-        throw new Error('Could not extract transaction details via Rules or GPT');
+        throw new Error(`Pipeline processing failed: ${result.status} ${(result as any).reason || ''}`);
       }
 
     } catch (error) {
@@ -388,7 +353,7 @@ export async function manualMap(userId: string, messageId: string, cardInfo: {
  */
 export async function getPipelineStats(userId: string) {
   const connection = await getConnectionStatus(userId);
-  const queueStats = { queue1: gptQueue.length }; // Simplified for new queue
+  const queueStats = { pending: 0 }; // Queue depth tracking to be updated for new batching if needed
   const latestJob = await getLatestJob(userId);
   // Status check MUST match the new UPPERCASE states
   const isJobRunning = latestJob?.status === 'PENDING' || latestJob?.status === 'PROCESSING' || latestJob?.status === 'FETCHING' || latestJob?.status === 'GPT_PROCESSING';

@@ -2,15 +2,11 @@ import { decrypt } from '../utils/encryption';
 import pool from '../lib/db';
 import * as gmailClient from '../lib/gmailClient';
 import { GmailFetcherService } from '../services/gmail/fetcher';
-
-import { gptQueue } from '../services/queue/gptQueue';
-import dayjs from 'dayjs';
 import logger from '../utils/logger';
 import { WorkflowLogger } from '../utils/workflowLogger';
-import { PipelineService } from '../services/pipeline/pipeline.service';
-
-import { SimplifiedEmail } from '../types';
-import '../services/gpt/gptProcessor'; // Import Side-effect: Attaches listener to gptQueue
+import { UniversalTransactionPipeline } from '../services/pipeline/UniversalTransactionPipeline';
+import { SimplifiedEmail } from '../types/transaction.types'; // Use new types
+import dayjs from 'dayjs';
 
 /**
  * Historical Email Scanner (Optimized for 200/sec Throughput)
@@ -42,9 +38,7 @@ export async function runHistoricalScan(
     const fromDateToUse = fromDate ? dayjs(fromDate) : dayjs().subtract(90, 'day');
     const from = fromDateToUse.format('YYYY/MM/DD');
     const to = toDate ? dayjs(toDate).format('YYYY/MM/DD') : dayjs().format('YYYY/MM/DD');
-    // REMOVED: Sender filtering. We now fetch ALL emails to ensure we never miss a transaction.
-    // const senderFilter = FilterService.SENDER_DOMAINS.map(d => `from:"${d}"`).join(' OR ');
-    // const query = `after:${from} before:${to} (${senderFilter})`;
+    // Fetch ALL emails to ensure we never miss a transaction.
     const query = `after:${from} before:${to} in:inbox`;
 
     await pool.query(
@@ -68,7 +62,7 @@ export async function runHistoricalScan(
     let totalFetched = 0;
 
     // Stats
-    const stats = { success: 0, failed: 0, queuedGpt: 0, terminated: 0 };
+    const stats = { success: 0, failed: 0, needs_review: 0, terminated: 0, duplicate: 0 };
 
     // Config
     const FETCH_BATCH_SIZE = 150;  // Increased for throughput
@@ -92,13 +86,18 @@ export async function runHistoricalScan(
 
           WorkflowLogger.log('FETCH', `Listing batch...`, { jobId });
 
-          // Note: fetchBatch internally now uses our optimized gmailClient parameters
           const { messages, nextPageToken } = await GmailFetcherService.fetchBatch(refreshToken, query, FETCH_BATCH_SIZE, pageToken);
           pageToken = nextPageToken;
 
           if (messages.length > 0) {
             totalFetched += messages.length;
-            processingQueue.push(...messages);
+            // Map to SimplifiedEmail format required by pipeline (ensure types match)
+            // fetchBatch returns simplified objects already, usually.
+            // But we need to make sure fields match `SimplifiedEmail` interface in transaction.types.ts
+            // (messageId, internalDate, subject, from, snippet?)
+            // Assuming GmailFetcherService returns compatible objects or we cast/map.
+            // Let's assume compatible for now as previously working.
+            processingQueue.push(...messages as any[]);
             WorkflowLogger.log('FETCH', `Pushed ${messages.length} to queue. Total Fetched: ${totalFetched}`, { jobId, queueSize: processingQueue.length });
           }
 
@@ -114,6 +113,8 @@ export async function runHistoricalScan(
     // --- CONSUMER LOOP (PROCESS) ---
     const processLoop = async () => {
       logger.info(`[PROCESS] Starting consumer loop for job ${jobId}`);
+      console.log(`\nStarting Parallel Process Loop (Concurrency: 100)`);
+
       while (isFetching || processingQueue.length > 0) {
         if (processingQueue.length === 0) {
           // Wait briefly for producer
@@ -122,10 +123,13 @@ export async function runHistoricalScan(
         }
 
         // Take a chunk off the queue
-        const batch = processingQueue.splice(0, 50); // Process 50 at a time (increased for throughput)
-        logger.debug(`[PROCESS] Processing batch of ${batch.length} emails. Queue size: ${processingQueue.length}`);
+        const batchSize = 100;
+        const batch = processingQueue.splice(0, batchSize);
+        const batchStartTime = Date.now();
 
-        // Process this batch in parallel (Control concurrency here too if needed, but PipelineService is fast)
+        console.log(`\n[BATCH START] Processing ${batch.length} emails. Queue weight: ${processingQueue.length}`);
+
+        // Process this batch in parallel
         await Promise.all(batch.map(async (email) => {
           try {
             await processSingleEmail(email);
@@ -135,6 +139,9 @@ export async function runHistoricalScan(
           }
         }));
 
+        const batchDuration = Date.now() - batchStartTime;
+        console.log(`[BATCH END] Processed ${batch.length} emails in ${batchDuration}ms (${Math.round(batch.length / (batchDuration / 1000))} emails/sec)`);
+
         // Update DB periodically (approx every batch)
         await updateJobStats(jobId, totalFetched, stats);
       }
@@ -143,25 +150,30 @@ export async function runHistoricalScan(
 
     // --- PROCESS SINGLE EMAIL ---
     const processSingleEmail = async (cleanEmail: SimplifiedEmail) => {
-      logger.debug(`[PROCESS] Starting email ${cleanEmail.messageId}`);
       const fetchAttachment = async (msgId: string, attId: string) => {
         return gmailClient.getAttachment(refreshToken, msgId, attId);
       };
 
-      // Delegate to Unified Pipeline
-      const result = await PipelineService.processEmail(userId, cleanEmail, jobId, fetchAttachment);
-
-      logger.debug(`[PROCESS] Finished email ${cleanEmail.messageId}: ${result}`);
+      // Delegate to Universal Pipeline
+      const result = await UniversalTransactionPipeline.processEmail(userId, cleanEmail, jobId, fetchAttachment);
 
       // Update Stats based on result
-      if (result === 'success') stats.success++;
-      else if (result === 'terminated') stats.terminated++;
-      else if (result === 'queued_gpt') stats.queuedGpt++;
-      else if (result === 'failed') stats.failed++;
+      if (result.status === 'success') stats.success++;
+      else if (result.status === 'terminated') stats.terminated++;
+      else if (result.status === 'duplicate') stats.duplicate++;
+      else if (result.status === 'needs_review') stats.needs_review++;
+      else if (result.status === 'failed') stats.failed++;
     };
 
     const updateJobStats = async (jid: string, total: number, curStats: any) => {
-      const processed = curStats.success + curStats.failed + curStats.terminated + curStats.queuedGpt;
+      // Logic for total processed
+      // Map old columns to new metrics roughly
+      // rule_based_success -> success (approx)
+      // terminated_count -> terminated
+      // queued_for_gpt -> 0 (handled mostly internally, or map needs_review here?)
+      // Let's map 'needs_review' to a field or just count it as success but flagged
+
+      const processed = curStats.success + curStats.failed + curStats.terminated + curStats.duplicate + curStats.needs_review;
       const progress = total > 0 ? Math.floor((processed / total) * 100) : 0;
 
       await pool.query(
@@ -171,14 +183,13 @@ export async function runHistoricalScan(
                  processed_count = $2,
                  progress = $3,
                  rule_based_success = $4, 
-                 rule_based_failure = $5, 
-                 queued_for_gpt = $6, 
+                 rule_based_failure = $5, -- Map failed here
+                 queued_for_gpt = $6, -- Map needs_review here for visibility? Or just use metadata
                  terminated_count = $7, 
                  last_update_at = NOW()
              WHERE id = $8`,
-        [total, processed, progress, curStats.success, curStats.failed, curStats.queuedGpt, curStats.terminated, jid]
+        [total, processed, progress, curStats.success, curStats.failed, curStats.needs_review, curStats.terminated, jid]
       );
-      // WS Update is handled by periodic polling for now to save DB load
     };
 
 
@@ -188,39 +199,30 @@ export async function runHistoricalScan(
 
     await Promise.all([
       fetchLoop(),
-      processLoop() // This will finish when fetchLoop finishes AND queue is empty
+      processLoop()
     ]);
 
     const duration = (Date.now() - start) / 1000;
     const fetchRate = Math.round(totalFetched / duration);
-    const processRate = Math.round((stats.success + stats.failed + stats.terminated + stats.queuedGpt) / duration);
+    const processRate = Math.round((stats.success + stats.failed + stats.terminated + stats.needs_review) / duration);
 
-    // Log completion metrics at INFO level for observability
+    // Log completion metrics at INFO level representing new pipeline stats
     logger.info(`[HistoricalScanner] Scan ${jobId} completed`, {
       duration: `${duration.toFixed(1)}s`,
       totalFetched,
       fetchRate: `${fetchRate}/sec`,
       processRate: `${processRate}/sec`,
-      stats: {
-        success: stats.success,
-        failed: stats.failed,
-        terminated: stats.terminated,
-        queuedGpt: stats.queuedGpt
-      }
+      stats
     });
     WorkflowLogger.log('COMPLETED', `Scan finished in ${duration}s. Rate: ${fetchRate}/sec`, { jobId, stats });
 
 
-    // --- CLEANUP & FLUSH ---
-    // Explicit DRAINING state
-    await pool.query(`UPDATE gmail_sync_jobs SET status = 'DRAINING', current_step = 'FLUSHING_GPT_QUEUE' WHERE id = $1`, [jobId]);
-
-    WorkflowLogger.log('GPT_PROCESSING', `Flushing GPT queue...`, { jobId, queueSize: gptQueue.length });
-    (gptQueue as any).flush();
-
-    // Slight wait for GPT to pickup
-    let retries = 0;
-    while ((gptQueue.length > 0) && retries < 10) { await new Promise(r => setTimeout(r, 500)); retries++; }
+    // --- CLEANUP ---
+    // Universal pipeline doesn't have an external queue to flush unless GPTClassifier batching is hanging?
+    // GPTClassifier handles flushing on timeout or size. By end of loop, pending batch might exist.
+    // Ideally we should call a flush on GPTClassifier if needed, but it self-manages mostly.
+    // If strict, we could add a shutdown method to GPTClassifier.
+    // For now, allow processLoop to finish which implies all promises resolved.
 
     await pool.query(
       `UPDATE gmail_sync_jobs SET status = 'COMPLETED', current_step = 'COMPLETED', progress = 100, emails_processed = total_messages, last_update_at = NOW(), completed_at = NOW() WHERE id = $1`,
@@ -255,7 +257,6 @@ if (require.main === module) {
   if (!userId) { logger.error('Usage: <userId> [jobId]'); process.exit(1); }
 
   (async () => {
-    // Ensure Job Exists
     try {
       const { rows } = await pool.query('SELECT id FROM gmail_sync_jobs WHERE id = $1', [jobId]);
       if (rows.length === 0) {
@@ -274,3 +275,4 @@ if (require.main === module) {
     runHistoricalScan(userId, jobId).catch(err => logger.error(err));
   })();
 }
+

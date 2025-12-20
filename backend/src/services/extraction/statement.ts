@@ -2,8 +2,8 @@ import { PdfParser } from './pdfParser';
 import { StatementExtractor } from './statement.extractor';
 import { CleanEmailContent } from '../sanitize/sanitizer';
 
-// Types for Transaction result (aligning with Extractor)
-import { ExtractedTransaction } from './extractor';
+// Types for Transaction result (aligning with new schema)
+import { ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../types/transaction.types';
 
 export class StatementProcessor {
 
@@ -57,13 +57,15 @@ export class StatementProcessor {
 
         // 4. Map to Standard ExtractedTransaction
         return rawRows.map(row => ({
+            type: TransactionType.STATEMENT_TRANSACTION,
+            direction: TransactionDirection.DEBIT, // Usually debit for statement lines
             amount: row.amount,
-            currency: 'INR', // Statements usually local? Or infer from text
+            currency: 'INR',
             merchant: row.merchant,
             transactionDate: new Date(row.date),
-            cardLast4: knownCardLast4, // We apply the known card if strictly associated
-            bankHint: bankName,
-            channel: 'UNKNOWN' // Hard to tell from statement line often
+            instrumentType: InstrumentType.CREDIT_CARD, // Logic assumes credit card statements for now
+            instrumentId: knownCardLast4,
+            fingerprint: `${row.date}-${row.amount}-${row.merchant}`
         }));
     }
 

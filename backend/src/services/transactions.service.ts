@@ -17,6 +17,9 @@ export async function listTransactions(
   userId: string,
   filters: {
     cardId?: string;
+    instrumentType?: string;
+    instrumentId?: string;
+    direction?: string;
     from?: string;
     to?: string;
     billMonth?: number;
@@ -28,6 +31,8 @@ export async function listTransactions(
     limit?: number;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
+    needsReview?: boolean;
+    search?: string;
   }
 ) {
   const page = filters.page || 1;
@@ -36,6 +41,9 @@ export async function listTransactions(
 
   const result = await transactionsQueries.listTransactions(userId, {
     cardId: filters.cardId,
+    instrumentType: filters.instrumentType,
+    instrumentId: filters.instrumentId,
+    direction: filters.direction,
     from: filters.from ? new Date(filters.from) : undefined,
     to: filters.to ? new Date(filters.to) : undefined,
     billMonth: filters.billMonth,
@@ -47,6 +55,8 @@ export async function listTransactions(
     offset,
     sortBy: filters.sortBy,
     sortOrder: filters.sortOrder,
+    needsReview: filters.needsReview,
+    search: filters.search
   });
 
   const aggregations = await transactionsQueries.getSpendingAggregations(userId, {
@@ -75,42 +85,40 @@ export async function getTransaction(userId: string, transactionId: string) {
   return await transactionsQueries.getTransactionById(userId, transactionId);
 }
 
-/**
- * Create a manual transaction
- */
 export async function createManualTransaction(data: {
   userId: string;
-  cardId: string;
+  instrumentType: string;
+  instrumentId: string;
   transactionDate: Date;
   merchant: string;
   category: string;
   amount: number;
   transactionType: string;
+  direction: 'credit' | 'debit';
   description?: string;
+  metadata?: any;
 }) {
-  // Verify card belongs to user
-  const card = await cardsQueries.getCardById(data.userId, data.cardId);
-  if (!card) {
-    throw new Error('Card not found');
-  }
-
-  // Calculate bill month/year based on card billing cycle
+  // Calculate bill month/year (simplified for manual)
   const txDate = dayjs(data.transactionDate);
   const billMonth = txDate.month() + 1;
   const billYear = txDate.year();
 
   return await transactionsQueries.createTransaction({
     userId: data.userId,
-    cardId: data.cardId,
+    instrumentType: data.instrumentType,
+    instrumentId: data.instrumentId,
     transactionDate: data.transactionDate,
     merchant: data.merchant,
     category: data.category,
     amount: data.amount,
     transactionType: data.transactionType,
+    direction: data.direction,
     description: data.description,
     billMonth,
     billYear,
     isManuallyAdded: true,
+    metadata: data.metadata,
+    classificationMethod: 'manual'
   });
 }
 
@@ -137,18 +145,18 @@ export async function deleteTransaction(userId: string, transactionId: string) {
   return await transactionsQueries.deleteTransaction(userId, transactionId);
 }
 
-/**
- * Insert transaction from email
- */
 export async function insertFromEmail(
   userId: string,
   data: {
-    cardId: string;
+    instrumentType: string;
+    instrumentId?: string;
+    cardId?: string;
     amount: number;
     transactionDate: Date;
     merchant: string;
     category: string;
     emailMessageId: string;
+    direction: 'credit' | 'debit';
     metadata?: any;
     exactTimestamp?: Date;
     emailSubject?: string;
@@ -157,7 +165,10 @@ export async function insertFromEmail(
     currencyCode?: string;
     originalAmount?: number;
     referenceNumber?: string;
+    transactionType: string;
     transactionSubtype?: string;
+    classificationMethod: string;
+    rawExtraction?: any;
     scanJobId?: string;
     rawEmailId?: string;
   }
@@ -173,18 +184,23 @@ export async function insertFromEmail(
 
   return await transactionsQueries.createTransaction({
     userId,
+    instrumentType: data.instrumentType,
+    instrumentId: data.instrumentId,
     cardId: data.cardId,
     transactionDate: data.transactionDate,
     merchant: data.merchant,
     category: data.category || 'Others',
     amount: data.amount,
-    transactionType: 'debit',
+    transactionType: data.transactionType,
+    direction: data.direction,
     billMonth,
     billYear,
     emailMessageId: data.emailMessageId,
     txnFingerprint,
     isManuallyAdded: false,
     metadata: data.metadata,
+    rawExtraction: data.rawExtraction,
+    classificationMethod: data.classificationMethod,
     exactTimestamp: data.exactTimestamp,
     emailSubject: data.emailSubject,
     gmailThreadId: data.gmailThreadId,
@@ -198,18 +214,18 @@ export async function insertFromEmail(
   });
 }
 
-/**
- * Bulk insert transactions from emails
- */
 export async function insertFromEmailBulk(
   userId: string,
   items: Array<{
-    cardId: string;
+    instrumentType: string;
+    instrumentId?: string;
+    cardId?: string;
     amount: number;
     transactionDate: Date;
     merchant: string;
     category: string;
     emailMessageId: string;
+    direction: 'credit' | 'debit';
     metadata?: any;
     exactTimestamp?: Date;
     emailSubject?: string;
@@ -218,7 +234,12 @@ export async function insertFromEmailBulk(
     currencyCode?: string;
     originalAmount?: number;
     referenceNumber?: string;
+    transactionType: string;
     transactionSubtype?: string;
+    classificationMethod: string;
+    rawExtraction?: any;
+    scanJobId?: string;
+    rawEmailId?: string;
   }>
 ) {
   if (items.length === 0) return [];
@@ -236,18 +257,23 @@ export async function insertFromEmailBulk(
 
     return {
       userId,
+      instrumentType: data.instrumentType,
+      instrumentId: data.instrumentId,
       cardId: data.cardId,
       transactionDate: data.transactionDate,
       merchant: data.merchant,
       category: data.category || 'Others',
       amount: data.amount,
-      transactionType: 'debit',
+      transactionType: data.transactionType,
+      direction: data.direction,
       billMonth,
       billYear,
       emailMessageId: data.emailMessageId,
       txnFingerprint,
       isManuallyAdded: false,
       metadata: data.metadata,
+      rawExtraction: data.rawExtraction,
+      classificationMethod: data.classificationMethod,
       exactTimestamp: data.exactTimestamp,
       emailSubject: data.emailSubject,
       gmailThreadId: data.gmailThreadId,
@@ -256,6 +282,8 @@ export async function insertFromEmailBulk(
       originalAmount: data.originalAmount,
       referenceNumber: data.referenceNumber,
       transactionSubtype: data.transactionSubtype,
+      scanJobId: data.scanJobId,
+      rawEmailId: data.rawEmailId
     };
   });
 
