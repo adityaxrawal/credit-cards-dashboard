@@ -1,16 +1,20 @@
+import { AuthRequest } from '../types/auth.types';
 import { Request, Response, NextFunction } from 'express';
+import logger from '../utils/infrastructure/logger';
 import pool from '../lib/db';
-import { UniversalTransactionPipeline } from '../services/pipeline/UniversalTransactionPipeline';
+import { universalPipeline } from '../services/transactions/pipeline/UniversalTransactionPipeline';
+
+
 import { createTransactionsBulk, createTransaction } from '../db/queries/transactions.queries';
 import { SimplifiedEmail } from '../types/transaction.types';
 
 /**
  * Endpoint 1: POST /api/extraction/process-csv
  */
-export async function processCsv(req: Request, res: Response, next: NextFunction) {
+export async function processCsv(req: AuthRequest, res: Response, next: NextFunction) {
     try {
         const { csvRows } = req.body;
-        const userId = (req as any).user.id;
+        const userId = req.user.id;
 
         // Validate input
         if (!Array.isArray(csvRows) || csvRows.length === 0) {
@@ -27,13 +31,13 @@ export async function processCsv(req: Request, res: Response, next: NextFunction
 
         // Process in parallel batches of 100
         const batchSize = 100;
-        console.log(`\nStarting Parallel CSV Extraction (Concurrency: ${batchSize}, Total Rows: ${csvRows.length})`);
+        logger.info(`\nStarting Parallel CSV Extraction (Concurrency: ${batchSize}, Total Rows: ${csvRows.length})`);
         const startTime = Date.now();
 
         for (let i = 0; i < csvRows.length; i += batchSize) {
             const batch = csvRows.slice(i, i + batchSize);
             const batchStartTime = Date.now();
-            console.log(`\n[CSV BATCH] Processing rows ${i + 1} to ${Math.min(i + batchSize, csvRows.length)}`);
+            logger.info(`\n[CSV BATCH] Processing rows ${i + 1} to ${Math.min(i + batchSize, csvRows.length)}`);
 
             await Promise.all(batch.map(async (row) => {
                 try {
@@ -59,7 +63,7 @@ export async function processCsv(req: Request, res: Response, next: NextFunction
 
                     const fetchAttachment = async (msgId: string, attId: string) => Buffer.from('');
 
-                    const pipelineResult = await UniversalTransactionPipeline.processEmail(
+                    const pipelineResult = await universalPipeline.processEmail(
                         userId,
                         mockEmail,
                         `csv_job_${Date.now()}`,
@@ -90,11 +94,11 @@ export async function processCsv(req: Request, res: Response, next: NextFunction
             }));
 
             const batchDuration = Date.now() - batchStartTime;
-            console.log(`[CSV BATCH END] Finished batch in ${batchDuration}ms`);
+            logger.info(`[CSV BATCH END] Finished batch in ${batchDuration}ms`);
         }
 
         const totalDuration = Date.now() - startTime;
-        console.log(`\n[CSV EXTRACTION COMPLETE] Processed ${csvRows.length} rows in ${totalDuration}ms`);
+        logger.info(`\n[CSV EXTRACTION COMPLETE] Processed ${csvRows.length} rows in ${totalDuration}ms`);
 
         res.json({
             success: true,
@@ -105,7 +109,7 @@ export async function processCsv(req: Request, res: Response, next: NextFunction
         });
 
     } catch (error) {
-        console.error('Extraction error:', error);
+        logger.error('Extraction error:', error);
         next(error);
     }
 }

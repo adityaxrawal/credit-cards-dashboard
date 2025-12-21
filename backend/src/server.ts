@@ -3,8 +3,8 @@ import app from './app';
 import pool from './lib/db';
 import { env } from './config/env';
 import { createServer } from 'http';
-import { initializeWebSocket } from './services/webSocketService';
-import { registerAll } from './services/classification';
+import { initializeWebSocket } from './services/alerts/WebSocketService';
+import { registerAll } from './services/transactions/classification';
 
 const PORT = env.PORT || 8000;
 

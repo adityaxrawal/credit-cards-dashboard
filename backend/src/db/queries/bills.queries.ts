@@ -3,7 +3,7 @@ import pool from '../../lib/db';
 /**
  * Get all bills for a user
  */
-export async function getAllBills(userId: string) {
+export async function getAllBills(userId: string, limit: number = 50, offset: number = 0) {
   const result = await pool.query(
     `SELECT 
       bp.*,
@@ -13,10 +13,11 @@ export async function getAllBills(userId: string) {
     FROM bill_payments bp
     INNER JOIN credit_cards cc ON bp.card_id = cc.id
     WHERE cc.user_id = $1
-    ORDER BY bp.due_date DESC, bp.bill_date DESC`,
-    [userId]
+    ORDER BY bp.due_date DESC, bp.bill_date DESC
+    LIMIT $2 OFFSET $3`,
+    [userId, limit, offset]
   );
-  
+
   return result.rows;
 }
 
@@ -35,14 +36,14 @@ export async function getBillById(userId: string, billId: string) {
     WHERE bp.id = $1 AND cc.user_id = $2`,
     [billId, userId]
   );
-  
+
   return result.rows[0];
 }
 
 /**
  * Get bills for a specific card
  */
-export async function getCardBills(userId: string, cardId: string) {
+export async function getCardBills(userId: string, cardId: string, limit: number = 50, offset: number = 0) {
   const result = await pool.query(
     `SELECT 
       bp.*,
@@ -52,17 +53,18 @@ export async function getCardBills(userId: string, cardId: string) {
     FROM bill_payments bp
     INNER JOIN credit_cards cc ON bp.card_id = cc.id
     WHERE bp.card_id = $1 AND cc.user_id = $2
-    ORDER BY bp.due_date DESC, bp.bill_date DESC`,
-    [cardId, userId]
+    ORDER BY bp.due_date DESC, bp.bill_date DESC
+    LIMIT $3 OFFSET $4`,
+    [cardId, userId, limit, offset]
   );
-  
+
   return result.rows;
 }
 
 /**
  * Get upcoming bills (unpaid/pending)
  */
-export async function getUpcomingBills(userId: string) {
+export async function getUpcomingBills(userId: string, limit: number = 20, offset: number = 0) {
   const result = await pool.query(
     `SELECT 
       bp.*,
@@ -74,10 +76,11 @@ export async function getUpcomingBills(userId: string) {
     WHERE cc.user_id = $1 
       AND bp.payment_status IN ('pending', 'partial')
       AND bp.due_date >= CURRENT_DATE
-    ORDER BY bp.due_date ASC`,
-    [userId]
+    ORDER BY bp.due_date ASC
+    LIMIT $2 OFFSET $3`,
+    [userId, limit, offset]
   );
-  
+
   return result.rows;
 }
 
@@ -111,7 +114,7 @@ export async function createBill(data: {
       data.notes || null,
     ]
   );
-  
+
   return result.rows[0];
 }
 

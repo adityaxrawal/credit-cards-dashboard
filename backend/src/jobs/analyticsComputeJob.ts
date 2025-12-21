@@ -1,5 +1,5 @@
 import pool from '../lib/db';
-import * as analyticsService from '../services/analytics.service';
+import * as analyticsService from '../services/analytics/AnalyticsService';
 
 /**
  * Analytics Compute Job

@@ -1,6 +1,9 @@
 import { google, gmail_v1 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import pLimit from 'p-limit';
+// import pLimit from 'p-limit'; // Kept as is
+import NodeCache from 'node-cache';
+import { CircuitBreaker } from '../utils/infrastructure/circuitBreaker';
 import { env } from '../config/env';
 
 const oauth2Client = new OAuth2Client(
@@ -42,8 +45,25 @@ async function retryWithBackoff<T>(fn: () => Promise<T>, retries = 2, initialDel
 /**
  * Execute a Gmail API call with retry logic.
  */
+
+// --- Circuit Breaker Configuration ---
+/**
+ * Execute a Gmail API call with retry logic.
+ */
+
+// --- Circuit Breaker Configuration ---
+const gmailBreaker = new CircuitBreaker('GmailClient', {
+  failureThreshold: 10,
+  resetTimeout: 30000, // 30 seconds
+});
+
+/**
+ * Execute a Gmail API call with retry logic and circuit breaker protection.
+ */
 async function callGmailApi<T>(fn: () => Promise<T>): Promise<T> {
-  return retryWithBackoff(fn);
+  // Wrap the retry logic inside the circuit breaker
+  // If retries fail, it counts as a failure for the breaker
+  return gmailBreaker.execute(() => retryWithBackoff(fn));
 }
 
 // --------------------------------------
@@ -74,10 +94,21 @@ function getGmailClient(refreshToken: string) {
   return google.gmail({ version: 'v1', auth: client as any });
 }
 
-// Simple in-memory cache for raw messages to avoid duplicate fetches
-const messageCache = new Map<string, { data: gmail_v1.Schema$Message | null; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const MAX_CACHE_SIZE = 1000;
+// LRU in-memory cache for raw messages to avoid duplicate fetches
+// Per-user isolation prevents one user from evicting another user's cache entries
+const messageCache = new NodeCache({
+  stdTTL: 300,      // 5 minutes TTL
+  checkperiod: 60,  // Check for expired entries every 60 seconds
+  maxKeys: 500,     // Maximum 500 entries (auto-evicts least recently used)
+  useClones: false  // Performance optimization
+});
+
+/**
+ * Generate cache key with user isolation
+ */
+function getCacheKey(userId: string, messageId: string): string {
+  return `${userId}:${messageId}`;
+}
 
 // --- TOKEN BUCKET RATE LIMITER ---
 // Gmail API quota: ~250 requests per second per user for most operations
@@ -113,25 +144,48 @@ class TokenBucket {
   }
 }
 
-// Singleton rate limiter for Gmail API
-const gmailRateLimiter = new TokenBucket(100, 100); // 100 tokens max, refill 100/sec (Target: High Throughput)
+// Per-user rate limiters to prevent one user from starving others
+const userRateLimiters = new Map<string, TokenBucket>();
+
+// Global fallback rate limiter for calls without userId
+// Higher limits as it's a shared pool for system operations or legacy calls
+const globalRateLimiter = new TokenBucket(100, 100);
+
+/**
+ * Get or create a rate limiter for a specific user
+ * Each user gets 20 requests/sec quota (conservative to prevent quota exhaustion)
+ */
+function getRateLimiter(userId: string): TokenBucket {
+  if (!userRateLimiters.has(userId)) {
+    userRateLimiters.set(userId, new TokenBucket(20, 20));
+  }
+  return userRateLimiters.get(userId)!;
+}
 
 /**
  * Fetch raw Gmail message
  */
 export async function getRawMessage(
   refreshToken: string,
-  messageId: string
+  messageId: string,
+  userId?: string  // Optional for backward compatibility
 ): Promise<gmail_v1.Schema$Message | null> {
-  // Check cache first
-  const cached = messageCache.get(messageId);
-  if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
-    return cached.data;
+  // Check cache first (with user isolation if userId provided)
+  const cacheKey = userId ? getCacheKey(userId, messageId) : messageId;
+  const cached = messageCache.get<gmail_v1.Schema$Message>(cacheKey);
+  if (cached) {
+    return cached;
   }
 
   try {
-    // Acquire rate limit token before making request
-    await gmailRateLimiter.acquire();
+    // Acquire rate limit token
+    // Use per-user limiter if userId is present, otherwise fallback to global limiter
+    if (userId) {
+      const rateLimiter = getRateLimiter(userId);
+      await rateLimiter.acquire();
+    } else {
+      await globalRateLimiter.acquire();
+    }
 
     const gmail = getGmailClient(refreshToken);
 
@@ -142,16 +196,8 @@ export async function getRawMessage(
       format: 'full', // We need full to parse properly
     }));
 
-    // Cache the result
-    if (messageCache.size >= MAX_CACHE_SIZE) {
-      const firstKey = messageCache.keys().next().value;
-      if (firstKey) messageCache.delete(firstKey);
-    }
-
-    messageCache.set(messageId, {
-      data: response.data,
-      timestamp: Date.now()
-    });
+    // Cache the result (LRU auto-eviction)
+    messageCache.set(cacheKey, response.data);
 
     return response.data;
   } catch (error) {
@@ -244,8 +290,9 @@ export async function getMessage(
 export async function batchGetMessages(
   refreshToken: string,
   messageIds: string[],
+  userId: string,  // Required for per-user rate limiting and cache isolation
   concurrency: number = 100 // High concurrency for throughput
-): Promise<Array<gmail_v1.Schema$Message | null>> {
+): Promise<Array<gmail_v1.Schema$Message>> {
   // Use p-limit to control concurrency.
   // RATIONALE: 100 concurrent requests provides good throughput while
   // leaving headroom for rate limiting and other operations.
@@ -254,15 +301,42 @@ export async function batchGetMessages(
   const start = Date.now();
   console.log(`[GmailClient] Batch fetching ${messageIds.length} messages with concurrency ${concurrency}...`);
 
-  const tasks = messageIds.map(id => limit(() => getRawMessage(refreshToken, id)));
+  const tasks = messageIds.map(id => limit(() => getRawMessage(refreshToken, id, userId)));
 
-  const results = await Promise.all(tasks);
+  // Use Promise.allSettled to handle partial failures gracefully
+  const results = await Promise.allSettled(tasks);
+
+  // Separate successful and failed fetches
+  const successfulResults = results
+    .filter((r): r is PromiseFulfilledResult<gmail_v1.Schema$Message | null> => r.status === 'fulfilled');
+
+  const rejectedResults = results
+    .filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+
+  // Extract values and filter out nulls (logical failures from getRawMessage)
+  const validMessages = successfulResults
+    .map(r => r.value)
+    .filter((m): m is gmail_v1.Schema$Message => m !== null);
+
+  const nullCount = successfulResults.length - validMessages.length;
+  const failureCount = rejectedResults.length + nullCount;
+
+  // Log failures for debugging
+  if (failureCount > 0) {
+    console.warn(`[GmailClient] Batch fetch partial failure:`, {
+      total: messageIds.length,
+      succeeded: validMessages.length,
+      failed: failureCount,
+      rejections: rejectedResults.length,
+      nulls: nullCount, // getRawMessage returned null
+      sampleErrors: rejectedResults.slice(0, 3).map(f => f.reason?.message || String(f.reason))
+    });
+  }
 
   const duration = Date.now() - start;
-  const validCount = results.filter(r => r !== null).length;
-  console.log(`[GmailClient] Batch complete. ${validCount}/${messageIds.length} fetched in ${duration}ms (~${Math.round((validCount / duration) * 1000)}/sec)`);
+  console.log(`[GmailClient] Batch complete. ${validMessages.length}/${messageIds.length} fetched in ${duration}ms (~${Math.round((validMessages.length / duration) * 1000)}/sec)`);
 
-  return results;
+  return validMessages;
 }
 
 /**

@@ -1,12 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
-import * as transactionsService from '../services/transactions.service';
+import { z } from 'zod';
+import * as transactionsService from '../services/transactions/TransactionService';
+
+import { CreateTransactionSchema, UpdateTransactionSchema } from '../validators/transaction.schema';
 
 /**
  * Get all transactions with filters
  */
 export async function getTransactions(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const filters = {
       cardId: req.query.cardId as string,
       instrumentType: req.query.instrumentType as string,
@@ -39,7 +42,7 @@ export async function getTransactions(req: Request, res: Response, next: NextFun
  */
 export async function getTransaction(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { id } = req.params;
 
     const transaction = await transactionsService.getTransaction(userId, id);
@@ -59,45 +62,34 @@ export async function getTransaction(req: Request, res: Response, next: NextFunc
  */
 export async function createTransaction(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
-    const {
-      instrumentType,
-      instrumentId,
-      cardId, // Legacy support
-      transactionDate,
-      merchant,
-      category,
-      amount,
-      transactionType,
-      direction,
-      description
-    } = req.body;
-
-    // Validation
-    if ((!instrumentType && !cardId) || !transactionDate || !merchant || !category || !amount || !transactionType) {
-      return res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Missing required fields',
-        },
-      });
-    }
+    const userId = req.user.id;
+    // Zod Validation
+    const validatedData = await CreateTransactionSchema.parseAsync(req.body);
 
     const transaction = await transactionsService.createManualTransaction({
       userId,
-      instrumentType: instrumentType || 'credit_card',
-      instrumentId: instrumentId || cardId,
-      transactionDate: new Date(transactionDate),
-      merchant,
-      category,
-      amount: parseFloat(amount),
-      transactionType,
-      direction: direction || (transactionType === 'debit' ? 'debit' : 'credit'),
-      description,
+      instrumentType: validatedData.instrumentType || 'credit_card',
+      instrumentId: (validatedData.instrumentId || validatedData.cardId)!, // Validated by Zod refine
+      transactionDate: new Date(validatedData.transactionDate || validatedData.date!),
+      merchant: validatedData.merchant,
+      category: validatedData.category,
+      amount: validatedData.amount,
+      transactionType: validatedData.transactionType,
+      direction: validatedData.direction || (validatedData.transactionType === 'debit' ? 'debit' : 'credit'),
+      description: validatedData.description,
     });
 
     res.status(201).json({ data: transaction });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(422).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid request data',
+          details: error.errors
+        }
+      });
+    }
     next(error);
   }
 }
@@ -107,9 +99,9 @@ export async function createTransaction(req: Request, res: Response, next: NextF
  */
 export async function updateTransaction(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { id } = req.params;
-    const updates = req.body;
+    const updates = await UpdateTransactionSchema.parseAsync(req.body);
 
     const transaction = await transactionsService.updateTransaction(userId, id, updates);
 
@@ -119,6 +111,15 @@ export async function updateTransaction(req: Request, res: Response, next: NextF
 
     res.json({ data: transaction });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(422).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid update data',
+          details: error.errors
+        }
+      });
+    }
     next(error);
   }
 }
@@ -128,7 +129,7 @@ export async function updateTransaction(req: Request, res: Response, next: NextF
  */
 export async function deleteTransaction(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { id } = req.params;
 
     const deleted = await transactionsService.deleteTransaction(userId, id);
@@ -148,7 +149,7 @@ export async function deleteTransaction(req: Request, res: Response, next: NextF
  */
 export async function getTransactionsByType(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { type } = req.params;
     const { page, limit } = req.query;
 
@@ -169,7 +170,7 @@ export async function getTransactionsByType(req: Request, res: Response, next: N
  */
 export async function getTransactionsByInstrument(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { instrumentId } = req.params;
     const { page, limit } = req.query;
 
@@ -190,7 +191,7 @@ export async function getTransactionsByInstrument(req: Request, res: Response, n
  */
 export async function getPendingReviewQueue(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { page, limit } = req.query;
 
     const result = await transactionsService.listTransactions(userId, {
@@ -210,7 +211,7 @@ export async function getPendingReviewQueue(req: Request, res: Response, next: N
  */
 export async function manuallyClassifyTransaction(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { id } = req.params;
     const { transactionType, category, description } = req.body;
 

@@ -1,12 +1,13 @@
+import { AuthRequest } from '../types/auth.types';
 import { Request, Response, NextFunction } from 'express';
-import * as analyticsService from '../services/analytics.service';
+import * as analyticsService from '../services/analytics/AnalyticsService';
 
 /**
  * Get overview analytics
  */
-export async function getOverview(req: Request, res: Response, next: NextFunction) {
+export async function getOverview(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     
     const overview = await analyticsService.getOverview(userId);
     
@@ -19,9 +20,9 @@ export async function getOverview(req: Request, res: Response, next: NextFunctio
 /**
  * Get category breakdown
  */
-export async function getCategoryBreakdown(req: Request, res: Response, next: NextFunction) {
+export async function getCategoryBreakdown(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const month = req.query.month ? parseInt(req.query.month as string) : undefined;
     const year = req.query.year ? parseInt(req.query.year as string) : undefined;
     
@@ -36,9 +37,9 @@ export async function getCategoryBreakdown(req: Request, res: Response, next: Ne
 /**
  * Get spending trends
  */
-export async function getTrends(req: Request, res: Response, next: NextFunction) {
+export async function getTrends(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const range = req.query.range as string || '6m';
     
     const months = range === '12m' ? 12 : 6;
@@ -54,9 +55,9 @@ export async function getTrends(req: Request, res: Response, next: NextFunction)
 /**
  * Get top merchants
  */
-export async function getTopMerchants(req: Request, res: Response, next: NextFunction) {
+export async function getTopMerchants(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const month = req.query.month ? parseInt(req.query.month as string) : undefined;
     const year = req.query.year ? parseInt(req.query.year as string) : undefined;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;

@@ -45,22 +45,30 @@ export const authLimiter = rateLimit({
             retryAfter: '15 minutes',
         },
     },
+    // Auth endpoints might not have user ID yet, so we stick to IP.
+    // But specific endpoints like refresh-token might have user context if we extract it.
+    // For login/signup, IP is the only way.
 });
 
 /**
- * Rate limiter for Gmail sync endpoints
- * 10 requests per 15-minute window (expensive operation)
+ * Rate limiter for expensive operations (Gmail sync, CSV upload)
+ * 10 requests per 15-minute window
+ * Uses per-user limiting logic.
  */
-export const gmailSyncLimiter = rateLimit({
+export const expensiveLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 10, // 10 requests per window
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: (req) => {
+        // Use user ID if authenticated, otherwise fall back to IP
+        return (req as any).user?.id || req.ip;
+    },
     message: {
         success: false,
         error: {
             code: 'RATE_LIMIT_EXCEEDED',
-            message: 'Too many sync requests, please try again later.',
+            message: 'Too many requests for this operation, please try again later.',
             retryAfter: '15 minutes',
         },
     },

@@ -1,7 +1,7 @@
 import pool from '../lib/db';
-import * as budgetService from '../services/budget.service';
-import * as alertsService from '../services/alerts.service';
-import logger from '../utils/logger';
+import * as budgetService from '../services/bills/BudgetService';
+import * as alertsService from '../services/alerts/AlertsService';
+import logger from '../utils/infrastructure/logger';
 
 /**
  * Spending Alert Job

@@ -1,6 +1,6 @@
 import { Redis } from '@upstash/redis';
 import { env } from '../config/env';
-import logger from '../utils/logger';
+import logger from '../utils/infrastructure/logger';
 
 // Initialize Upstash Redis client
 const redis = new Redis({
