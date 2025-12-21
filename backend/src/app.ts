@@ -7,9 +7,11 @@ import cookieParser from 'cookie-parser';
 import { errorHandler } from './middleware/error.middleware';
 import { apiLimiter } from './middleware/rateLimit.middleware';
 import { metricsMiddleware } from './middleware/metrics.middleware';
-import { metricsService } from './services/metrics.service';
+import { metricsService } from './services/analytics/MetricsService';
 import routes from './routes';
 import { env } from './config/env';
+
+import { csrfProtection, csrfErrorHandler } from './middleware/csrf.middleware';
 
 const app = express();
 
@@ -28,7 +30,6 @@ app.use(metricsMiddleware);
 app.use('/api', apiLimiter);
 
 // Logging & Parsing
-// Logging & Parsing
 app.use(morgan('dev', {
   skip: (req, res) => {
     // Skip logging for polling endpoints if they return 304 (Not Modified)
@@ -42,6 +43,10 @@ app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// CSRF Protection (Must be after cookie/body parsers)
+// Conditionally apply: Skip for webhook paths if any, or specific non-browser APIs if needed
+app.use(csrfProtection);
+
 // Internal Monitoring Endpoint (Admin Only - simplified protection for now)
 app.get('/api/admin/metrics', (req, res) => {
   // In prod, check for Admin Header or Auth. 
@@ -49,15 +54,43 @@ app.get('/api/admin/metrics', (req, res) => {
   res.json(metricsService.getAllMetrics());
 });
 
-// Health Check
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+// CSRF Token Endpoint
+app.get('/api/csrf-token', (req, res) => {
+  res.json({ csrfToken: req.csrfToken() });
+});
+
+// Comprehensive Health Check
+app.get('/health', async (req, res) => {
+  const { performHealthCheck } = await import('./utils/healthCheck');
+  const health = await performHealthCheck();
+
+  const statusCode = health.status === 'healthy' ? 200 : (health.status === 'degraded' ? 200 : 503);
+  res.status(statusCode).json(health);
+});
+
+// Detailed Health Check (for monitoring tools)
+app.get('/health/detailed', async (req, res) => {
+  const { performHealthCheck, getSystemMetrics, getDatabaseStats } = await import('./utils/healthCheck');
+
+  const [health, systemMetrics, dbStats] = await Promise.all([
+    performHealthCheck(),
+    Promise.resolve(getSystemMetrics()),
+    getDatabaseStats()
+  ]);
+
+  res.json({
+    ...health,
+    system: systemMetrics,
+    database: dbStats
+  });
 });
 
 // API Routes
 app.use('/api', routes);
 
 // Error Handling
+// Error Handling
+app.use(csrfErrorHandler);
 app.use(errorHandler);
 
 export default app;

@@ -1,6 +1,7 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import { env } from '../config/env';
-import logger from '../utils/logger';
+import logger from '../utils/infrastructure/logger';
+import { isConnectionError } from '../utils/validation/errorTypeGuards';
 
 const pool = new Pool({
   connectionString: env.DATABASE_URL,
@@ -11,8 +12,11 @@ const pool = new Pool({
   keepAliveInitialDelayMillis: 10000,
   idleTimeoutMillis: 60000, // Close idle clients after 60s
   connectionTimeoutMillis: 10000, // 10s connection timeout
-  max: 20, // Increase max connections for parallel processing
+  max: 50, // Increased for batch processing (was 20)
+  min: 5, // Keep minimum connections ready
   allowExitOnIdle: false, // Keep pool alive even when idle
+  statement_timeout: 30000, // Kill queries after 30s
+  idle_in_transaction_session_timeout: 10000, // Kill idle transactions after 10s
 });
 
 // Log pool status periodically in development
@@ -28,6 +32,37 @@ if (env.NODE_ENV === 'development') {
     }
   }, 60000); // Every minute
 }
+
+// Production pool monitoring - check for exhaustion
+setInterval(() => {
+  const total = pool.totalCount;
+  const idle = pool.idleCount;
+  const waiting = pool.waitingCount;
+
+  if (total > 0) {
+    const utilization = ((total - idle) / 50) * 100; // max is 50
+
+    // Alert if pool is > 80% utilized
+    if (utilization > 80) {
+      logger.warn('[DB Pool] High utilization warning', {
+        utilization: `${utilization.toFixed(1)}%`,
+        total,
+        idle,
+        waiting,
+        active: total - idle
+      });
+    }
+
+    // Alert if requests are waiting for connections
+    if (waiting > 0) {
+      logger.error('[DB Pool] Connection exhaustion - requests waiting', {
+        waiting,
+        total,
+        idle
+      });
+    }
+  }
+}, 30000); // Check every 30s
 
 // Handle unexpected errors on idle clients
 pool.on('error', (err, client) => {
@@ -92,6 +127,96 @@ export const getPoolStats = () => {
   };
 };
 
+/**
+ * Execute a database operation with retry logic and exponential backoff
+ * @param fn - Function that receives a PoolClient and returns a Promise
+ * @param options - Configuration options
+ * @returns The result of the function
+ */
+export async function executeWithRetry<T>(
+  fn: (client: PoolClient) => Promise<T>,
+  options?: {
+    maxRetries?: number;
+    retryDelayMs?: number;
+    timeoutMs?: number;
+  }
+): Promise<T> {
+  const maxRetries = options?.maxRetries ?? 3;
+  const retryDelayMs = options?.retryDelayMs ?? 1000;
+  const timeoutMs = options?.timeoutMs ?? 30000;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    let client: PoolClient | null = null;
+    try {
+      // Get connection with timeout
+      client = await Promise.race([
+        pool.connect(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Connection acquisition timeout')), timeoutMs / 2)
+        ),
+      ]);
+
+      // Execute operation with timeout
+      const result = await Promise.race([
+        fn(client),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Operation timeout')), timeoutMs)
+        ),
+      ]);
+
+      return result;
+    } catch (error) {
+      const err = error as Error;
+      const isRecoverable =
+        err.message.includes('connection') ||
+        err.message.includes('timeout') ||
+        err.message.includes('ECONNRESET') ||
+        isConnectionError(error);
+
+      if (isRecoverable && attempt < maxRetries - 1) {
+        const delay = retryDelayMs * Math.pow(2, attempt); // Exponential backoff
+        logger.warn(`[DB] Retrying operation (attempt ${attempt + 1}/${maxRetries}) after ${delay}ms`, {
+          error: err.message
+        });
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      logger.error(`[DB] Operation failed after ${attempt + 1} attempts`, { error: err.message });
+      throw error;
+    } finally {
+      if (client) {
+        try {
+          client.release();
+        } catch (releaseError) {
+          logger.warn('[DB] Error releasing client', releaseError);
+        }
+      }
+    }
+  }
+
+  throw new Error(`Database operation failed after ${maxRetries} retries`);
+}
+
+/**
+ * Execute a transaction with retry logic
+ */
+export async function executeTransaction<T>(
+  fn: (client: PoolClient) => Promise<T>,
+  options?: { maxRetries?: number }
+): Promise<T> {
+  return executeWithRetry(async (client) => {
+    await client.query('BEGIN');
+    try {
+      const result = await fn(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  }, options);
+}
 
 export default pool;
 

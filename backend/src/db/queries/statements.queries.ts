@@ -25,7 +25,7 @@ export async function getAllStatements(userId: string) {
     ORDER BY t.bill_year DESC, t.bill_month DESC`,
     [userId]
   );
-  
+
   return result.rows;
 }
 
@@ -38,60 +38,61 @@ export async function getStatementDetails(
   month: number,
   year: number
 ) {
-  // Get card details
-  const cardResult = await pool.query(
-    `SELECT * FROM credit_cards WHERE id = $1 AND user_id = $2`,
-    [cardId, userId]
+  const result = await pool.query(
+    `
+    WITH card_data AS (
+      SELECT * FROM credit_cards WHERE id = $1 AND user_id = $2
+    ),
+    txn_data AS (
+      SELECT * FROM transactions
+      WHERE card_id = $1 AND bill_month = $3 AND bill_year = $4
+      ORDER BY transaction_date DESC
+    ),
+    bill_data AS (
+      SELECT * FROM bill_payments
+      WHERE card_id = $1 AND bill_month = $3 AND bill_year = $4
+      LIMIT 1
+    ),
+    summary_stats AS (
+      SELECT 
+        COALESCE(SUM(CASE WHEN transaction_type = 'debit' THEN amount ELSE 0 END), 0) as total_debits,
+        COALESCE(SUM(CASE WHEN transaction_type = 'credit' THEN amount ELSE 0 END), 0) as total_credits,
+        COUNT(*) as transaction_count
+      FROM txn_data
+    )
+    SELECT 
+      (SELECT row_to_json(c) FROM card_data c) as card,
+      (SELECT json_agg(t) FROM txn_data t) as transactions,
+      (SELECT row_to_json(b) FROM bill_data b) as bill_payment,
+      (SELECT row_to_json(s) FROM summary_stats s) as summary
+    FROM card_data -- Ensure we only return if card exists
+    `,
+    [cardId, userId, month, year]
   );
 
-  if (cardResult.rows.length === 0) {
+  if (result.rows.length === 0) {
     return null;
   }
 
-  const card = cardResult.rows[0];
+  const row = result.rows[0];
+  const summary = row.summary;
 
-  // Get transactions for this billing period
-  const transactionsResult = await pool.query(
-    `SELECT * FROM transactions
-    WHERE card_id = $1 
-      AND bill_month = $2 
-      AND bill_year = $3
-    ORDER BY transaction_date DESC`,
-    [cardId, month, year]
-  );
-
-  const transactions = transactionsResult.rows;
-
-  // Calculate summary
-  const totalDebits = transactions
-    .filter((t: any) => t.transaction_type === 'debit')
-    .reduce((sum: number, t: any) => sum + parseFloat(t.amount.toString()), 0);
-
-  const totalCredits = transactions
-    .filter((t: any) => t.transaction_type === 'credit')
-    .reduce((sum: number, t: any) => sum + parseFloat(t.amount.toString()), 0);
-
-  // Get bill payment info if exists
-  const billResult = await pool.query(
-    `SELECT * FROM bill_payments
-    WHERE card_id = $1 AND bill_month = $2 AND bill_year = $3`,
-    [cardId, month, year]
-  );
-
+  // Calculate net amount in JS or SQL (already have debits/credits)
+  // Ensure we format the response correctly
   return {
-    card,
+    card: row.card,
     billingPeriod: {
       month,
       year,
     },
-    transactions,
+    transactions: row.transactions || [],
     summary: {
-      totalDebits,
-      totalCredits,
-      netAmount: totalDebits - totalCredits,
-      transactionCount: transactions.length,
+      totalDebits: parseFloat(summary.total_debits),
+      totalCredits: parseFloat(summary.total_credits),
+      netAmount: parseFloat(summary.total_debits) - parseFloat(summary.total_credits),
+      transactionCount: parseInt(summary.transaction_count),
     },
-    billPayment: billResult.rows[0] || null,
+    billPayment: row.bill_payment || null,
   };
 }
 
@@ -117,6 +118,6 @@ export async function getCardStatements(userId: string, cardId: string) {
     ORDER BY t.bill_year DESC, t.bill_month DESC`,
     [cardId, userId]
   );
-  
+
   return result.rows;
 }

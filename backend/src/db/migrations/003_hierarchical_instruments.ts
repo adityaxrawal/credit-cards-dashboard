@@ -1,5 +1,5 @@
 import pool from '../../lib/db';
-import logger from '../../utils/logger';
+import logger from '../../utils/infrastructure/logger';
 import fs from 'fs';
 import path from 'path';
 

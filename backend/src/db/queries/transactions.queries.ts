@@ -76,88 +76,88 @@ export async function listTransactions(
   userId: string,
   filters: TransactionFilters & { sortBy?: string; sortOrder?: 'asc' | 'desc' }
 ): Promise<{ data: Transaction[]; total: number }> {
+  const safeFilters = filters ?? {};
+
   const where: string[] = ['t.user_id = $1'];
   const params: any[] = [userId];
   let paramIndex = 2;
 
-  if (filters.cardId) {
+  // Type guards for critical parameters
+  if (safeFilters.cardId && typeof safeFilters.cardId !== 'string') {
+    throw new Error('Invalid cardId type');
+  }
+
+  if (safeFilters.cardId) {
     where.push(`t.card_id = $${paramIndex++}`);
-    params.push(filters.cardId);
+    params.push(safeFilters.cardId);
   }
-  if (filters.instrumentType) {
+  if (safeFilters.instrumentType) {
     where.push(`t.instrument_type = $${paramIndex++}`);
-    params.push(filters.instrumentType);
+    params.push(safeFilters.instrumentType);
   }
-  if (filters.instrumentId) {
+  if (safeFilters.instrumentId) {
     where.push(`t.instrument_id = $${paramIndex++}`);
-    params.push(filters.instrumentId);
+    params.push(safeFilters.instrumentId);
   }
-  if (filters.direction) {
+  if (safeFilters.direction) {
     where.push(`t.direction = $${paramIndex++}`);
-    params.push(filters.direction);
+    params.push(safeFilters.direction);
   }
-  if (filters.from) {
+  if (safeFilters.from) {
     where.push(`t.transaction_date >= $${paramIndex++}`);
-    params.push(filters.from);
+    params.push(safeFilters.from);
   }
 
-  if (filters.to) {
+  if (safeFilters.to) {
     where.push(`t.transaction_date <= $${paramIndex++}`);
-    params.push(filters.to);
+    params.push(safeFilters.to);
   }
 
-  if (filters.billMonth) {
+  if (safeFilters.billMonth) {
     where.push(`t.bill_month = $${paramIndex++}`);
-    params.push(filters.billMonth);
+    params.push(safeFilters.billMonth);
   }
 
-  if (filters.billYear) {
+  if (safeFilters.billYear) {
     where.push(`t.bill_year = $${paramIndex++}`);
-    params.push(filters.billYear);
+    params.push(safeFilters.billYear);
   }
 
-  if (filters.category) {
+  if (safeFilters.category) {
     where.push(`t.category = $${paramIndex++}`);
-    params.push(filters.category);
+    params.push(safeFilters.category);
   }
 
-  if (filters.transactionType) {
+  if (safeFilters.transactionType) {
     where.push(`t.transaction_type = $${paramIndex++}`);
-    params.push(filters.transactionType);
+    params.push(safeFilters.transactionType);
   }
 
-  if (filters.merchant) {
+  if (safeFilters.merchant) {
     where.push(`t.merchant ILIKE $${paramIndex++}`);
-    params.push(`%${filters.merchant}%`);
+    params.push(`%${safeFilters.merchant}%`);
   }
 
-  if (filters.needsReview !== undefined) {
+  if (safeFilters.needsReview !== undefined) {
     where.push(`t.needs_review = $${paramIndex++}`);
-    params.push(filters.needsReview);
+    params.push(safeFilters.needsReview);
   }
-  if (filters.search) {
+  if (safeFilters.search) {
     where.push(`(t.merchant ILIKE $${paramIndex} OR t.description ILIKE $${paramIndex})`);
-    params.push(`%${filters.search}%`);
+    params.push(`%${safeFilters.search}%`);
     paramIndex++;
   }
 
 
   const whereClause = where.join(' AND ');
 
-  // Get total count
-  const countResult = await pool.query(
-    `SELECT COUNT(*) as total FROM transactions t WHERE ${whereClause}`,
-    params
-  );
-  const total = parseInt(countResult.rows[0].total);
-
-  // Get paginated data
-  const limit = filters.limit || 50;
-  const offset = filters.offset || 0;
+  // Get paginated data with total count using window function
+  const limit = safeFilters.limit || 50;
+  const offset = safeFilters.offset || 0;
 
   // Sorting
-  const sortBy = filters.sortBy || 'transaction_date';
-  const sortOrder = filters.sortOrder || 'desc';
+  const sortBy = safeFilters.sortBy || 'transaction_date';
+  const sortOrder = safeFilters.sortOrder || 'desc';
 
   // Validate sort column to prevent SQL injection
   const validSortColumns = ['transaction_date', 'amount', 'merchant', 'category'];
@@ -166,6 +166,7 @@ export async function listTransactions(
 
   const dataResult = await pool.query(
     `SELECT t.*, 
+      count(*) OVER() as total_count,
       json_build_object(
         'id', c.id,
         'card_name', c.card_name,
@@ -180,8 +181,16 @@ export async function listTransactions(
     [...params, limit, offset]
   );
 
+  const total = dataResult.rows.length > 0 ? parseInt(dataResult.rows[0].total_count) : 0;
+
+  // Remove total_count from the individual objects to keep the response clean
+  const data = dataResult.rows.map(row => {
+    const { total_count, ...transaction } = row;
+    return transaction;
+  });
+
   return {
-    data: dataResult.rows,
+    data: data as Transaction[],
     total,
   };
 }
@@ -549,20 +558,21 @@ export async function getSpendingAggregations(
   const where: string[] = ['user_id = $1', "direction = 'debit'"];
   const params: any[] = [userId];
   let paramIndex = 2;
+  const safeFilters = filters || {};
 
-  if (filters.from) {
+  if (safeFilters.from) {
     where.push(`transaction_date >= $${paramIndex++}`);
-    params.push(filters.from);
+    params.push(safeFilters.from);
   }
 
-  if (filters.to) {
+  if (safeFilters.to) {
     where.push(`transaction_date <= $${paramIndex++}`);
-    params.push(filters.to);
+    params.push(safeFilters.to);
   }
 
-  if (filters.billMonth && filters.billYear) {
+  if (safeFilters.billMonth && safeFilters.billYear) {
     where.push(`bill_month = $${paramIndex++} AND bill_year = $${paramIndex++}`);
-    params.push(filters.billMonth, filters.billYear);
+    params.push(safeFilters.billMonth, safeFilters.billYear);
   }
 
   const whereClause = where.join(' AND ');

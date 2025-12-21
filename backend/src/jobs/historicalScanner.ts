@@ -1,10 +1,10 @@
-import { decrypt } from '../utils/encryption';
+import { decrypt } from '../utils/helpers/encryption';
 import pool from '../lib/db';
 import * as gmailClient from '../lib/gmailClient';
 import { GmailFetcherService } from '../services/gmail/fetcher';
-import logger from '../utils/logger';
-import { WorkflowLogger } from '../utils/workflowLogger';
-import { UniversalTransactionPipeline } from '../services/pipeline/UniversalTransactionPipeline';
+import logger from '../utils/infrastructure/logger';
+import { WorkflowLogger } from '../utils/infrastructure/workflowLogger';
+import { universalPipeline } from '../services/transactions/pipeline/UniversalTransactionPipeline';
 import { SimplifiedEmail } from '../types/transaction.types'; // Use new types
 import dayjs from 'dayjs';
 
@@ -86,7 +86,7 @@ export async function runHistoricalScan(
 
           WorkflowLogger.log('FETCH', `Listing batch...`, { jobId });
 
-          const { messages, nextPageToken } = await GmailFetcherService.fetchBatch(refreshToken, query, FETCH_BATCH_SIZE, pageToken);
+          const { messages, nextPageToken } = await GmailFetcherService.fetchBatch(refreshToken, userId, query, FETCH_BATCH_SIZE, pageToken);
           pageToken = nextPageToken;
 
           if (messages.length > 0) {
@@ -155,7 +155,7 @@ export async function runHistoricalScan(
       };
 
       // Delegate to Universal Pipeline
-      const result = await UniversalTransactionPipeline.processEmail(userId, cleanEmail, jobId, fetchAttachment);
+      const result = await universalPipeline.processEmail(userId, cleanEmail, jobId, fetchAttachment);
 
       // Update Stats based on result
       if (result.status === 'success') stats.success++;

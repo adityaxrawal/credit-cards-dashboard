@@ -1,12 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
-import * as gmailService from '../services/gmail.service';
+
+import { gmailService } from '../services/gmail/GmailService';
+import logger from '../utils/infrastructure/logger';
 
 /**
  * Get Gmail connection status
  */
 export async function getStatus(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
 
     const status = await gmailService.getConnectionStatus(userId);
 
@@ -21,7 +23,7 @@ export async function getStatus(req: Request, res: Response, next: NextFunction)
  */
 export async function connect(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { refreshToken } = req.body;
 
     if (!refreshToken) {
@@ -46,7 +48,7 @@ export async function connect(req: Request, res: Response, next: NextFunction) {
  */
 export async function disconnect(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
 
     const result = await gmailService.disconnectGmail(userId);
 
@@ -61,7 +63,7 @@ export async function disconnect(req: Request, res: Response, next: NextFunction
  */
 export async function triggerHistoricalScan(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { fromDate, toDate } = req.body;
 
     const result = await gmailService.triggerHistoricalScan(
@@ -81,14 +83,14 @@ export async function triggerHistoricalScan(req: Request, res: Response, next: N
  */
 export async function getHistoricalScanStatus(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { jobId } = req.params;
 
     const status = await gmailService.getHistoricalScanStatus(userId, jobId);
 
     res.json({ data: status });
   } catch (error) {
-    console.error('[GmailController] Error getting scan status:', error);
+    logger.error('[GmailController] Error getting scan status:', error);
     next(error);
   }
 }
@@ -98,7 +100,7 @@ export async function getHistoricalScanStatus(req: Request, res: Response, next:
  */
 export async function getLatestJob(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
 
     const job = await gmailService.getLatestJob(userId);
 
@@ -113,7 +115,7 @@ export async function getLatestJob(req: Request, res: Response, next: NextFuncti
  */
 export async function getLastSync(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
 
     const lastSync = await gmailService.getLastSuccessfulSync(userId);
 
@@ -128,7 +130,7 @@ export async function getLastSync(req: Request, res: Response, next: NextFunctio
  */
 export async function manualMap(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { messageId, cardInfo } = req.body;
 
     if (!messageId || !cardInfo || !cardInfo.last4 || !cardInfo.bankName) {
@@ -153,7 +155,7 @@ export async function manualMap(req: Request, res: Response, next: NextFunction)
  */
 export async function getTerminatorReport(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const startDate = req.query.startDate
       ? new Date(req.query.startDate as string)
       : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Last 7 days
@@ -174,7 +176,7 @@ export async function getTerminatorReport(req: Request, res: Response, next: Nex
       message: `${report.totalTerminated} emails terminated in the requested period`,
     });
   } catch (error) {
-    console.error('[GmailController] Terminator Report Error:', error);
+    logger.error('[GmailController] Terminator Report Error:', error);
     next(error);
   }
 }
@@ -184,7 +186,7 @@ export async function getTerminatorReport(req: Request, res: Response, next: Nex
  */
 export async function getStats(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const stats = await gmailService.getPipelineStats(userId);
     res.json({ data: stats });
   } catch (error) {

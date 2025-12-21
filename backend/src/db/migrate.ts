@@ -20,6 +20,23 @@ const runMigration = async () => {
     await client.query(schemaSql);
     console.log('Schema executed successfully');
 
+    // Run Migrations from migrations folder
+    const migrationsDir = path.join(__dirname, 'migrations');
+    if (fs.existsSync(migrationsDir)) {
+      console.log('Checking for migrations...');
+      const files = fs.readdirSync(migrationsDir)
+        .filter(file => file.endsWith('.sql'))
+        .sort(); // Ensure order by filename (001, 002, etc.)
+
+      for (const file of files) {
+        console.log(`Executing migration: ${file}`);
+        const migrationPath = path.join(migrationsDir, file);
+        const migrationSql = fs.readFileSync(migrationPath, 'utf8');
+        await client.query(migrationSql);
+        console.log(`Completed migration: ${file}`);
+      }
+    }
+
   } catch (err) {
     console.error('Migration failed:', err);
   } finally {

@@ -1,12 +1,13 @@
+import { AuthRequest } from '../types/auth.types';
 import { Request, Response, NextFunction } from 'express';
-import * as alertsService from '../services/alerts.service';
+import * as alertsService from '../services/alerts/AlertsService';
 
 /**
  * Get user alerts
  */
-export async function getAlerts(req: Request, res: Response, next: NextFunction) {
+export async function getAlerts(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const unreadOnly = req.query.unread === 'true';
     const type = req.query.type as string;
     const page = req.query.page ? parseInt(req.query.page as string) : 1;
@@ -28,9 +29,9 @@ export async function getAlerts(req: Request, res: Response, next: NextFunction)
 /**
  * Mark alert as read
  */
-export async function markAsRead(req: Request, res: Response, next: NextFunction) {
+export async function markAsRead(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { id } = req.params;
     
     const success = await alertsService.markAlertAsRead(userId, id);
@@ -48,9 +49,9 @@ export async function markAsRead(req: Request, res: Response, next: NextFunction
 /**
  * Delete alert
  */
-export async function deleteAlert(req: Request, res: Response, next: NextFunction) {
+export async function deleteAlert(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { id } = req.params;
     
     const success = await alertsService.deleteAlert(userId, id);

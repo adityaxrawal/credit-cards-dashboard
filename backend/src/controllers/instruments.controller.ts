@@ -1,12 +1,13 @@
+import { AuthRequest } from '../types/auth.types';
 import { Request, Response } from 'express';
-import { BankService } from '../services/instruments/BankService';
-import { BankAccountService } from '../services/instruments/BankAccountService';
-import { CreditCardService } from '../services/instruments/CreditCardService';
-import { DebitCardService } from '../services/instruments/DebitCardService';
-import { UPIHandleService } from '../services/instruments/UPIHandleService';
-import { InstrumentHierarchyService } from '../services/instruments/InstrumentHierarchyService';
-import { InstrumentRegistry } from '../services/instruments/InstrumentRegistry';
-import logger from '../utils/logger';
+import { BankService } from '../services/cards/instruments/BankService';
+import { BankAccountService } from '../services/cards/instruments/BankAccountService';
+import { CreditCardService } from '../services/cards/instruments/CreditCardService';
+import { DebitCardService } from '../services/cards/instruments/DebitCardService';
+import { UPIHandleService } from '../services/cards/instruments/UPIHandleService';
+import { InstrumentHierarchyService } from '../services/cards/instruments/InstrumentHierarchyService';
+import { InstrumentRegistry } from '../services/cards/instruments/InstrumentRegistry';
+import logger from '../utils/infrastructure/logger';
 
 export class InstrumentsController {
 
@@ -14,7 +15,7 @@ export class InstrumentsController {
     // Returns all instruments for user in hierarchical format
     async getInstruments(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.id;
+            const userId = req.user.id;
             const instruments = await InstrumentRegistry.getUserInstruments(userId);
             res.json(instruments);
         } catch (error) {
@@ -27,7 +28,7 @@ export class InstrumentsController {
     // Returns full Bank → Account → Card hierarchy
     async getHierarchy(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.id;
+            const userId = req.user.id;
             const hierarchy = await InstrumentHierarchyService.getUserHierarchy(userId);
             res.json(hierarchy);
         } catch (error) {
@@ -52,7 +53,7 @@ export class InstrumentsController {
     // List user's bank accounts
     async getAccounts(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.id;
+            const userId = req.user.id;
             const accounts = await BankAccountService.getUserAccounts(userId);
             res.json(accounts);
         } catch (error) {
@@ -65,7 +66,7 @@ export class InstrumentsController {
     // Create new bank account
     async createAccount(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.id;
+            const userId = req.user.id;
             const account = await BankAccountService.createAccount(userId, req.body);
 
             // Register in registry
@@ -100,7 +101,7 @@ export class InstrumentsController {
     // Register credit card
     async registerCreditCard(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.id;
+            const userId = req.user.id;
             const card = await CreditCardService.registerCreditCard(userId, req.body);
 
             // Register in registry
@@ -124,7 +125,7 @@ export class InstrumentsController {
     // Register debit card
     async registerDebitCard(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.id;
+            const userId = req.user.id;
             const { bankAccountId, ...data } = req.body;
             const card = await DebitCardService.registerDebitCard(userId, bankAccountId, data);
 
@@ -149,7 +150,7 @@ export class InstrumentsController {
     // Register UPI handle
     async registerUPIHandle(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.id;
+            const userId = req.user.id;
             const { bankAccountId, ...data } = req.body;
             const handle = await UPIHandleService.registerUPIHandle(userId, bankAccountId, data);
 
@@ -173,7 +174,7 @@ export class InstrumentsController {
     // Search instrument by mask/handle
     async searchInstrument(req: Request, res: Response) {
         try {
-            const userId = (req as any).user.id;
+            const userId = req.user.id;
             const { identifier } = req.query;
             const instrument = await InstrumentRegistry.searchInstrument(userId, identifier as string);
             if (!instrument) return res.status(404).json({ error: 'Instrument not found' });
@@ -189,7 +190,7 @@ export class InstrumentsController {
     async getInstrument(req: Request, res: Response) {
         // This needs logic to fetch the actual instrument based on type from registry
         try {
-            const userId = (req as any).user.id;
+            const userId = req.user.id;
             const { id } = req.params;
             const regEntry = await InstrumentRegistry.getInstrument(userId, id, req.query.type as string);
             if (!regEntry) return res.status(404).json({ error: 'Instrument not found' });

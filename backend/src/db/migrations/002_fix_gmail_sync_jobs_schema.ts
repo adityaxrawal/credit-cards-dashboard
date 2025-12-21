@@ -1,5 +1,5 @@
 import pool from '../../lib/db';
-import logger from '../../utils/logger';
+import logger from '../../utils/infrastructure/logger';
 
 export async function migrate() {
     const client = await pool.connect();

@@ -20,14 +20,28 @@ export interface Card {
 /**
  * Get all cards for a user
  */
-export async function getUserCards(userId: string): Promise<Card[]> {
+/**
+ * Get all cards for a user with calculated utilization
+ */
+export async function getUserCards(userId: string): Promise<Array<Card & { outstanding_balance: number }>> {
   const { rows } = await pool.query(
-    `SELECT * FROM credit_cards 
-     WHERE user_id = $1 AND is_active = true 
-     ORDER BY created_at DESC`,
+    `SELECT c.*, 
+      COALESCE((
+        SELECT SUM(t.amount) 
+        FROM transactions t 
+        WHERE t.card_id = c.id 
+          AND t.transaction_type = 'debit' 
+          AND t.is_settled = false
+      ), 0) as outstanding_balance
+     FROM credit_cards c 
+     WHERE c.user_id = $1 AND c.is_active = true 
+     ORDER BY c.created_at DESC`,
     [userId]
   );
-  return rows;
+  return rows.map(row => ({
+    ...row,
+    outstanding_balance: parseFloat(row.outstanding_balance)
+  }));
 }
 
 /**

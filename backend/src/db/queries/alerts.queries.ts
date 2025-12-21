@@ -70,27 +70,30 @@ export async function getUserAlerts(
 
   const whereClause = where.join(' AND ');
 
-  // Get total count
-  const countResult = await pool.query(
-    `SELECT COUNT(*) as total FROM alerts WHERE ${whereClause}`,
-    params
-  );
-  const total = parseInt(countResult.rows[0].total);
-
-  // Get paginated data
+  // Get data and total count in one query
   const limit = filters?.limit || 50;
   const offset = filters?.offset || 0;
 
-  const dataResult = await pool.query(
-    `SELECT * FROM alerts 
+  const result = await pool.query(
+    `SELECT *, COUNT(*) OVER() as total_count 
+     FROM alerts 
      WHERE ${whereClause}
      ORDER BY created_at DESC
      LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
     [...params, limit, offset]
   );
 
+  const total = result.rows.length > 0 ? parseInt(result.rows[0].total_count) : 0;
+
+  // Clean up the total_count field from the returned objects if needed, 
+  // or just return as is (extra field usually harmless or can be stripped)
+  const data = result.rows.map(row => {
+    const { total_count, ...alert } = row;
+    return alert;
+  });
+
   return {
-    data: dataResult.rows,
+    data: data as Alert[],
     total,
   };
 }

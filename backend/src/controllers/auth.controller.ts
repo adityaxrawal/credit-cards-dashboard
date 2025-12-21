@@ -3,8 +3,8 @@ import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import { UserRepository } from '../repositories/user.repository';
 import { env } from '../config/env';
-import { asyncHandler } from '../utils/asyncHandler';
-import { encrypt } from '../utils/encryption';
+import { asyncHandler } from '../utils/helpers/asyncHandler';
+import { encrypt } from '../utils/helpers/encryption';
 
 const client = new OAuth2Client(
   env.GOOGLE_CLIENT_ID,
