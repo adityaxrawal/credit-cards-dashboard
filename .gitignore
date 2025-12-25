@@ -9,9 +9,9 @@ backend/deploy.sh
 .env.prod
 .env.local
 backend_repo.txt
-backend/backend_repo.txt
-frontend/frontend_repo.txt
-frontend/dump-frontend.js
+frontend_repo.txt
+generate_repo_text.js
+
 
 .dockerignore
 backend/logs
