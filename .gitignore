@@ -8,7 +8,11 @@ backend/deploy.sh
 .next
 .env.prod
 .env.local
-.gitignore
+backend_repo.txt
+backend/backend_repo.txt
+frontend/frontend_repo.txt
+frontend/dump-frontend.js
+
 .dockerignore
 backend/logs
 .md
