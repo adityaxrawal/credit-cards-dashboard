@@ -161,6 +161,68 @@ export function TransactionDetailModal({
               </p>
             </DetailRow>
           )}
+
+          {/* NEW: Extraction Details Section */}
+          <div className="mt-6 pt-6 border-t border-muted-text/10">
+            <h4 className="text-sm font-semibold text-primary-text mb-4">Extraction Details</h4>
+            
+            <div className="space-y-4">
+              {/* Detection Method */}
+              {transaction.detection_method && (
+                <DetailRow label="Detection Method">
+                  <Badge 
+                    label={transaction.detection_method === 'gpt' ? 'AI-Powered (GPT)' : 'Rule-based Pattern'}
+                    variant="secondary"
+                  />
+                </DetailRow>
+              )}
+
+              {/* Confidence Score */}
+              {transaction.confidence_score !== undefined && (
+                <DetailRow label="Confidence">
+                  <div className="flex items-center gap-2 justify-end">
+                    <div className="w-24 bg-hover-bg rounded-full h-2">
+                      <div
+                        className="bg-success h-2 rounded-full"
+                        style={{ width: `${transaction.confidence_score * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-primary-text">
+                      {Math.round(transaction.confidence_score * 100)}%
+                    </span>
+                  </div>
+                </DetailRow>
+              )}
+
+              {/* Source Email */}
+              {transaction.email_message_id && (
+                <DetailRow label="Source Email">
+                  <a
+                    href={`https://mail.google.com/mail/u/0/#inbox/${transaction.email_message_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary-green hover:underline"
+                  >
+                    View in Gmail →
+                  </a>
+                </DetailRow>
+              )}
+
+              {/* Pipeline Job */}
+              {transaction.scan_job_id && (
+                <DetailRow label="Pipeline Job">
+                  <span className="text-xs text-secondary-text font-mono">{transaction.scan_job_id.substring(0, 8)}...</span>
+                </DetailRow>
+              )}
+
+              {/* Manual Review Actions */}
+              {transaction.needs_review && (
+                <div className="pt-2">
+                  <Badge label="Needs Review" variant="warning" />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Actions */}

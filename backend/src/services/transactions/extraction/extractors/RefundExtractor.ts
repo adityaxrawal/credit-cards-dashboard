@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../types/transaction.types';
+import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
 
 export class RefundExtractor {
     static async extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {

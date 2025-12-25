@@ -1,4 +1,4 @@
-import { ClassificationResult, CleanEmail, TransactionType } from '../../types/transaction.types';
+import { ClassificationResult, CleanEmail, TransactionType } from '../../../types/transaction.types';
 
 export abstract class BaseClassifier {
     abstract readonly priority: number; // Lower number = higher priority

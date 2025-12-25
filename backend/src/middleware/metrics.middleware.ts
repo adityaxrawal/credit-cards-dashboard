@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { metricsService } from '../services/metrics.service';
+import { metricsService } from '../services/analytics/MetricsService';
 
 export const metricsMiddleware = (req: Request, res: Response, next: NextFunction) => {
     const start = process.hrtime();

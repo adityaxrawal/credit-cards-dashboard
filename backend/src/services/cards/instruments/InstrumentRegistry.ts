@@ -1,6 +1,6 @@
-import { UserInstrumentRepository } from '../../repositories/UserInstrumentRepository';
-import { UserInstrument, UUID } from '../../types/instruments.types';
-import logger from '../../utils/infrastructure/logger';
+import { UserInstrumentRepository } from '../../../repositories/UserInstrumentRepository';
+import { UserInstrument, UUID } from '../../../types/instruments.types';
+import logger from '../../../utils/infrastructure/logger';
 
 export class InstrumentRegistry {
     private static userInstrumentCache: Map<string, UserInstrument[]> = new Map();

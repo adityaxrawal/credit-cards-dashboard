@@ -1,5 +1,5 @@
-import { DebitCardRepository } from '../../repositories/DebitCardRepository';
-import { DebitCard, UUID } from '../../types/instruments.types';
+import { DebitCardRepository } from '../../../repositories/DebitCardRepository';
+import { DebitCard, UUID } from '../../../types/instruments.types';
 
 export class DebitCardService {
     // Register debit card (must have parent account)

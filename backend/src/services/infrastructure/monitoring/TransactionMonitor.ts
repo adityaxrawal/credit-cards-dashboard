@@ -1,5 +1,5 @@
-import pool from '../../lib/db';
-import logger from '../../utils/infrastructure/logger';
+import pool from '../../../lib/db';
+import logger from '../../../utils/infrastructure/logger';
 
 interface PeriodStats {
     totalProcessed: number;

@@ -27,8 +27,11 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui";
 import {
   TrendingUp,
   TrendingDown,
@@ -36,6 +39,7 @@ import {
   CreditCard,
   Calendar,
   PieChart as PieChartIcon,
+  Download,
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { analyticsApi, DashboardOverview, SpendingTrendItem, TopMerchant } from "@/lib/api/analytics";
@@ -227,7 +231,24 @@ export default function AnalyticsPage() {
           </div>
           <div className="flex items-center space-x-4">
              {/* Period selection could be added here if backend supports arbitrary ranges for overview */}
-            <Button variant="secondary">Export Report</Button>
+            <Button variant="secondary" onClick={async () => {
+              try {
+                const blob = await analyticsApi.exportData('pdf');
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `spending-report-${new Date().toISOString().split('T')[0]}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+              } catch (e) {
+                console.error("Export failed", e);
+              }
+            }}>
+              <Download className="w-4 h-4 mr-2" />
+              Export Report
+            </Button>
           </div>
         </div>
 

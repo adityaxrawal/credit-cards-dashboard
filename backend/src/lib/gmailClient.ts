@@ -163,18 +163,42 @@ function getRateLimiter(userId: string): TokenBucket {
 }
 
 /**
+ * Fetch a single Gmail message
+ */
+export async function getMessage(
+  refreshToken: string,
+  messageId: string,
+  userId?: string,  // Optional for backward compatibility
+  skipCache: boolean = false
+): Promise<GmailMessage | null> {
+  try {
+    const rawMessage = await getRawMessage(refreshToken, messageId, userId, skipCache);
+    if (!rawMessage) return null;
+
+    return parseMessage(rawMessage);
+  } catch (error) {
+    console.error('[GmailClient] Error fetching message:', error);
+    return null;
+  }
+}
+
+/**
  * Fetch raw Gmail message
  */
 export async function getRawMessage(
   refreshToken: string,
   messageId: string,
-  userId?: string  // Optional for backward compatibility
+  userId?: string,  // Optional for backward compatibility
+  skipCache: boolean = false
 ): Promise<gmail_v1.Schema$Message | null> {
   // Check cache first (with user isolation if userId provided)
   const cacheKey = userId ? getCacheKey(userId, messageId) : messageId;
-  const cached = messageCache.get<gmail_v1.Schema$Message>(cacheKey);
-  if (cached) {
-    return cached;
+
+  if (!skipCache) {
+    const cached = messageCache.get<gmail_v1.Schema$Message>(cacheKey);
+    if (cached) {
+      return cached;
+    }
   }
 
   try {
@@ -197,7 +221,9 @@ export async function getRawMessage(
     }));
 
     // Cache the result (LRU auto-eviction)
-    messageCache.set(cacheKey, response.data);
+    if (!skipCache) {
+      messageCache.set(cacheKey, response.data);
+    }
 
     return response.data;
   } catch (error) {
@@ -266,24 +292,6 @@ export function parseMessage(rawMessage: gmail_v1.Schema$Message): GmailMessage 
 }
 
 /**
- * Fetch a single Gmail message
- */
-export async function getMessage(
-  refreshToken: string,
-  messageId: string
-): Promise<GmailMessage | null> {
-  try {
-    const rawMessage = await getRawMessage(refreshToken, messageId);
-    if (!rawMessage) return null;
-
-    return parseMessage(rawMessage);
-  } catch (error) {
-    console.error('[GmailClient] Error fetching message:', error);
-    return null;
-  }
-}
-
-/**
  * Batch fetch Gmail messages
  * Optimized for High Throughput (Target: 200/sec)
  */
@@ -291,7 +299,8 @@ export async function batchGetMessages(
   refreshToken: string,
   messageIds: string[],
   userId: string,  // Required for per-user rate limiting and cache isolation
-  concurrency: number = 100 // High concurrency for throughput
+  concurrency: number = 100, // High concurrency for throughput
+  skipCache: boolean = true
 ): Promise<Array<gmail_v1.Schema$Message>> {
   // Use p-limit to control concurrency.
   // RATIONALE: 100 concurrent requests provides good throughput while
@@ -301,7 +310,7 @@ export async function batchGetMessages(
   const start = Date.now();
   console.log(`[GmailClient] Batch fetching ${messageIds.length} messages with concurrency ${concurrency}...`);
 
-  const tasks = messageIds.map(id => limit(() => getRawMessage(refreshToken, id, userId)));
+  const tasks = messageIds.map(id => limit(() => getRawMessage(refreshToken, id, userId, skipCache)));
 
   // Use Promise.allSettled to handle partial failures gracefully
   const results = await Promise.allSettled(tasks);

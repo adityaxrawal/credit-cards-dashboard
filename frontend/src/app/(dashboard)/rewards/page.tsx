@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Star,
   TrendingUp,
@@ -12,11 +12,15 @@ import {
   Calendar,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout";
-import { Badge } from "@/components/ui";
+import { Badge, Button } from "@/components/ui";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { rewardsApi, type RewardPoints, type RewardTransaction } from "@/lib/api/rewards";
+import { RedemptionModal } from "@/components/features/rewards/RedemptionModal";
 
 export default function RewardsPage() {
+  const queryClient = useQueryClient();
+  const [redemptionCard, setRedemptionCard] = React.useState<RewardPoints | null>(null);
+
   // Fetch rewards summary
   const { data: summary, isLoading: summaryLoading } = useQuery({
     queryKey: ["rewards-summary"],
@@ -31,6 +35,24 @@ export default function RewardsPage() {
 
   const isLoading = summaryLoading || rewardsLoading;
 
+  // Mutation for redemption
+  const createTransactionMutation = useMutation({
+    mutationFn: (data: { cardId: string; amount: number; description: string }) => 
+      rewardsApi.createTransaction({
+        cardId: data.cardId,
+        pointsChange: -data.amount,
+        description: data.description
+      }),
+    onSuccess: () => {
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      queryClient.invalidateQueries({ queryKey: ["rewards-summary"] });
+      // Modal closed inside handleRedeem or by prop
+    }
+  });
+
+
+
   if (isLoading) {
     return (
       <AppLayout title="Rewards" showRightSidebar={false}>
@@ -40,6 +62,23 @@ export default function RewardsPage() {
       </AppLayout>
     );
   }
+
+  const handleRedeem = (option: string, points: number) => {
+    if (!redemptionCard) return;
+    
+    // Map option to description
+    const optionLabels: Record<string, string> = {
+      cashback: "Cashback Redemption",
+      giftcard: "Gift Card Redemption",
+      travel: "Miles Transfer"
+    };
+
+    createTransactionMutation.mutate({
+      cardId: redemptionCard.card_id,
+      amount: points,
+      description: optionLabels[option] || "Reward Redemption"
+    });
+  };
 
   return (
     <AppLayout title="Rewards & Points" showRightSidebar={false}>
@@ -51,10 +90,12 @@ export default function RewardsPage() {
           </p>
         </div>
 
-        {/* Summary Stats */}
+        {/* ... (Summary Stats already here) ... */}
         {summary && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-card-bg rounded-xl border border-muted-text/10 shadow-sm p-6">
+             {/* ... existing stats structure ... */}
+             {/* Re-rendering just the grid container start for context, assumes file match */}
+             <div className="bg-card-bg rounded-xl border border-muted-text/10 shadow-sm p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-secondary-text">Total Points</p>
@@ -128,21 +169,31 @@ export default function RewardsPage() {
           ) : (
             <div className="divide-y divide-muted-text/10">
               {allRewards.map((reward) => (
-                <RewardCard key={reward.id} reward={reward} />
+                <RewardCard 
+                  key={reward.id} 
+                  reward={reward} 
+                  onRedeem={(r) => setRedemptionCard(r)}
+                />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {redemptionCard && (
+        <RedemptionModal
+          isOpen={!!redemptionCard}
+          onClose={() => setRedemptionCard(null)}
+          availablePoints={redemptionCard.points_balance}
+          onRedeem={handleRedeem}
+        />
+      )}
     </AppLayout>
   );
 }
 
-interface RewardCardProps {
-  reward: RewardPoints;
-}
 
-function RewardCard({ reward }: RewardCardProps) {
+function RewardCard({ reward, onRedeem }: RewardCardProps) {
   // Fetch transactions for this card
   const { data: transactions = [] } = useQuery({
     queryKey: ["reward-transactions", reward.card_id],
@@ -230,7 +281,7 @@ function RewardCard({ reward }: RewardCardProps) {
           )}
         </div>
 
-        <div className="flex flex-col items-end space-y-2">
+        <div className="flex flex-col items-end space-y-4">
           <div className="text-right">
             <p className="text-2xl font-bold text-blue-500">
               {reward.points_balance.toLocaleString()}
@@ -242,10 +293,25 @@ function RewardCard({ reward }: RewardCardProps) {
             variant="default"
             size="sm"
           />
+          <Button 
+            variant="primary" 
+            size="sm"
+            onClick={() => onRedeem(reward)}
+            disabled={reward.points_balance <= 0}
+          >
+            <Gift className="w-4 h-4 mr-2" />
+            Redeem Points
+          </Button>
         </div>
       </div>
     </div>
   );
+}
+
+// Add props to RewardCard for callback
+interface RewardCardProps {
+  reward: RewardPoints;
+  onRedeem: (reward: RewardPoints) => void;
 }
 
 interface TransactionRowProps {

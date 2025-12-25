@@ -1,6 +1,6 @@
-import pool from '../../lib/db';
-import logger from '../../utils/infrastructure/logger';
-import { isPostgresError } from '../../utils/errorTypeGuards';
+import pool from '../../../lib/db';
+import logger from '../../../utils/infrastructure/logger';
+import { isPostgresError } from '../../../utils/validation/errorTypeGuards';
 import { ManualReviewService } from './ManualReviewService';
 import { RetryQueueService } from './RetryQueueService';
 

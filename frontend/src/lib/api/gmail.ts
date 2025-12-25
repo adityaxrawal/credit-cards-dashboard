@@ -113,4 +113,43 @@ export const gmailApi = {
     const response = await apiGet<{ data: { lastSync: string | null } }>("/api/gmail/last-sync");
     return response.data;
   },
+
+  async getPipelineStats(): Promise<{
+    processed: number;
+    saved: number;
+    needsReview: number;
+    terminated: number;
+    avgConfidence: number;
+  }> {
+    const response = await apiGet<{
+      data: {
+        processed: number;
+        saved: number;
+        needsReview: number;
+        terminated: number;
+        avgConfidence: number;
+      };
+    }>('api/gmail/stats');
+    return response.data;
+  },
+
+  async getTerminatorReport(
+    fromDate: Date,
+    toDate: Date
+  ): Promise<{
+    reasons: Array<{ reason: string; count: number }>;
+    totalTerminated: number;
+  }> {
+    const query = new URLSearchParams({
+      startDate: fromDate.toISOString(),
+      endDate: toDate.toISOString()
+    });
+    const response = await apiGet<{
+      data: {
+        reasons: Array<{ reason: string; count: number }>;
+        totalTerminated: number;
+      };
+    }>(`api/gmail/terminator-report?${query}`);
+    return response.data;
+  },
 };

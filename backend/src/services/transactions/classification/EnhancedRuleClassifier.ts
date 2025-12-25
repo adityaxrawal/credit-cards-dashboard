@@ -1,6 +1,6 @@
-import { CleanEmail } from '../../types/transaction.types';
-import { TRANSACTION_PATTERNS, isKnownBankSender, PatternGroup } from '../../data/transaction-patterns';
-import logger from '../../utils/infrastructure/logger';
+import { CleanEmail } from '../../../types/transaction.types';
+import { TRANSACTION_PATTERNS, isKnownBankSender, PatternGroup } from '../../../data/transaction-patterns';
+import logger from '../../../utils/infrastructure/logger';
 
 /**
  * Result from the enhanced rule classifier

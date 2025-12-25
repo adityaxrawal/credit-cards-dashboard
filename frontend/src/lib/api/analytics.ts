@@ -1,4 +1,6 @@
 import { apiGet } from "./client";
+import { SpendingReport, CategoryReport, MonthlyReport } from "../../types/reports";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export interface DashboardOverview {
   currentMonth: {
@@ -95,4 +97,33 @@ export const analyticsApi = {
       `/api/analytics/merchants?${params.toString()}`
     ).then((res) => res.data);
   },
+
+  async getSpendingReport(fromDate: Date, toDate: Date): Promise<SpendingReport> {
+    const query = new URLSearchParams({
+      startDate: fromDate.toISOString(),
+      endDate: toDate.toISOString()
+    });
+    const response = await apiGet<{ data: SpendingReport }>(`/api/reports/spending?${query}`);
+    return response.data;
+  },
+
+  async getCategoryReport(month: number, year: number): Promise<CategoryReport[]> {
+    const response = await apiGet<{ data: CategoryReport[] }>(
+      `/api/reports/category?month=${month}&year=${year}`
+    );
+    return response.data;
+  },
+
+  async getMonthlyReport(year: number): Promise<MonthlyReport[]> {
+    const response = await apiGet<{ data: MonthlyReport[] }>(`/api/reports/monthly?year=${year}`);
+    return response.data;
+  },
+
+  async exportData(format: 'csv' | 'pdf'): Promise<Blob> {
+    const response = await fetch(`${API_BASE_URL}/api/reports/export?format=${format}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    return response.blob();
+  }
 };

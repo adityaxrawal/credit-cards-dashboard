@@ -1,13 +1,14 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as transactionsService from '../services/transactions/TransactionService';
+import { AuthRequest } from '../types/auth.types';
 
 import { CreateTransactionSchema, UpdateTransactionSchema } from '../validators/transaction.schema';
 
 /**
  * Get all transactions with filters
  */
-export async function getTransactions(req: Request, res: Response, next: NextFunction) {
+export async function getTransactions(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user.id;
     const filters = {
@@ -40,7 +41,7 @@ export async function getTransactions(req: Request, res: Response, next: NextFun
 /**
  * Get a single transaction
  */
-export async function getTransaction(req: Request, res: Response, next: NextFunction) {
+export async function getTransaction(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user.id;
     const { id } = req.params;
@@ -60,7 +61,7 @@ export async function getTransaction(req: Request, res: Response, next: NextFunc
 /**
  * Create a manual transaction
  */
-export async function createTransaction(req: Request, res: Response, next: NextFunction) {
+export async function createTransaction(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user.id;
     // Zod Validation
@@ -97,7 +98,7 @@ export async function createTransaction(req: Request, res: Response, next: NextF
 /**
  * Update a transaction
  */
-export async function updateTransaction(req: Request, res: Response, next: NextFunction) {
+export async function updateTransaction(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user.id;
     const { id } = req.params;
@@ -127,7 +128,7 @@ export async function updateTransaction(req: Request, res: Response, next: NextF
 /**
  * Delete a transaction
  */
-export async function deleteTransaction(req: Request, res: Response, next: NextFunction) {
+export async function deleteTransaction(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user.id;
     const { id } = req.params;
@@ -147,7 +148,7 @@ export async function deleteTransaction(req: Request, res: Response, next: NextF
 /**
  * Get transactions by type
  */
-export async function getTransactionsByType(req: Request, res: Response, next: NextFunction) {
+export async function getTransactionsByType(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user.id;
     const { type } = req.params;
@@ -168,7 +169,7 @@ export async function getTransactionsByType(req: Request, res: Response, next: N
 /**
  * Get transactions by instrument
  */
-export async function getTransactionsByInstrument(req: Request, res: Response, next: NextFunction) {
+export async function getTransactionsByInstrument(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user.id;
     const { instrumentId } = req.params;
@@ -189,7 +190,7 @@ export async function getTransactionsByInstrument(req: Request, res: Response, n
 /**
  * Get pending review queue
  */
-export async function getPendingReviewQueue(req: Request, res: Response, next: NextFunction) {
+export async function getPendingReviewQueue(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user.id;
     const { page, limit } = req.query;
@@ -209,7 +210,7 @@ export async function getPendingReviewQueue(req: Request, res: Response, next: N
 /**
  * Manually classify a transaction
  */
-export async function manuallyClassifyTransaction(req: Request, res: Response, next: NextFunction) {
+export async function manuallyClassifyTransaction(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user.id;
     const { id } = req.params;

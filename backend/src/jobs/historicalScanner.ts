@@ -65,13 +65,14 @@ export async function runHistoricalScan(
     const stats = { success: 0, failed: 0, needs_review: 0, terminated: 0, duplicate: 0 };
 
     // Config
-    const FETCH_BATCH_SIZE = 150;  // Increased for throughput
+    const FETCH_BATCH_SIZE = 200;  // Increased for throughput
     const HIGH_WATER_MARK = 500;  // Buffer more items before pausing
     const LOW_WATER_MARK = 100;   // Resume sooner
 
     // --- PRODUCER LOOP (FETCH) ---
     const fetchLoop = async () => {
       let pageToken: string | undefined = undefined;
+      console.log(`[PHASE: FETCH] Starting fetch loop with batch size ${FETCH_BATCH_SIZE}`);
 
       try {
         do {
@@ -86,22 +87,19 @@ export async function runHistoricalScan(
 
           WorkflowLogger.log('FETCH', `Listing batch...`, { jobId });
 
+          const fetchStart = Date.now();
           const { messages, nextPageToken } = await GmailFetcherService.fetchBatch(refreshToken, userId, query, FETCH_BATCH_SIZE, pageToken);
           pageToken = nextPageToken;
+          console.log(`[PHASE: FETCH] Fetched ${messages.length} messages in ${Date.now() - fetchStart}ms`);
 
           if (messages.length > 0) {
             totalFetched += messages.length;
-            // Map to SimplifiedEmail format required by pipeline (ensure types match)
-            // fetchBatch returns simplified objects already, usually.
-            // But we need to make sure fields match `SimplifiedEmail` interface in transaction.types.ts
-            // (messageId, internalDate, subject, from, snippet?)
-            // Assuming GmailFetcherService returns compatible objects or we cast/map.
-            // Let's assume compatible for now as previously working.
             processingQueue.push(...messages as any[]);
             WorkflowLogger.log('FETCH', `Pushed ${messages.length} to queue. Total Fetched: ${totalFetched}`, { jobId, queueSize: processingQueue.length });
           }
 
         } while (pageToken);
+        console.log(`[PHASE: FETCH] Fetch loop completed. Total fetched: ${totalFetched}`);
       } catch (err) {
         logger.error('[HistoricalScanner] Fetch loop error:', err);
         throw err;
@@ -127,7 +125,7 @@ export async function runHistoricalScan(
         const batch = processingQueue.splice(0, batchSize);
         const batchStartTime = Date.now();
 
-        console.log(`\n[BATCH START] Processing ${batch.length} emails. Queue weight: ${processingQueue.length}`);
+        console.log(`\n[PHASE: PROCESS] Processing batch of ${batch.length} emails. Queue rem: ${processingQueue.length}`);
 
         // Process this batch in parallel
         await Promise.all(batch.map(async (email) => {
@@ -140,7 +138,7 @@ export async function runHistoricalScan(
         }));
 
         const batchDuration = Date.now() - batchStartTime;
-        console.log(`[BATCH END] Processed ${batch.length} emails in ${batchDuration}ms (${Math.round(batch.length / (batchDuration / 1000))} emails/sec)`);
+        console.log(`[PHASE: PROCESS] Processed ${batch.length} emails in ${batchDuration}ms (${Math.round(batch.length / (batchDuration / 1000))} emails/sec)`);
 
         // Update DB periodically (approx every batch)
         await updateJobStats(jobId, totalFetched, stats);
@@ -230,7 +228,7 @@ export async function runHistoricalScan(
     );
 
     // Emit Final WebSocket Update
-    const { broadcastJobComplete } = await import('../services/webSocketService');
+    const { broadcastJobComplete } = await import('../services/alerts/WebSocketService');
     broadcastJobComplete(jobId, {
       totalEmails: totalFetched,
       totalTransactions: stats.success,

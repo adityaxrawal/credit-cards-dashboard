@@ -3,7 +3,7 @@ import { BankAccountService } from './BankAccountService';
 import { CreditCardService } from './CreditCardService';
 import { DebitCardService } from './DebitCardService';
 import { UPIHandleService } from './UPIHandleService';
-import { Bank, BankAccount, CreditCard, DebitCard, UPIHandle, UUID, BankHierarchy } from '../../types/instruments.types';
+import { Bank, BankAccount, CreditCard, DebitCard, UPIHandle, UUID, BankHierarchy } from '../../../types/instruments.types';
 
 export class InstrumentHierarchyService {
     // Get complete hierarchy for user (Bank → Account → Cards/UPI)

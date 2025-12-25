@@ -6,14 +6,21 @@ import { env } from '../config/env';
  * CSRF Protection Middleware
  * Uses cookie-based token storage
  */
-export const csrfProtection = csurf({
+const csrfMiddleware = csurf({
     cookie: {
         key: '_csrf',
         secure: env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'lax',
         httpOnly: true
     }
 });
+
+export const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
+    if (req.path === '/auth/google' || req.path === '/api/auth/google' || req.path === '/api/gmail/scan-historical') {
+        return next();
+    }
+    return csrfMiddleware(req, res, next);
+};
 
 /**
  * Handle CSRF errors specifically

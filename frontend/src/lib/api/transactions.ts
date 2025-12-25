@@ -32,6 +32,12 @@ export interface Transaction {
     last_four?: string;
   };
   bank_name?: string;
+  // Metadata
+  needs_review?: boolean;
+  detection_method?: string;
+  confidence_score?: number;
+  scan_job_id?: string;
+  txn_fingerprint?: string;
 }
 
 export interface TransactionFormData {

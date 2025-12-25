@@ -4,6 +4,7 @@ export * from "./useApi";
 // Domain-specific hooks
 export * from "./useCards";
 export * from "./useTransactions";
+export * from "./useDashboardData";
 
 // Form management hooks
 export * from "./useForm";

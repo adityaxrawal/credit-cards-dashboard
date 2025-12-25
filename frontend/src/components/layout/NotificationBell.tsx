@@ -17,6 +17,11 @@ interface Alert {
   card_name?: string;
 }
 
+import { rewardsApi } from "@/lib/api/rewards";
+import { gmailApi } from "@/lib/api/gmail";
+
+// ... existing imports ...
+
 export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -29,11 +34,25 @@ export function NotificationBell() {
       );
       return data.data?.total || 0;
     },
-    refetchInterval: 60000, // Refetch every minute
+    refetchInterval: 60000,
+  });
+
+  // Fetch Rewards Summary for Alerts
+  const { data: rewardsSummary } = useQuery({
+    queryKey: ["rewards-summary-alerts"],
+    queryFn: () => rewardsApi.getSummary(),
+    enabled: isOpen,
+  });
+
+  // Fetch Gmail Status for Alerts
+  const { data: gmailStatus } = useQuery({
+    queryKey: ["gmail-status-alerts"],
+    queryFn: () => gmailApi.getStatus(),
+    enabled: isOpen,
   });
 
   // Fetch recent alerts when dropdown is open
-  const { data: alerts = [] } = useQuery({
+  const { data: serverAlerts = [] } = useQuery({
     queryKey: ["recent-alerts"],
     queryFn: async () => {
       const data = await apiClient.get<{ alerts: Alert[] }>(
@@ -41,8 +60,39 @@ export function NotificationBell() {
       );
       return (data.data?.alerts || []) as Alert[];
     },
-    enabled: isOpen, // Only fetch when dropdown is open
+    enabled: isOpen,
   });
+
+  // Combine Alerts
+  const alerts: Alert[] = React.useMemo(() => {
+    const virtualAlerts: Alert[] = [];
+
+    // Rewards Expiry Alert
+    if (rewardsSummary?.summary?.total_points_expiring_soon && rewardsSummary.summary.total_points_expiring_soon > 0) {
+      virtualAlerts.push({
+        id: "virtual-rewards-expiry",
+        alert_type: "reward_expiry",
+        severity: "medium",
+        message: `${rewardsSummary.summary.total_points_expiring_soon} points are expiring soon!`,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    // Gmail Disconnected Alert
+    if (gmailStatus && !gmailStatus.connected) {
+      virtualAlerts.push({
+        id: "virtual-gmail-disconnected",
+        alert_type: "system_alert",
+        severity: "high",
+        message: "Gmail sync is disconnected. Re-connect to track expenses.",
+        is_read: false,
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    return [...virtualAlerts, ...serverAlerts];
+  }, [serverAlerts, rewardsSummary, gmailStatus]);
 
   const markAsRead = async (alertId: string) => {
     try {

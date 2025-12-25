@@ -1,4 +1,4 @@
-import logger from '../../utils/infrastructure/logger';
+import logger from '../../../utils/infrastructure/logger';
 
 /**
  * PDF Parser for Node.js using pdfjs-dist legacy build.
