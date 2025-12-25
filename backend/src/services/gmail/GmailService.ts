@@ -1,14 +1,14 @@
 import * as gmailClient from '../../lib/gmailClient';
 import pool from '../../lib/db';
-import { runHistoricalScan } from '../jobs/historicalScanner';
+import { runHistoricalScan } from '../../jobs/historicalScanner';
 import * as cardsQueries from '../../db/queries/cards.queries';
 import { randomUUID } from 'crypto';
-import { env } from '../config/env';
+import { env } from '../../config/env';
 import logger from '../../utils/infrastructure/logger';
-import { encrypt, decrypt } from '../utils/helpers/encryption';
-import { TerminatorService } from './termination/TerminatorService';
+import { encrypt, decrypt } from '../../utils/helpers/encryption';
+import { TerminatorService } from '../infrastructure/termination/TerminatorService';
 import { SimplifiedEmail } from '../../types/transaction.types';
-import { universalPipeline } from './pipeline/UniversalTransactionPipeline';
+import { universalPipeline } from '../transactions/pipeline/UniversalTransactionPipeline';
 import { Pool } from 'pg';
 
 export interface IGmailServiceDependencies {
@@ -117,6 +117,41 @@ export class GmailService {
    * Trigger historical scan
    */
   async triggerHistoricalScan(userId: string, fromDate?: Date, toDate?: Date) {
+    // Check for existing active job
+    const latestJob = await this.getLatestJob(userId);
+    const activeStatuses = ['PENDING', 'PROCESSING', 'FETCHING', 'GPT_PROCESSING'];
+
+    if (latestJob && activeStatuses.includes(latestJob.status)) {
+      // Check for staleness (e.g. no updates for 30 minutes)
+      const lastUpdate = latestJob.lastUpdateAt ? new Date(latestJob.lastUpdateAt) : new Date(latestJob.startedAt);
+      const now = new Date();
+      const diffMinutes = (now.getTime() - lastUpdate.getTime()) / 1000 / 60;
+
+      if (diffMinutes < 30) {
+        logger.info(`[GmailService] Scan already running for user ${userId}: ${latestJob.jobId}`);
+        return {
+          jobId: latestJob.jobId,
+          status: latestJob.status,
+          fromDate: fromDate, // Preserving request params in response for consistency
+          toDate: toDate,
+          message: 'A scan is already in progress',
+          existingJob: latestJob
+        };
+      }
+
+      // Job is stale, mark as failed and proceed
+      logger.warn(`[GmailService] Found stale job ${latestJob.jobId} (last update ${diffMinutes.toFixed(0)} mins ago). Marking as FAILED.`);
+      logger.info(`[GmailService] Updating stale job status...`);
+      await this.deps.pool.query(
+        `UPDATE gmail_sync_jobs 
+         SET status = 'FAILED', errors = $1, completed_at = NOW(), last_update_at = NOW()
+         WHERE id = $2`,
+        [JSON.stringify([{ error: 'Job marked as stale/abandoned due to inactivity' }]), latestJob.jobId]
+      );
+      logger.info(`[GmailService] Stale job updated.`);
+    }
+
+
     const jobId = randomUUID();
 
     // Create job record in database

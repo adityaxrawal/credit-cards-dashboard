@@ -1,5 +1,5 @@
-import { UPIHandleRepository } from '../../repositories/UPIHandleRepository';
-import { UPIHandle, UUID } from '../../types/instruments.types';
+import { UPIHandleRepository } from '../../../repositories/UPIHandleRepository';
+import { UPIHandle, UUID } from '../../../types/instruments.types';
 
 export class UPIHandleService {
     // Register UPI handle (linked to account)

@@ -49,15 +49,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const router = useRouter();
 
-  // Check authentication status on mount - ONLY ONCE
+  // Use a ref to track if auth check has run/is running, to survive strict mode re-mounts
+  const authCheckRef = React.useRef(false);
+
+  // Check authentication status on mount
   useEffect(() => {
-    if (!hasCheckedAuth) {
+    if (!authCheckRef.current) {
+      authCheckRef.current = true;
       console.log("🔍 AuthProvider: Checking auth status on mount");
       checkAuth();
-      setHasCheckedAuth(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasCheckedAuth]);
+  }, []); // Run once on mount
 
   // Start token refresh when user is authenticated
   useEffect(() => {
@@ -90,14 +93,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function checkAuth() {
     try {
       console.log("📡 Making /api/auth/me request");
-      // apiClient.get<User>() returns ApiResponse<User> = { success, data: User, error, timestamp }
-      const response = await apiClient.get<User>("/api/auth/me");
+      // @ts-ignore - The response type might be inconsistent (wrapped vs unwrapped)
+      const response = await apiClient.get<User | ApiResponse<User>>("/api/auth/me");
 
-      if (response.data && response.data.id && response.data.email) {
-        console.log("✅ Auth check successful:", response.data.email);
-        setUser(response.data);
+      // Handle both wrapped ApiResponse and direct User object
+      // @ts-ignore
+      const userData = response.data || response;
+
+      if (userData && userData.id && userData.email) {
+        console.log("✅ Auth check successful:", userData.email);
+        setUser(userData as User);
       } else {
-        console.log("❌ Auth check failed: Invalid response", response);
+        console.log("❌ Auth check failed: Invalid response structure", response);
         setUser(null);
       }
     } catch (error: unknown) {

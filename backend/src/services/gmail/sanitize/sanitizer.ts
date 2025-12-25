@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { SimplifiedEmail, CleanEmail } from '../../types/transaction.types';
+import { SimplifiedEmail, CleanEmail } from '../../../types/transaction.types';
 
 export type CleanEmailContent = CleanEmail;
 

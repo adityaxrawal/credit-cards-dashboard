@@ -1,6 +1,6 @@
 import * as cardsQueries from '../../db/queries/cards.queries';
 import logger from '../../utils/infrastructure/logger';
-import { getCurrentBillingPeriod, getBillingPeriodForMonth } from '../utils/helpers/billingCycle';
+import { getCurrentBillingPeriod, getBillingPeriodForMonth } from '../../utils/helpers/billingCycle';
 import { invalidateCardCache } from '../../utils/cache/cacheInvalidation';
 
 /**
@@ -129,7 +129,7 @@ export async function getCardStatement(
   const billingPeriod = getBillingPeriodForMonth(card.bill_date, card.due_date, month, year);
 
   // Get transactions for this billing period
-  const transactionsQueries = await import('../db/queries/transactions.queries');
+  const transactionsQueries = await import('../../db/queries/transactions.queries');
   const { data: transactions } = await transactionsQueries.listTransactions(userId, {
     cardId,
     from: billingPeriod.start,

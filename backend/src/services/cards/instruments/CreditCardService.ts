@@ -1,5 +1,5 @@
-import { CreditCardRepository } from '../../repositories/CreditCardRepository';
-import { CreditCard, UUID } from '../../types/instruments.types';
+import { CreditCardRepository } from '../../../repositories/CreditCardRepository';
+import { CreditCard, UUID } from '../../../types/instruments.types';
 
 export class CreditCardService {
     // Register credit card

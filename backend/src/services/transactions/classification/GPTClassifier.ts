@@ -1,13 +1,17 @@
-import { CleanEmail, ClassificationResult, Instrument } from '../../types/transaction.types';
-import pool from '../../lib/db';
-import logger from '../../utils/infrastructure/logger';
+import { CleanEmail, ClassificationResult, Instrument } from '../../../types/transaction.types';
+import pool from '../../../lib/db';
+import logger from '../../../utils/infrastructure/logger';
 import OpenAI from 'openai';
-import { env } from '../../config/env';
+import { env } from '../../../config/env';
+import pLimit from 'p-limit';
 
 // Initialize OpenAI
 const openai = new OpenAI({
     apiKey: env.OPENAI_API_KEY,
 });
+
+// Concurrency Limiter for GPT Calls
+const limit = pLimit(5);
 
 interface GPTBatch {
     batchId: string;
@@ -19,8 +23,8 @@ interface GPTBatch {
 
 export class GPTClassifier {
     private static pendingBatch: GPTBatch | null = null;
-    private static batchSize = 50;
-    private static batchTimeoutMs = 5000;
+    private static batchSize = 5; // Reduced to 5 as requested
+    private static batchTimeoutMs = 2000; // Reduced timeout for faster processing of small batches
     private static timeoutHandle: NodeJS.Timeout | null = null;
 
     static async classify(
@@ -42,9 +46,7 @@ export class GPTClassifier {
 
                 // Set timeout to process even if not full
                 this.timeoutHandle = setTimeout(() => {
-                    this.flushBatch(userId, instruments).catch(err => {
-                        logger.error('Failed to flush batch on timeout', err);
-                    });
+                    this.triggerFlush(userId, instruments);
                 }, this.batchTimeoutMs);
             }
 
@@ -56,22 +58,28 @@ export class GPTClassifier {
             // If full, process immediately
             if (this.pendingBatch.emails.length >= this.batchSize) {
                 if (this.timeoutHandle) clearTimeout(this.timeoutHandle);
-                this.flushBatch(userId, instruments).catch(err => {
-                    logger.error('Failed to flush full batch', err);
-                });
+                this.triggerFlush(userId, instruments);
             }
         });
     }
 
-    private static async flushBatch(userId: string, instruments: Instrument[]): Promise<void> {
-        if (!this.pendingBatch || this.pendingBatch.emails.length === 0) return;
-
-        const batch = this.pendingBatch;
-        this.pendingBatch = null; // Reset immediately so new requests form new batch
+    private static triggerFlush(userId: string, instruments: Instrument[]) {
+        if (!this.pendingBatch) return;
+        const batchToProcess = this.pendingBatch;
+        this.pendingBatch = null; // Reset immediately
         this.timeoutHandle = null;
 
+        // Execute with concurrency limit
+        limit(() => this.processBatch(userId, instruments, batchToProcess)).catch(err => {
+            logger.error('Failed to process batch via limit', err);
+        });
+    }
+
+    private static async processBatch(userId: string, instruments: Instrument[], batch: GPTBatch): Promise<void> {
+        if (!batch.emails.length) return;
+
         try {
-            logger.info(`Processing GPT batch of ${batch.emails.length} emails`);
+            logger.info(`Processing GPT batch of ${batch.emails.length} emails (Concurrency: Active ${limit.activeCount}/5)`);
 
             // 1. Prepare Prompt
             const emailTexts = batch.emails
@@ -99,6 +107,9 @@ Each result object must have:
 
             const userPrompt = `Classify these ${batch.emails.length} emails:\n\n${emailTexts}`;
 
+            console.log(`[GPT] Sending batch request (Size: ${batch.emails.length})`);
+            const startStr = Date.now();
+
             // 2. Call OpenAI
             const response = await openai.chat.completions.create({
                 model: 'gpt-4o-mini', // Cost effective
@@ -115,6 +126,8 @@ Each result object must have:
 
             const parsed = JSON.parse(content);
             const results = parsed.results as Array<{ messageId: string; type: any; confidence: number; extracted: any }>;
+
+            console.log(`[GPT] Batch processed in ${Date.now() - startStr}ms`);
 
             // 3. Store Batch Log
             await pool.query(
@@ -135,10 +148,6 @@ Each result object must have:
             ).catch(e => logger.warn('Failed to log GPT batch', e));
 
             // 4. Resolve Promises
-            // Map back results to promises by messageId or index
-            // Since order is preserved, we can use index, but messageId is safer if GPT skipped one (which it shouldn't)
-            // We'll rely on index for simplicity but check messageId if possible.
-
             batch.emails.forEach((req, index) => {
                 const result = results.find(r => r.messageId === req.messageId) || results[index];
 

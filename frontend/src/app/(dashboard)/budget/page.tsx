@@ -9,18 +9,20 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/primitives/card";
-import { Button } from "@/components/ui/primitives/Button";
-import { Input } from "@/components/ui/primitives/Input";
-import { Label } from "@/components/ui/primitives/label";
-import {
+  Button,
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  Progress,
+} from "@/components/ui";
 import {
   AlertCircle,
   CheckCircle,
@@ -30,7 +32,6 @@ import {
   Settings,
   Plus,
 } from "lucide-react";
-import { Progress } from "@/components/ui/progress";
 import {
   LineChart,
   Line,

@@ -1,5 +1,5 @@
-import logger from '../../utils/infrastructure/logger';
-import { BANK_PATTERNS, isKnownBankSender } from '../../data/transaction-patterns';
+import logger from '../../../utils/infrastructure/logger';
+import { BANK_PATTERNS, isKnownBankSender } from '../../../data/transaction-patterns';
 
 /**
  * Merchant category codes for common merchant types

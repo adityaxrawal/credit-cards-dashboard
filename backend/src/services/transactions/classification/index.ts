@@ -1,6 +1,6 @@
 import { ClassifierRegistry } from './ClassifierRegistry';
 import { TransactionExtractorFactory } from '../extraction/TransactionExtractorFactory';
-import { TransactionType } from '../../types/transaction.types';
+import { TransactionType } from '../../../types/transaction.types';
 
 // Detectors
 import { StatementDetector } from './detectors/StatementDetector';

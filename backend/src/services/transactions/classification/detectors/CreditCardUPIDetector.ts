@@ -1,6 +1,6 @@
 import { BaseClassifier } from '../BaseClassifier';
-import { InstrumentService } from '../../instruments/InstrumentService';
-import { ClassificationResult, CleanEmail, TransactionType, InstrumentType } from '../../../types/transaction.types';
+import { InstrumentService } from '../../../cards/instruments/InstrumentService';
+import { ClassificationResult, CleanEmail, TransactionType, InstrumentType } from '../../../../types/transaction.types';
 
 export class CreditCardUPIDetector extends BaseClassifier {
     readonly priority = 3;

@@ -1,7 +1,7 @@
 import crypto from 'crypto';
-import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../types/transaction.types';
-import { InstrumentService } from '../../instruments/InstrumentService';
-import { BankParserPatterns } from '../../../utils/regexCache';
+import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
+import { InstrumentService } from '../../../cards/instruments/InstrumentService';
+import { BankParserPatterns } from '../../../../utils/cache/regexCache';
 
 export class CreditCardSpendExtractor {
     static async extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {

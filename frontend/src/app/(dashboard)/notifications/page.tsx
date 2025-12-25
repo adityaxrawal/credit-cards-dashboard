@@ -9,18 +9,21 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/primitives/card";
-import { Button } from "@/components/ui/primitives/Button";
-import { Input } from "@/components/ui/primitives/Input";
-import { Label } from "@/components/ui/primitives/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
+  Button,
+  Input,
+  Label,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+  Badge,
+  Switch,
+} from "@/components/ui";
 import {
   Bell,
   BellOff,
@@ -34,8 +37,6 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { Badge } from "@/components/ui/primitives/Badge";
-import { Switch } from "@/components/ui/switch";
 
 interface Alert {
   id: string;

@@ -1,8 +1,8 @@
-import { BankAccountRepository } from '../../repositories/BankAccountRepository';
-import { CreditCardRepository } from '../../repositories/CreditCardRepository';
-import { DebitCardRepository } from '../../repositories/DebitCardRepository';
-import { UPIHandleRepository } from '../../repositories/UPIHandleRepository';
-import { BankAccount, CreditCard, DebitCard, UPIHandle, UUID } from '../../types/instruments.types';
+import { BankAccountRepository } from '../../../repositories/BankAccountRepository';
+import { CreditCardRepository } from '../../../repositories/CreditCardRepository';
+import { DebitCardRepository } from '../../../repositories/DebitCardRepository';
+import { UPIHandleRepository } from '../../../repositories/UPIHandleRepository';
+import { BankAccount, CreditCard, DebitCard, UPIHandle, UUID } from '../../../types/instruments.types';
 
 export class BankAccountService {
     // Get all accounts for user

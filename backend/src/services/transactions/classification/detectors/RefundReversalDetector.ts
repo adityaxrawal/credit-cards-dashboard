@@ -1,5 +1,5 @@
 import { BaseClassifier } from '../BaseClassifier';
-import { ClassificationResult, CleanEmail, TransactionType } from '../../../types/transaction.types';
+import { ClassificationResult, CleanEmail, TransactionType } from '../../../../types/transaction.types';
 
 export class RefundReversalDetector extends BaseClassifier {
     readonly priority = 7;

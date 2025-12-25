@@ -9,11 +9,6 @@ export const metadata: Metadata = {
   title: "Credit Card Dashboard",
   description: "Personal credit card management and analytics dashboard",
   manifest: "/manifest.webmanifest",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "CC Dashboard",
-  },
   formatDetection: {
     telephone: false,
   },
@@ -37,6 +32,7 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body
         className={`${inter.className} bg-primary-bg text-primary-text antialiased`}
+        suppressHydrationWarning
       >
         <Providers>{children}</Providers>
       </body>

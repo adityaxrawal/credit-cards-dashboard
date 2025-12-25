@@ -5,6 +5,7 @@ import { UserRepository } from '../repositories/user.repository';
 import { env } from '../config/env';
 import { asyncHandler } from '../utils/helpers/asyncHandler';
 import { encrypt } from '../utils/helpers/encryption';
+import { AuthRequest } from '../types/auth.types';
 
 const client = new OAuth2Client(
   env.GOOGLE_CLIENT_ID,
@@ -107,7 +108,7 @@ export const googleLogin = asyncHandler(async (req: Request, res: Response) => {
   const hasRefreshToken = !!tokens.refresh_token || !!user.google_refresh_token;
 });
 
-export const getMe = asyncHandler(async (req: any, res: Response) => {
+export const getMe = asyncHandler(async (req: AuthRequest, res: Response) => {
   res.json(req.user);
 });
 

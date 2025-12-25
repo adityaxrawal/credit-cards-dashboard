@@ -1,4 +1,4 @@
-import { TransactionType } from '../../types/transaction.types';
+import { TransactionType } from '../../../types/transaction.types';
 
 /**
  * Transaction direction

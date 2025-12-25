@@ -7,6 +7,7 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant | "destructive" | "secondary" | "outline";
   size?: "sm" | "md" | "lg";
   className?: string;
+  icon?: React.ReactNode;
   children?: React.ReactNode;
 }
 
@@ -23,15 +24,16 @@ const variantStyles = {
 };
 
 const sizeStyles = {
-  sm: "px-2 py-1 text-xs",
-  md: "px-3 py-1.5 text-sm",
-  lg: "px-4 py-2 text-base",
+  sm: "px-2 py-1 text-xs gap-1.5",
+  md: "px-3 py-1.5 text-sm gap-2",
+  lg: "px-4 py-2 text-base gap-2.5",
 };
 
 export function Badge({
   label,
   variant = "default",
   size = "md",
+  icon,
   className,
   children,
   ...props
@@ -46,6 +48,7 @@ export function Badge({
       )}
       {...props}
     >
+      {icon}
       {children || label}
     </span>
   );

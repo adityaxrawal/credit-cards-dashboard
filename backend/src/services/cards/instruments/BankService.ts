@@ -1,5 +1,5 @@
-import { BankRepository } from '../../repositories/BankRepository';
-import { Bank, UUID } from '../../types/instruments.types';
+import { BankRepository } from '../../../repositories/BankRepository';
+import { Bank, UUID } from '../../../types/instruments.types';
 
 export class BankService {
     private static bankCache: Map<string, Bank> = new Map();

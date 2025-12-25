@@ -1,22 +1,27 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction, RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import pool from '../lib/db';
 import { env } from '../config/env';
-import { JwtPayload, AuthErrorCode } from '../types/auth.types';
+import { JwtPayload, AuthErrorCode, AuthRequest } from '../types/auth.types';
 
-export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+export const authenticate: RequestHandler = async (req, res, next) => {
   try {
     // Only accept Authorization header (no cookie fallback for security)
     const authHeader = req.headers.authorization;
+    let token: string | undefined;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({
-        error: AuthErrorCode.MISSING_TOKEN,
-        message: 'Authorization header with Bearer token required'
-      });
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.cookies && req.cookies.accessToken) {
+      token = req.cookies.accessToken;
     }
 
-    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({
+        error: AuthErrorCode.MISSING_TOKEN,
+        message: 'Authorization header with Bearer token or accessToken cookie required'
+      });
+    }
 
     // Strict JWT validation with algorithm specification and no clock tolerance
     let decoded: JwtPayload;
@@ -65,7 +70,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       });
     }
 
-    req.user = result.rows[0];
+    (req as AuthRequest).user = result.rows[0];
     next();
   } catch (error) {
     // Catch-all for unexpected errors

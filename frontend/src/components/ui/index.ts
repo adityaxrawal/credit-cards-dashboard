@@ -26,9 +26,11 @@ export * from './data-display/CardVisual';
 
 // Form components (from subdirectory)
 export { default as DatePicker } from './forms/DatePicker';
+export * from './forms/select';
+export * from './forms/switch';
 
-// Legacy exports from root (backward compatibility)
-export * from './select';
-export * from './switch';
-export * from './tabs';
-export * from './progress';
+// Data display components
+export * from './data-display/tabs';
+
+// Feedback components
+export * from './feedback/progress';

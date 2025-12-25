@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { Suspense } from "react";
-import LoginForm from "./LoginForm";
+import LoginForm from "@/components/features/auth/LoginForm";
 
 /**
  * Login Page Content

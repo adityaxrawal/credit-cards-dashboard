@@ -14,8 +14,7 @@ export async function apiRequest(
 
   try {
     const response = await fetch(
-      `${
-        process.env.NEXT_PUBLIC_API_URL || ""
+      `${process.env.NEXT_PUBLIC_API_URL || ""
       }${endpoint}`,
       {
         ...options,
@@ -42,6 +41,9 @@ class ApiClient {
   private client: AxiosInstance;
   private isAuthCheckInProgress = false;
   private isRedirecting = false;
+  private csrfToken: string | null = null;
+  private isFetchingCsrfToken = false;
+  private csrfTokenPromise: Promise<string | null> | null = null;
 
   constructor() {
     this.client = axios.create({
@@ -59,9 +61,17 @@ class ApiClient {
   private setupInterceptors() {
     // Request interceptor
     this.client.interceptors.request.use(
-      (config) => {
+      async (config) => {
         // Add auth token if available (backend uses 'accessToken' cookie)
         if (typeof window !== "undefined") {
+          // Add CSRF token for non-GET requests
+          if (config.method !== "get" && !config.url?.includes("/api/csrf-token")) {
+            const token = await this.getCsrfToken();
+            if (token && config.headers) {
+              config.headers["X-CSRF-Token"] = token;
+            }
+          }
+
           const token = document.cookie
             .split("; ")
             .find((row) => row.startsWith("accessToken="))
@@ -116,6 +126,15 @@ class ApiClient {
 
         // Dynamically import toast to avoid SSR issues
         const { toastService } = await import("@/lib/utils/toast");
+
+        if (error.response?.status === 403 && error.response?.data?.error?.code === "CSRF_ERROR") {
+          console.warn("🔐 CSRF error detected, refreshing token...");
+          this.csrfToken = null;
+          this.csrfTokenPromise = null;
+
+          // If we have original request, we could retry here, 
+          // but for now let's just clear it so next request succeeds
+        }
 
         if (error.response?.status === 401) {
           // Only redirect to login if not already redirecting and not on login page
@@ -188,6 +207,29 @@ class ApiClient {
   async patch<T>(url: string, data?: unknown): Promise<ApiResponse<T>> {
     const response = await this.client.patch<ApiResponse<T>>(url, data);
     return response.data;
+  }
+
+  // CSRF Handling
+  private async getCsrfToken(): Promise<string | null> {
+    if (this.csrfToken) return this.csrfToken;
+    if (this.csrfTokenPromise) return this.csrfTokenPromise;
+
+    console.log("📡 Fetching new CSRF token");
+    this.csrfTokenPromise = this.client
+      .get<ApiResponse<{ csrfToken: string }>>("/api/csrf-token")
+      .then((response) => {
+        this.csrfToken = response.data.data?.csrfToken || null;
+        this.csrfTokenPromise = null;
+        console.log("✅ CSRF token fetched successfully");
+        return this.csrfToken;
+      })
+      .catch((err) => {
+        console.error("❌ Failed to fetch CSRF token:", err);
+        this.csrfTokenPromise = null;
+        return null;
+      });
+
+    return this.csrfTokenPromise;
   }
 
   // Raw client access for special cases
