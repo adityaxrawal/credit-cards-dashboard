@@ -115,6 +115,8 @@ export class UniversalTransactionPipeline {
             let classificationMethod = 'rule_based';
             let classificationStage = 'stage_4_rule_based';
 
+            logger.info(`[Pipeline] Stage 4: Starting classification. cleanEmail.id=${cleanEmail.id}`);
+
             // STEP 1: Try Enhanced Rule Classifier
             try {
                 const enhancedResult = this.deps.enhancedClassifier.classify(cleanEmail);
@@ -146,6 +148,7 @@ export class UniversalTransactionPipeline {
             const isLowConfidence = !classificationResult || (classificationResult.confidence < 0.85);
 
             if (isLowConfidence) {
+                logger.info(`[Pipeline] Classification: Low confidence (${classificationResult?.confidence}). Attempting GPT fallback.`);
                 logger.info(`[Pipeline] Low confidence/No rule match, attempting GPT classification...`);
                 const gptResult = await this.classifyWithGPT(userId, cleanEmail);
 
@@ -238,6 +241,7 @@ export class UniversalTransactionPipeline {
             }
 
             try {
+                logger.info(`[Pipeline] Stage 5: Starting extraction with ${classificationResult.type} extractor`);
                 const Extractor = this.deps.extractorFactory.getExtractor(classificationResult.type as TransactionType);
                 extracted = await Extractor.extract(userId, cleanEmail);
                 logger.info(`[Pipeline] Stage 5 (Extract) took ${Date.now() - s5Start}ms. Data: ${extracted.amount} ${extracted.currency} @ ${extracted.merchant}`);
@@ -301,6 +305,7 @@ export class UniversalTransactionPipeline {
             }
 
             const transactionId = txnResult.id;
+            logger.info(`[Pipeline] Transaction created successfully: ${transactionId}`);
 
             // Mark scanned email as processed
             await this.deps.scannedEmailsQueries.updateScannedEmailProcessed(userId, cleanEmail.id, transactionId);

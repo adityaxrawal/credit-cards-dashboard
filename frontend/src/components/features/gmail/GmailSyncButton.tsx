@@ -133,6 +133,7 @@ export function GmailSyncModal({
   };
 
   const handleSync = async () => {
+    console.log("[GmailSync] Starting manual sync...");
     setConfigMode(false);
     setSyncing(true);
     setProgress(null);
@@ -149,6 +150,7 @@ export function GmailSyncModal({
       );
 
       if (result.jobId) {
+        console.log(`[GmailSync] Job started: ${result.jobId}`);
         setJobId(result.jobId);
       }
     } catch (error: unknown) {
@@ -189,6 +191,7 @@ export function GmailSyncModal({
   };
 
   const handleCompletion = (status: ScanStatus) => {
+    console.log("[GmailSync] Sync completed successfully");
     setSyncing(false);
     setCompleted(true);
     setJobId(null);
@@ -204,6 +207,7 @@ export function GmailSyncModal({
   };
 
   const handleFailure = (status: ScanStatus) => {
+    console.error(`[GmailSync] Sync failed: ${status.errorMessage}`);
     setSyncing(false);
     setFailed(true);
     setJobId(null);

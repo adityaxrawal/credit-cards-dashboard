@@ -5,6 +5,7 @@ import { env } from '../config/env';
 import { JwtPayload, AuthErrorCode, AuthRequest } from '../types/auth.types';
 
 export const authenticate: RequestHandler = async (req, res, next) => {
+  console.log('[Auth Middleware] Processing request:', req.path);
   try {
     // Only accept Authorization header (no cookie fallback for security)
     const authHeader = req.headers.authorization;
@@ -23,6 +24,8 @@ export const authenticate: RequestHandler = async (req, res, next) => {
       });
     }
 
+    console.log('[Auth Middleware] Token found, verifying...');
+
     // Strict JWT validation with algorithm specification and no clock tolerance
     let decoded: JwtPayload;
     try {
@@ -30,7 +33,9 @@ export const authenticate: RequestHandler = async (req, res, next) => {
         algorithms: ['HS256'],  // Prevent algorithm confusion attacks
         clockTolerance: 0       // Strict expiry enforcement
       }) as JwtPayload;
+      console.log('[Auth Middleware] Token verified successfully for userId:', decoded.userId);
     } catch (error: any) {
+      console.log('[Auth Middleware] Token verification failed:', error.message);
       if (error.name === 'TokenExpiredError') {
         return res.status(401).json({
           error: AuthErrorCode.TOKEN_EXPIRED,
@@ -69,6 +74,7 @@ export const authenticate: RequestHandler = async (req, res, next) => {
         message: 'User associated with token not found'
       });
     }
+    console.log('[Auth Middleware] User found:', result.rows[0].id);
 
     (req as AuthRequest).user = result.rows[0];
     next();

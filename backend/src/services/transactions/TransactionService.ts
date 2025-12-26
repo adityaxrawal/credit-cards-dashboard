@@ -36,6 +36,7 @@ export async function listTransactions(
     search?: string;
   } = {}
 ) {
+  console.log(`[TransactionService] Listing transactions for user ${userId}`, filters);
   const safeFilters = filters || {};
   const page = safeFilters.page || 1;
   const limit = safeFilters.limit || 50;
@@ -100,6 +101,7 @@ export async function createManualTransaction(data: {
   description?: string;
   metadata?: any;
 }) {
+  console.log(`[TransactionService] Creating manual transaction for user ${data.userId}`, data);
   // Calculate bill month/year (simplified for manual)
   const txDate = dayjs(data.transactionDate);
   const billMonth = txDate.month() + 1;
@@ -188,6 +190,7 @@ export async function insertFromEmail(
     rawEmailId?: string;
   }
 ) {
+  console.log(`[TransactionService] Inserting transaction from email for user ${userId}, message ${data.emailMessageId}`);
   // Create fingerprint for deduplication
   const fingerprintData = `${data.emailMessageId}-${data.transactionDate.toISOString()}-${data.amount}-${data.merchant}`;
   const crypto = require('crypto');
@@ -262,6 +265,7 @@ export async function insertFromEmailBulk(
     rawEmailId?: string;
   }>
 ) {
+  console.log(`[TransactionService] Inserting bulk transactions from email for user ${userId}, count: ${items.length}`);
   if (items.length === 0) return [];
 
   const crypto = require('crypto');

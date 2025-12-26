@@ -64,6 +64,7 @@ export async function getTransaction(req: AuthRequest, res: Response, next: Next
 export async function createTransaction(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user.id;
+    console.log(`[TransactionController] Create transaction request from user ${userId}`, req.body);
     // Zod Validation
     const validatedData = await CreateTransactionSchema.parseAsync(req.body);
 
@@ -102,6 +103,7 @@ export async function updateTransaction(req: AuthRequest, res: Response, next: N
   try {
     const userId = req.user.id;
     const { id } = req.params;
+    console.log(`[TransactionController] Update transaction request from user ${userId}, id ${id}`, req.body);
     const updates = await UpdateTransactionSchema.parseAsync(req.body);
 
     const transaction = await transactionsService.updateTransaction(userId, id, updates);

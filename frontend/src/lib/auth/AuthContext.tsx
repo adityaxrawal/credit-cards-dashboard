@@ -163,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   async function logout() {
     try {
+      console.log("[AuthContext] Logout requested");
       // Call logout endpoint (httpOnly cookie sent automatically)
       await apiClient.post("/api/auth/logout", {});
     } catch (error) {

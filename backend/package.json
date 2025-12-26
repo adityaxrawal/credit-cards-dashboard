@@ -6,6 +6,7 @@
   "private": true,
   "scripts": {
     "dev": "nodemon src/server.ts",
+    "dev-logs": "nodemon src/server.ts 2>&1 | tee logs/console-backend.log",
     "build": "tsc",
     "start": "node dist/server.js",
     "migrate": "ts-node src/db/migrate.ts",

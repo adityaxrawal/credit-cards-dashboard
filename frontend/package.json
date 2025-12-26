@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev-logs": "next dev 2>&1 | tee logs/console-frontend.log",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

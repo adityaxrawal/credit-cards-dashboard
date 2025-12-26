@@ -20,6 +20,7 @@ const generateTokens = (userId: string) => {
 };
 
 export const googleLogin = asyncHandler(async (req: Request, res: Response) => {
+  console.log('[AuthController] Google login request received');
   const { code } = req.body;
   if (!code) {
     return res.status(400).json({ error: 'Missing authorization code' });
@@ -113,6 +114,7 @@ export const getMe = asyncHandler(async (req: AuthRequest, res: Response) => {
 });
 
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
+  console.log('[AuthController] Token refresh request received');
   let { refreshToken } = req.body;
 
   // Also check cookies if not in body

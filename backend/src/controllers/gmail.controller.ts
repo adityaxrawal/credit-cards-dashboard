@@ -24,6 +24,7 @@ export async function getStatus(req: Request, res: Response, next: NextFunction)
 export async function connect(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user.id;
+    console.log(`[GmailController] Connect Gmail request from user ${userId}`);
     const { refreshToken } = req.body;
 
     if (!refreshToken) {
@@ -64,6 +65,7 @@ export async function disconnect(req: Request, res: Response, next: NextFunction
 export async function triggerHistoricalScan(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user.id;
+    console.log(`[GmailController] Trigger historical scan request from user ${userId}`, req.body);
     const { fromDate, toDate } = req.body;
 
     const result = await gmailService.triggerHistoricalScan(
@@ -131,6 +133,7 @@ export async function getLastSync(req: Request, res: Response, next: NextFunctio
 export async function manualMap(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user.id;
+    console.log(`[GmailController] Manual map request from user ${userId}`, req.body);
     const { messageId, cardInfo } = req.body;
 
     if (!messageId || !cardInfo || !cardInfo.last4 || !cardInfo.bankName) {

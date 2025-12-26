@@ -20,6 +20,7 @@ export default function LoginForm() {
 
   // Clear errors when component mounts
   useEffect(() => {
+    console.log("[LoginForm] Component Mounted");
     clearError();
     setLocalError(null);
   }, [clearError]);

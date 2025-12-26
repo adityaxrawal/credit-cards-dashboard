@@ -43,6 +43,21 @@ app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// [DEBUG] Request Body Logger
+app.use((req, res, next) => {
+  if (req.path.includes('/api')) {
+    console.log(`[DEBUG] ${req.method} ${req.path}`);
+    if (Object.keys(req.body).length > 0) {
+      // Create a copy to mask sensitive fields
+      const logBody = { ...req.body };
+      if (logBody.password) logBody.password = '***';
+      if (logBody.token) logBody.token = '***'; // Mask token if present in body
+      console.log('[DEBUG] Request Body:', JSON.stringify(logBody, null, 2));
+    }
+  }
+  next();
+});
+
 // CSRF Protection (Must be after cookie/body parsers)
 // Conditionally apply: Skip for webhook paths if any, or specific non-browser APIs if needed
 app.use(csrfProtection);

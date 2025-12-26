@@ -26,14 +26,20 @@ export function useDashboardData() {
     // 1. Overview Data
     const { data: overview, isLoading: overviewLoading } = useQuery({
         queryKey: queryKeys.analytics.overview,
-        queryFn: () => analyticsApi.getOverview(),
+        queryFn: () => {
+            console.log("[useDashboardData] Fetching overview");
+            return analyticsApi.getOverview();
+        },
         enabled: !!user,
     });
 
     // 2. Recent Transactions
     const { data: transactionsData, isLoading: transactionsLoading } = useQuery({
         queryKey: queryKeys.transactions.list({ limit: 5 }),
-        queryFn: () => transactionApi.getTransactions({ limit: 5 }),
+        queryFn: () => {
+            console.log("[useDashboardData] Fetching recent transactions");
+            return transactionApi.getTransactions({ limit: 5 });
+        },
         enabled: !!user,
     });
     const recentTransactions = transactionsData?.data || [];
@@ -41,7 +47,10 @@ export function useDashboardData() {
     // 3. Cards Data
     const { data: cards = [], isLoading: cardsLoading } = useQuery({
         queryKey: queryKeys.cards.all,
-        queryFn: () => cardApi.getCards(),
+        queryFn: () => {
+            console.log("[useDashboardData] Fetching cards");
+            return cardApi.getCards();
+        },
         enabled: !!user,
     });
 

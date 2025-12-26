@@ -62,6 +62,7 @@ class ApiClient {
     // Request interceptor
     this.client.interceptors.request.use(
       async (config) => {
+        console.log(`[API] Request: ${config.method?.toUpperCase()} ${config.url}`);
         // Add auth token if available (backend uses 'accessToken' cookie)
         if (typeof window !== "undefined") {
           // Add CSRF token for non-GET requests
@@ -106,6 +107,7 @@ class ApiClient {
     // Response interceptor
     this.client.interceptors.response.use(
       (response: AxiosResponse<ApiResponse<unknown>>) => {
+        console.log(`[API] Response: ${response.status} ${response.config.url}`);
         // Clear auth check flag on success
         if (response.config.url?.includes("/api/auth/me")) {
           this.isAuthCheckInProgress = false;
@@ -114,6 +116,7 @@ class ApiClient {
         return response;
       },
       async (error) => {
+        console.error(`[API] Error: ${error.message} for ${error.config?.url}`);
         // Clear auth check flag on error
         if (error.config?.url?.includes("/api/auth/me")) {
           this.isAuthCheckInProgress = false;

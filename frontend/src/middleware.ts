@@ -234,6 +234,7 @@ export async function middleware(request: NextRequest) {
 
   // Check if user has required security level
   const hasAccess = checkSecurityLevel(userContext, requiredLevel);
+  console.log(`[Middleware] Security Check: User=${userContext?.email}, Required=${requiredLevel}, Access=${hasAccess}`);
 
   if (!hasAccess) {
     // Redirect based on missing security level

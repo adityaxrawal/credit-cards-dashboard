@@ -37,10 +37,12 @@ export default function DashboardPage() {
   const [isAutoSyncing, setIsAutoSyncing] = useState(false);
 
   useEffect(() => {
+    console.log("[DashboardClient] Component Mounted");
     loadDashboardData();
     checkAndAutoSync();
 
     const handleTransactionsUpdated = () => {
+      console.log("[DashboardClient] Transactions updated event received");
       loadDashboardData();
     };
 

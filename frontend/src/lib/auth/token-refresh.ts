@@ -15,6 +15,7 @@ export function startTokenRefresh(
   onRefreshSuccess?: () => void,
   onRefreshError?: (error: Error) => void
 ) {
+  console.log("[TokenRefresh] Starting auto-refresh timer");
   // Clear any existing timer
   stopTokenRefresh();
 
@@ -47,6 +48,7 @@ export function startTokenRefresh(
  * Stop automatic token refresh
  */
 export function stopTokenRefresh() {
+  console.log("[TokenRefresh] Stopping auto-refresh timer");
   if (refreshTimer) {
     clearInterval(refreshTimer);
     refreshTimer = null;
@@ -58,6 +60,7 @@ export function stopTokenRefresh() {
  */
 export async function refreshAccessToken(): Promise<boolean> {
   try {
+    console.log("[TokenRefresh] Manual refresh triggered");
     await apiClient.post("/api/auth/refresh");
     return true;
   } catch (error) {

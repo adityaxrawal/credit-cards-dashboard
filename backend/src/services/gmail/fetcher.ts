@@ -12,6 +12,7 @@ export class GmailFetcherService {
         limit: number = 200,
         pageToken?: string
     ): Promise<{ messages: SimplifiedEmail[], nextPageToken?: string }> {
+        console.log(`[GmailFetcher] Fetching batch (limit=${limit})`);
 
         // 1. List Messages
         const listResponse = await gmailClient.listMessages(refreshToken, query, limit, pageToken);
@@ -35,6 +36,7 @@ export class GmailFetcherService {
         const messageIds = messageStubs.map(m => m.id);
         // Reduced concurrency to 10 for stability
         const rawMessages = await gmailClient.batchGetMessages(refreshToken, messageIds, userId, 10, true);
+        console.log(`[GmailFetcher] Downloaded ${rawMessages.length} raw messages`);
 
         const validEmails: SimplifiedEmail[] = [];
 

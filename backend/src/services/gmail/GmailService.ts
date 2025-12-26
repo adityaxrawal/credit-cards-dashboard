@@ -58,6 +58,7 @@ export class GmailService {
    * Connect Gmail (setup watch)
    */
   async connectGmail(userId: string, refreshToken: string) {
+    console.log(`[GmailService] Connecting Gmail for user ${userId}`);
     // Store refresh token
     const encryptedToken = this.deps.encrypt(refreshToken);
     await this.deps.pool.query(
@@ -117,6 +118,7 @@ export class GmailService {
    * Trigger historical scan
    */
   async triggerHistoricalScan(userId: string, fromDate?: Date, toDate?: Date) {
+    console.log(`[GmailService] Triggering historical scan for user ${userId}`, { fromDate, toDate });
     // Check for existing active job
     const latestJob = await this.getLatestJob(userId);
     const activeStatuses = ['PENDING', 'PROCESSING', 'FETCHING', 'GPT_PROCESSING'];
@@ -300,6 +302,7 @@ export class GmailService {
     bankName: string;
     cardType?: string;
   }) {
+    console.log(`[GmailService] Manual map for user ${userId}, message ${messageId}`, cardInfo);
     const jobId = randomUUID();
 
     // Create job record
