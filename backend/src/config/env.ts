@@ -32,6 +32,7 @@ const envSchema = z.object({
   // OpenAI
   OPENAI_API_KEY: z.string().min(1, "OPENAI_API_KEY is required"),
   GPT_MODEL: z.string().optional().default('gpt-4o-mini'),
+  BATCH_SIZE: z.coerce.number().optional().default(2),
 
   // Feature Flags
   USE_NEW_PIPELINE: z.string().optional().default('true'),

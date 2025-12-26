@@ -23,7 +23,7 @@ interface GPTBatch {
 
 export class GPTClassifier {
     private static pendingBatch: GPTBatch | null = null;
-    private static batchSize = 5; // Reduced to 5 as requested
+    private static batchSize = env.BATCH_SIZE;
     private static batchTimeoutMs = 2000; // Reduced timeout for faster processing of small batches
     private static timeoutHandle: NodeJS.Timeout | null = null;
 
@@ -88,6 +88,14 @@ export class GPTClassifier {
 
             const systemPrompt = `You are a precision financial auditor. Your task is to extract ONE transaction event from the email text.
 
+CRITICAL INSTRUCTION:
+Return a result for EVERY message ID provided. Do not skip any. If you cannot classify an email, return "type": "unclassified".
+
+OBJECTIVE:
+Identify ALL valid financial transactions. It is better to classify something as "unclassified" than to miss a valid transaction.
+A transaction is any event where money is spent, received, or moved.
+Keywords to look for: "spent", "debited", "charged", "paid", "sent", "received", "credited", "refunded", "withdrawal", "purchase".
+
 CRITICAL RULES:
 1. IGNORE "Available Balance", "Credit Limit", or "Outstanding Due". These are NOT the transaction amount.
 2. IGNORE OTPs, Login Alerts, or Marketing. Return "is_transaction": false.
@@ -95,12 +103,17 @@ CRITICAL RULES:
 4. Merchant Name: Extract the CLEAN merchant name (e.g., "Uber" instead of "Uber India Tech Pvt Ltd").
 5. Amount: Must be a number. Ignore commas.
 
+REASONING GUIDELINES:
+- If "is_transaction" is false, you MUST explain WHY.
+- If "is_transaction" is true, explain what specific text confirmed the transaction.
+- If unsure, mark as "unclassified" and explain the ambiguity.
+
 OUTPUT FORMAT (JSON):
 For each email, return an object in the "results" array:
 {
   "messageId": "string",
   "is_transaction": boolean,
-  "reasoning": "string", // Explain why this is/is not a transaction (Chain of Thought)
+  "reasoning": "string", // rigorous Chain of Thought
   "type": "string", // One of: cc_spend, cc_upi, bank_debit, bank_credit, bank_upi_debit, bank_upi_credit, refund, unclassified
   "confidence": number, // 0-1
   "extracted": {
