@@ -7,12 +7,13 @@ export async function getAllBills(userId: string, limit: number = 50, offset: nu
   const result = await pool.query(
     `SELECT 
       bp.*,
-      cc.card_name,
-      cc.bank_name,
-      cc.card_number_last4
+      i.name as card_name,
+      b.name as bank_name,
+      i.last4 as card_number_last4
     FROM bill_payments bp
-    INNER JOIN credit_cards cc ON bp.card_id = cc.id
-    WHERE cc.user_id = $1
+    INNER JOIN instruments i ON bp.instrument_id = i.id
+    LEFT JOIN banks b ON i.bank_id = b.id
+    WHERE i.user_id = $1 AND i.type = 'credit_card'
     ORDER BY bp.due_date DESC, bp.bill_date DESC
     LIMIT $2 OFFSET $3`,
     [userId, limit, offset]
@@ -28,12 +29,13 @@ export async function getBillById(userId: string, billId: string) {
   const result = await pool.query(
     `SELECT 
       bp.*,
-      cc.card_name,
-      cc.bank_name,
-      cc.card_number_last4
+      i.name as card_name,
+      b.name as bank_name,
+      i.last4 as card_number_last4
     FROM bill_payments bp
-    INNER JOIN credit_cards cc ON bp.card_id = cc.id
-    WHERE bp.id = $1 AND cc.user_id = $2`,
+    INNER JOIN instruments i ON bp.instrument_id = i.id
+    LEFT JOIN banks b ON i.bank_id = b.id
+    WHERE bp.id = $1 AND i.user_id = $2`,
     [billId, userId]
   );
 
@@ -47,12 +49,13 @@ export async function getCardBills(userId: string, cardId: string, limit: number
   const result = await pool.query(
     `SELECT 
       bp.*,
-      cc.card_name,
-      cc.bank_name,
-      cc.card_number_last4
+      i.name as card_name,
+      b.name as bank_name,
+      i.last4 as card_number_last4
     FROM bill_payments bp
-    INNER JOIN credit_cards cc ON bp.card_id = cc.id
-    WHERE bp.card_id = $1 AND cc.user_id = $2
+    INNER JOIN instruments i ON bp.instrument_id = i.id
+    LEFT JOIN banks b ON i.bank_id = b.id
+    WHERE bp.instrument_id = $1 AND i.user_id = $2
     ORDER BY bp.due_date DESC, bp.bill_date DESC
     LIMIT $3 OFFSET $4`,
     [cardId, userId, limit, offset]
@@ -68,12 +71,13 @@ export async function getUpcomingBills(userId: string, limit: number = 20, offse
   const result = await pool.query(
     `SELECT 
       bp.*,
-      cc.card_name,
-      cc.bank_name,
-      cc.card_number_last4
+      i.name as card_name,
+      b.name as bank_name,
+      i.last4 as card_number_last4
     FROM bill_payments bp
-    INNER JOIN credit_cards cc ON bp.card_id = cc.id
-    WHERE cc.user_id = $1 
+    INNER JOIN instruments i ON bp.instrument_id = i.id
+    LEFT JOIN banks b ON i.bank_id = b.id
+    WHERE i.user_id = $1 AND i.type = 'credit_card'
       AND bp.payment_status IN ('pending', 'partial')
       AND bp.due_date >= CURRENT_DATE
     ORDER BY bp.due_date ASC
@@ -99,7 +103,7 @@ export async function createBill(data: {
 }) {
   const result = await pool.query(
     `INSERT INTO bill_payments (
-      card_id, bill_month, bill_year, bill_amount, 
+      instrument_id, bill_month, bill_year, bill_amount, 
       bill_date, due_date, payment_status, notes
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     RETURNING *`,
@@ -157,10 +161,10 @@ export async function updateBill(
   const result = await pool.query(
     `UPDATE bill_payments bp
     SET ${fields.join(', ')}
-    FROM credit_cards cc
+    FROM instruments i
     WHERE bp.id = $${paramCount} 
-      AND bp.card_id = cc.id 
-      AND cc.user_id = $${paramCount + 1}
+      AND bp.instrument_id = i.id 
+      AND i.user_id = $${paramCount + 1}
     RETURNING bp.*`,
     values
   );
@@ -174,10 +178,10 @@ export async function updateBill(
 export async function deleteBill(userId: string, billId: string) {
   const result = await pool.query(
     `DELETE FROM bill_payments bp
-    USING credit_cards cc
+    USING instruments i
     WHERE bp.id = $1 
-      AND bp.card_id = cc.id 
-      AND cc.user_id = $2
+      AND bp.instrument_id = i.id 
+      AND i.user_id = $2
     RETURNING bp.id`,
     [billId, userId]
   );

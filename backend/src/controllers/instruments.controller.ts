@@ -73,8 +73,8 @@ export class InstrumentsController {
             await InstrumentRegistry.registerInstrument(userId, {
                 instrumentType: 'bank_account',
                 instrumentId: account.id,
-                identifierMask: account.accountNumberMasked,
-                bankId: account.bankId
+                identifierMask: account.accountNumberMasked || '',
+                bankId: account.bankId || '' // bankId is also optional in BankAccount via Instrument? No, Instrument has bankId optional. BankAccount should probably have it.
             });
 
             res.status(201).json(account);
@@ -108,9 +108,9 @@ export class InstrumentsController {
             await InstrumentRegistry.registerInstrument(userId, {
                 instrumentType: 'credit_card',
                 instrumentId: card.id,
-                identifierMask: card.cardNumberMasked,
+                identifierMask: card.cardNumberMasked || '',
                 last4Digits: card.cardNumberLast4,
-                bankId: card.bankId,
+                bankId: card.bankId || '',
                 bankAccountId: card.bankAccountId
             });
 
@@ -133,9 +133,9 @@ export class InstrumentsController {
             await InstrumentRegistry.registerInstrument(userId, {
                 instrumentType: 'debit_card',
                 instrumentId: card.id,
-                identifierMask: card.cardNumberMasked,
+                identifierMask: card.cardNumberMasked || '',
                 last4Digits: card.cardNumberLast4,
-                bankId: card.bankId,
+                bankId: card.bankId || '',
                 bankAccountId: card.bankAccountId
             });
 
@@ -158,8 +158,8 @@ export class InstrumentsController {
             await InstrumentRegistry.registerInstrument(userId, {
                 instrumentType: 'upi_handle',
                 instrumentId: handle.id,
-                identifierMask: handle.upiHandle,
-                bankId: handle.bankId,
+                identifierMask: handle.upiHandle || '',
+                bankId: handle.bankId || '',
                 bankAccountId: handle.bankAccountId
             });
 

@@ -146,17 +146,31 @@ For each email, return an object in the "results" array:
 
             let parsed: any;
             try {
-                parsed = JSON.parse(content);
+                // Strip markdown code blocks if present
+                const cleanContent = content.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+                parsed = JSON.parse(cleanContent);
             } catch (jsonError) {
                 logger.error('[GPT] JSON Parse Error:', { content });
                 throw new Error('Malformed JSON response from GPT');
             }
 
-            const results = parsed.results as Array<{ messageId: string; is_transaction: boolean; type: any; confidence: number; extracted: any; reasoning?: string }>;
+            let results = parsed.results as Array<{ messageId: string; is_transaction: boolean; type: any; confidence: number; extracted: any; reasoning?: string }>;
+
+            // Handle case where GPT returns a single object instead of an array (common in small batches)
+            if (!results && parsed.messageId && typeof parsed.is_transaction === 'boolean') {
+                logger.warn('[GPT] GPT returned single object instead of array. Adapting...', { messageId: parsed.messageId });
+                results = [parsed]; // Treat as single result array
+            }
+
+            // Handle case where GPT returns array directly without { results: ... } wrapper
+            if (!results && Array.isArray(parsed)) {
+                logger.warn('[GPT] GPT returned array directly. Adapting...');
+                results = parsed;
+            }
 
             // Validate results array
             if (!Array.isArray(results)) {
-                logger.error('[GPT] Invalid results format:', { parsed });
+                logger.error('[GPT] Invalid results format (expected array or {results: array}):', { parsed });
                 throw new Error('GPT response missing results array');
             }
 

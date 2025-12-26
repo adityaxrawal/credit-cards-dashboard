@@ -6,22 +6,24 @@ import pool from '../../lib/db';
 export async function getAllStatements(userId: string) {
   const result = await pool.query(
     `SELECT 
-      cc.id as card_id,
-      cc.card_name,
-      cc.bank_name,
-      cc.card_number_last4,
+      i.id as card_id,
+      i.name as card_name,
+      b.name as bank_name,
+      i.last4 as card_number_last4,
       t.bill_year,
       t.bill_month,
       COUNT(t.id) as transaction_count,
       SUM(CASE WHEN t.transaction_type = 'debit' THEN t.amount ELSE 0 END) as total_debits,
       SUM(CASE WHEN t.transaction_type = 'credit' THEN t.amount ELSE 0 END) as total_credits,
       SUM(CASE WHEN t.transaction_type = 'debit' THEN t.amount ELSE -t.amount END) as net_amount
-    FROM credit_cards cc
-    LEFT JOIN transactions t ON cc.id = t.card_id
-    WHERE cc.user_id = $1 
+    FROM instruments i
+    LEFT JOIN banks b ON i.bank_id = b.id
+    LEFT JOIN transactions t ON i.id = t.instrument_id
+    WHERE i.user_id = $1 
+      AND i.type = 'credit_card'
       AND t.bill_year IS NOT NULL 
       AND t.bill_month IS NOT NULL
-    GROUP BY cc.id, cc.card_name, cc.bank_name, cc.card_number_last4, t.bill_year, t.bill_month
+    GROUP BY i.id, i.name, b.name, i.last4, t.bill_year, t.bill_month
     ORDER BY t.bill_year DESC, t.bill_month DESC`,
     [userId]
   );
@@ -41,16 +43,19 @@ export async function getStatementDetails(
   const result = await pool.query(
     `
     WITH card_data AS (
-      SELECT * FROM credit_cards WHERE id = $1 AND user_id = $2
+      SELECT i.*, b.name as bank_name 
+      FROM instruments i
+      LEFT JOIN banks b ON i.bank_id = b.id
+      WHERE i.id = $1 AND i.user_id = $2
     ),
     txn_data AS (
       SELECT * FROM transactions
-      WHERE card_id = $1 AND bill_month = $3 AND bill_year = $4
+      WHERE instrument_id = $1 AND bill_month = $3 AND bill_year = $4
       ORDER BY transaction_date DESC
     ),
     bill_data AS (
       SELECT * FROM bill_payments
-      WHERE card_id = $1 AND bill_month = $3 AND bill_year = $4
+      WHERE instrument_id = $1 AND bill_month = $3 AND bill_year = $4
       LIMIT 1
     ),
     summary_stats AS (
@@ -80,7 +85,11 @@ export async function getStatementDetails(
   // Calculate net amount in JS or SQL (already have debits/credits)
   // Ensure we format the response correctly
   return {
-    card: row.card,
+    card: {
+      ...row.card,
+      card_name: row.card.name, // Map back logic for frontend if needed
+      card_number_last4: row.card.last4
+    },
     billingPeriod: {
       month,
       year,
@@ -109,9 +118,9 @@ export async function getCardStatements(userId: string, cardId: string) {
       SUM(CASE WHEN t.transaction_type = 'credit' THEN t.amount ELSE 0 END) as total_credits,
       SUM(CASE WHEN t.transaction_type = 'debit' THEN t.amount ELSE -t.amount END) as net_amount
     FROM transactions t
-    INNER JOIN credit_cards cc ON t.card_id = cc.id
-    WHERE t.card_id = $1 
-      AND cc.user_id = $2
+    INNER JOIN instruments i ON t.instrument_id = i.id
+    WHERE t.instrument_id = $1 
+      AND i.user_id = $2
       AND t.bill_year IS NOT NULL 
       AND t.bill_month IS NOT NULL
     GROUP BY t.bill_year, t.bill_month

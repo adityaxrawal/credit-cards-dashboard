@@ -7,16 +7,17 @@ export async function getAllRewards(userId: string) {
   const result = await pool.query(
     `SELECT 
       rp.*,
-      cc.card_name,
-      cc.bank_name,
-      cc.card_number_last4
+      i.name as card_name,
+      b.name as bank_name,
+      i.last4 as card_number_last4
     FROM reward_points rp
-    INNER JOIN credit_cards cc ON rp.card_id = cc.id
-    WHERE cc.user_id = $1
+    INNER JOIN instruments i ON rp.instrument_id = i.id
+    LEFT JOIN banks b ON i.bank_id = b.id
+    WHERE i.user_id = $1 AND i.type = 'credit_card'
     ORDER BY rp.last_updated DESC`,
     [userId]
   );
-  
+
   return result.rows;
 }
 
@@ -27,15 +28,16 @@ export async function getCardRewards(userId: string, cardId: string) {
   const result = await pool.query(
     `SELECT 
       rp.*,
-      cc.card_name,
-      cc.bank_name,
-      cc.card_number_last4
+      i.name as card_name,
+      b.name as bank_name,
+      i.last4 as card_number_last4
     FROM reward_points rp
-    INNER JOIN credit_cards cc ON rp.card_id = cc.id
-    WHERE rp.card_id = $1 AND cc.user_id = $2`,
+    INNER JOIN instruments i ON rp.instrument_id = i.id
+    LEFT JOIN banks b ON i.bank_id = b.id
+    WHERE rp.instrument_id = $1 AND i.user_id = $2`,
     [cardId, userId]
   );
-  
+
   return result.rows[0];
 }
 
@@ -50,13 +52,13 @@ export async function getRewardTransactions(userId: string, cardId: string) {
       t.amount as transaction_amount,
       t.transaction_date
     FROM reward_transactions rt
-    INNER JOIN credit_cards cc ON rt.card_id = cc.id
+    INNER JOIN instruments i ON rt.instrument_id = i.id
     LEFT JOIN transactions t ON rt.transaction_id = t.id
-    WHERE rt.card_id = $1 AND cc.user_id = $2
+    WHERE rt.instrument_id = $1 AND i.user_id = $2
     ORDER BY rt.created_at DESC`,
     [cardId, userId]
   );
-  
+
   return result.rows;
 }
 
@@ -70,13 +72,13 @@ export async function getRewardsSummary(userId: string) {
       SUM(rp.points_redeemed) as total_points_redeemed,
       SUM(rp.points_balance) as total_points_balance,
       SUM(rp.points_expiring_soon) as total_points_expiring_soon,
-      COUNT(DISTINCT rp.card_id) as cards_with_rewards
+      COUNT(DISTINCT rp.instrument_id) as cards_with_rewards
     FROM reward_points rp
-    INNER JOIN credit_cards cc ON rp.card_id = cc.id
-    WHERE cc.user_id = $1`,
+    INNER JOIN instruments i ON rp.instrument_id = i.id
+    WHERE i.user_id = $1 AND i.type = 'credit_card'`,
     [userId]
   );
-  
+
   return result.rows[0];
 }
 
@@ -93,10 +95,10 @@ export async function upsertRewardPoints(data: {
 }) {
   const result = await pool.query(
     `INSERT INTO reward_points (
-      card_id, points_earned, points_redeemed, points_balance,
+      instrument_id, points_earned, points_redeemed, points_balance,
       points_expiring_soon, next_expiry_date, last_updated
     ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
-    ON CONFLICT (card_id) 
+    ON CONFLICT (instrument_id) 
     DO UPDATE SET
       points_earned = EXCLUDED.points_earned,
       points_redeemed = EXCLUDED.points_redeemed,
@@ -114,7 +116,7 @@ export async function upsertRewardPoints(data: {
       data.nextExpiryDate || null,
     ]
   );
-  
+
   return result.rows[0];
 }
 
@@ -130,7 +132,7 @@ export async function createRewardTransaction(data: {
 }) {
   const result = await pool.query(
     `INSERT INTO reward_transactions (
-      card_id, transaction_id, points_change, description, expiry_date
+      instrument_id, transaction_id, points_change, description, expiry_date
     ) VALUES ($1, $2, $3, $4, $5)
     RETURNING *`,
     [
@@ -141,6 +143,6 @@ export async function createRewardTransaction(data: {
       data.expiryDate || null,
     ]
   );
-  
+
   return result.rows[0];
 }

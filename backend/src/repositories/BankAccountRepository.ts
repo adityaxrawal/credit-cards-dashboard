@@ -1,66 +1,117 @@
-import { query } from '../lib/db';
+import { InstrumentRepository } from './InstrumentRepository';
 import { BankAccount, UUID } from '../types/instruments.types';
 
 export class BankAccountRepository {
     static async findByUserId(userId: UUID): Promise<BankAccount[]> {
-        const result = await query('SELECT * FROM bank_accounts WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
-        return result.rows;
+        const instruments = await InstrumentRepository.findByType(userId, 'bank_account');
+        return instruments.map(this.mapToBankAccount);
     }
 
     static async findByUserAndBank(userId: UUID, bankId: UUID): Promise<BankAccount[]> {
-        const result = await query('SELECT * FROM bank_accounts WHERE user_id = $1 AND bank_id = $2', [userId, bankId]);
-        return result.rows;
+        const { query } = require('../lib/db');
+        const result = await query(
+            `SELECT * FROM instruments WHERE user_id = $1 AND bank_id = $2 AND type = 'bank_account'`,
+            [userId, bankId]
+        );
+        return result.rows.map(this.mapRowToBankAccount);
     }
 
     static async findById(id: UUID): Promise<BankAccount | null> {
-        const result = await query('SELECT * FROM bank_accounts WHERE id = $1', [id]);
-        return result.rows[0] || null;
+        const instrument = await InstrumentRepository.findById(id);
+        if (!instrument || instrument.type !== 'bank_account') return null;
+        return this.mapToBankAccount(instrument as any);
     }
 
     static async findByUserAndMasked(userId: UUID, masked: string): Promise<BankAccount | null> {
+        const { query } = require('../lib/db');
         const result = await query(
-            'SELECT * FROM bank_accounts WHERE user_id = $1 AND account_number_masked = $2 LIMIT 1',
+            `SELECT * FROM instruments WHERE user_id = $1 AND identifier = $2 AND type = 'bank_account' LIMIT 1`,
             [userId, masked]
         );
-        return result.rows[0] || null;
+        return result.rows[0] ? this.mapRowToBankAccount(result.rows[0]) : null;
     }
 
     static async create(data: Partial<BankAccount>): Promise<BankAccount> {
-        const result = await query(
-            `INSERT INTO bank_accounts (
-        user_id, bank_id, account_number_masked, account_type, 
-        account_holder_name, upi_handle, is_primary, notes, metadata
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
-       RETURNING *`,
-            [
-                data.userId, data.bankId, data.accountNumberMasked, data.accountType,
-                data.accountHolderName, data.upiHandle, data.isPrimary || false,
-                data.notes, data.metadata ? JSON.stringify(data.metadata) : null
-            ]
-        );
-        return result.rows[0];
+        return InstrumentRepository.create({
+            userId: data.userId,
+            type: 'bank_account',
+            bankId: data.bankId,
+            name: data.accountHolderName,
+            identifier: data.accountNumberMasked,
+            status: 'active',
+            isPrimary: data.isPrimary,
+            metadata: {
+                account_type: data.accountType,
+                account_holder_name: data.accountHolderName,
+                upi_handle: data.upiHandle,
+                notes: data.notes,
+                ...data.metadata
+            }
+        }).then(inst => this.mapToBankAccount(inst as any));
     }
 
     static async update(id: UUID, data: Partial<BankAccount>): Promise<BankAccount> {
-        const fields = Object.keys(data).filter(key => data[key as keyof BankAccount] !== undefined && key !== 'id' && key !== 'userId');
-        const setClause = fields.map((field, index) => {
-            const dbField = field.replace(/([A-Z])/g, '_$1').toLowerCase();
-            return `${dbField} = $${index + 2}`;
-        }).join(', ');
+        const updateData: any = {};
+        if (data.accountHolderName) updateData.name = data.accountHolderName;
+        if (data.accountNumberMasked) updateData.identifier = data.accountNumberMasked;
+        if (data.isPrimary !== undefined) updateData.isPrimary = data.isPrimary;
 
-        const values = fields.map(field => {
-            const val = data[field as keyof BankAccount];
-            return typeof val === 'object' ? JSON.stringify(val) : val;
-        });
+        // Merge metadata
+        if (data.accountType || data.accountHolderName || data.upiHandle || data.notes) {
+            const current = await this.findById(id);
+            updateData.metadata = {
+                ...current?.metadata,
+                account_type: data.accountType,
+                account_holder_name: data.accountHolderName,
+                upi_handle: data.upiHandle,
+                notes: data.notes,
+                ...data.metadata
+            };
+        }
 
-        const result = await query(
-            `UPDATE bank_accounts SET ${setClause}, updated_at = NOW() WHERE id = $1 RETURNING *`,
-            [id, ...values]
-        );
-        return result.rows[0];
+        const inst = await InstrumentRepository.update(id, updateData);
+        return this.mapToBankAccount(inst as any);
     }
 
     static async delete(id: UUID): Promise<void> {
-        await query('DELETE FROM bank_accounts WHERE id = $1', [id]);
+        await InstrumentRepository.delete(id);
+    }
+
+    private static mapRowToBankAccount(row: any): BankAccount {
+        return {
+            id: row.id,
+            userId: row.user_id,
+            type: 'bank_account',
+            bankId: row.bank_id,
+            accountNumberMasked: row.identifier,
+            accountType: row.metadata.account_type,
+            accountHolderName: row.name, // or row.metadata.account_holder_name
+            upiHandle: row.metadata.upi_handle,
+            status: row.status as any, // Required
+            isPrimary: row.is_primary,
+            notes: row.metadata.notes,
+            metadata: row.metadata,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at
+        };
+    }
+
+    private static mapToBankAccount(inst: any): BankAccount {
+        return {
+            id: inst.id,
+            userId: inst.userId || inst.user_id,
+            type: 'bank_account',
+            bankId: inst.bankId || inst.bank_id,
+            accountNumberMasked: inst.identifier,
+            accountType: inst.metadata.accountType || inst.metadata.account_type,
+            accountHolderName: inst.name || inst.metadata.accountHolderName || inst.metadata.account_holder_name,
+            upiHandle: inst.metadata.upiHandle || inst.metadata.upi_handle,
+            status: inst.status as any, // Required
+            isPrimary: inst.isPrimary,
+            notes: inst.metadata.notes,
+            metadata: inst.metadata,
+            createdAt: inst.createdAt || inst.created_at,
+            updatedAt: inst.updatedAt || inst.updated_at
+        };
     }
 }

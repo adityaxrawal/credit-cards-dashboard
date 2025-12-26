@@ -52,19 +52,27 @@ export class BankAccountCreditExtractor {
     }
 
     private static extractAmount(text: string): number {
+        // 1. Precise Match with Code/Symbol (e.g. INR 50,000, Rs. 5000)
         const match = text.match(BankParserPatterns.AMOUNT_INR);
         if (match) return parseFloat(match[1].replace(/,/g, ''));
 
-        // Fallback for action-based extraction (credited/received)
-        const commonPatterns = [
-            /(?:credited|received|added|amount|for)\s+(?:[₹$€£]|rs\.?|inr|usd|eur|gbp)?\s*([\d,]+(?:\.\d{1,2})?)/i,
-            /(?:inr|rs\.?|₹)\s*([\d,]+(?:\.\d{1,2})?)\s*(?:is|has\s+been)\s+(?:credited|added)/i,
-            /valued\s+at\s+(?:inr|rs\.?|₹)\s*([\d,]+(?:\.\d{1,2})?)/i
+        // 2. Context-based extraction (Credited X, Received X)
+        const actionPatterns = [
+            /(?:credited|received|added|deposited)\s+(?:with|of)?\s*(?:[₹$€£]|rs\.?|inr|usd)?\s*([\d,]+(?:\.\d{1,2})?)/i,
+            /(?:inr|rs\.?|₹)\s*([\d,]+(?:\.\d{1,2})?)\s*(?:is|has\s+been)\s+(?:credited|added|received)/i,
+            /(?:amt|amount|txn|transaction)\s*(?:of)?\s*(?:[₹$€£]|rs\.?|inr)?\s*([\d,]+(?:\.\d{1,2})?)/i
         ];
 
-        for (const pattern of commonPatterns) {
+        for (const pattern of actionPatterns) {
             const m = text.match(pattern);
-            if (m) return parseFloat(m[1].replace(/,/g, ''));
+            if (m && m[1]) return parseFloat(m[1].replace(/,/g, ''));
+        }
+
+        // 3. Fallback: Look for "INR X" or "Rs X" anywhere if not found above
+        const loosePattern = /(?:inr|rs\.?|₹)\s*[\.:]?\s*([\d,]+(?:\.\d{1,2})?)/i;
+        const looseMatch = text.match(loosePattern);
+        if (looseMatch && looseMatch[1]) {
+            return parseFloat(looseMatch[1].replace(/,/g, ''));
         }
 
         throw new Error('Amount not found');

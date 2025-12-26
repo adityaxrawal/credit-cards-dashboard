@@ -16,9 +16,6 @@ export async function getPendingReviewTransactions(
 /**
  * List transactions with filters and pagination
  */
-/**
- * List transactions with filters and pagination
- */
 export async function listTransactions(
   userId: string,
   filters: TransactionFilters & { sortBy?: string; sortOrder?: 'asc' | 'desc' }
@@ -34,8 +31,9 @@ export async function listTransactions(
     throw new Error('Invalid cardId type');
   }
 
+  // Support legacy cardId filter by mapping to instrument_id
   if (safeFilters.cardId) {
-    where.push(`t.card_id = $${paramIndex++}`);
+    where.push(`t.instrument_id = $${paramIndex++}`);
     params.push(safeFilters.cardId);
   }
   if (safeFilters.instrumentType) {
@@ -115,13 +113,14 @@ export async function listTransactions(
     `SELECT t.*, 
       count(*) OVER() as total_count,
       json_build_object(
-        'id', c.id,
-        'card_name', c.card_name,
-        'bank_name', c.bank_name,
-        'last_four', c.card_number_last4
+        'id', i.id,
+        'card_name', i.name,
+        'bank_name', b.name,
+        'last_four', i.last4
       ) as card
      FROM transactions t
-     LEFT JOIN credit_cards c ON (t.card_id = c.id OR (t.instrument_type = 'credit_card' AND t.instrument_id = c.id))
+     LEFT JOIN instruments i ON t.instrument_id = i.id
+     LEFT JOIN banks b ON i.bank_id = b.id
      WHERE ${whereClause}
      ORDER BY ${sortColumn} ${orderDirection}
      LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
@@ -220,9 +219,13 @@ export async function createTransaction(data: {
   const truncatedEmailSubject = data.emailSubject?.substring(0, 500) || data.emailSubject;
   const truncatedReferenceNumber = data.referenceNumber?.substring(0, 100) || data.referenceNumber;
 
+  // Map legacy cardId
+  const instrumentId = data.instrumentId || data.cardId;
+  const instrumentType = data.instrumentType || (data.cardId ? 'credit_card' : undefined);
+
   const { rows } = await pool.query(
     `INSERT INTO transactions (
-      user_id, instrument_type, instrument_id, card_id, transaction_date, merchant, category,
+      user_id, instrument_type, instrument_id, transaction_date, merchant, category,
       amount, transaction_type, direction, counterparty_name, counterparty_identifier,
       reference_number, description, bill_month, bill_year,
       email_message_id, email_subject, email_sender, txn_fingerprint,
@@ -231,14 +234,13 @@ export async function createTransaction(data: {
       gmail_thread_id, gmail_account_index,
       currency_code, original_amount, transaction_subtype,
       scan_job_id, raw_email_id
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
     ON CONFLICT (email_message_id, txn_fingerprint) DO NOTHING
     RETURNING *`,
     [
       data.userId,
-      data.instrumentType,
-      data.instrumentId,
-      data.cardId || null,
+      instrumentType,
+      instrumentId,
       data.transactionDate,
       truncatedMerchant,
       truncatedCategory,
@@ -340,14 +342,16 @@ export async function createTransactionsBulk(dataList: Array<{
       const truncatedEmailSubject = data.emailSubject?.substring(0, 500) || data.emailSubject;
       const truncatedReferenceNumber = data.referenceNumber?.substring(0, 100) || data.referenceNumber;
 
+      const instrumentId = data.instrumentId || data.cardId;
+      const instrumentType = data.instrumentType || (data.cardId ? 'credit_card' : undefined);
+
       placeholders.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13}, $${paramIndex + 14}, $${paramIndex + 15}, $${paramIndex + 16}, $${paramIndex + 17}, $${paramIndex + 18}, $${paramIndex + 19}, $${paramIndex + 20}, $${paramIndex + 21}, $${paramIndex + 22}, $${paramIndex + 23}, $${paramIndex + 24}, $${paramIndex + 25}, $${paramIndex + 26}, $${paramIndex + 27}, $${paramIndex + 28}, $${paramIndex + 29}, $${paramIndex + 30}, $${paramIndex + 31}, $${paramIndex + 32}, $${paramIndex + 33}, $${paramIndex + 34})`
+        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13}, $${paramIndex + 14}, $${paramIndex + 15}, $${paramIndex + 16}, $${paramIndex + 17}, $${paramIndex + 18}, $${paramIndex + 19}, $${paramIndex + 20}, $${paramIndex + 21}, $${paramIndex + 22}, $${paramIndex + 23}, $${paramIndex + 24}, $${paramIndex + 25}, $${paramIndex + 26}, $${paramIndex + 27}, $${paramIndex + 28}, $${paramIndex + 29}, $${paramIndex + 30}, $${paramIndex + 31}, $${paramIndex + 32}, $${paramIndex + 33})`
       );
       values.push(
         data.userId,
-        data.instrumentType || null,
-        data.instrumentId || null,
-        data.cardId || null,
+        instrumentType || null,
+        instrumentId || null,
         data.transactionDate,
         truncatedMerchant,
         truncatedCategory,
@@ -380,12 +384,12 @@ export async function createTransactionsBulk(dataList: Array<{
         data.scanJobId || null,
         data.rawEmailId || null
       );
-      paramIndex += 35;
+      paramIndex += 34;
     }
 
     const query = `
       INSERT INTO transactions (
-        user_id, instrument_type, instrument_id, card_id, transaction_date, merchant, category,
+        user_id, instrument_type, instrument_id, transaction_date, merchant, category,
         amount, transaction_type, direction, counterparty_name, counterparty_identifier,
         reference_number, description, bill_month, bill_year,
         email_message_id, email_subject, email_sender, txn_fingerprint,

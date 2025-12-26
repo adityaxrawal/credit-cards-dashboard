@@ -35,31 +35,31 @@ export class InstrumentHierarchyService {
                         .filter(a => a.bankId === bank.id)
                         .map(account => ({
                             accountId: account.id,
-                            accountType: account.accountType,
-                            accountNumberMasked: account.accountNumberMasked,
+                            accountType: account.accountType || 'savings',
+                            accountNumberMasked: account.accountNumberMasked || '',
                             upiHandle: account.upiHandle,
                             creditCards: userCreditCards
                                 .filter(cc => cc.bankAccountId === account.id)
                                 .map(cc => ({
                                     cardId: cc.id,
-                                    cardName: cc.cardName,
-                                    last4: cc.cardNumberLast4,
-                                    status: cc.cardStatus
+                                    cardName: cc.cardName || 'Unknown Card',
+                                    last4: cc.cardNumberLast4 || '',
+                                    status: cc.cardStatus || 'active'
                                 })),
                             debitCards: userDebitCards
                                 .filter(dc => dc.bankAccountId === account.id)
                                 .map(dc => ({
                                     cardId: dc.id,
-                                    cardName: dc.cardName,
-                                    last4: dc.cardNumberLast4,
-                                    status: dc.cardStatus
+                                    cardName: dc.cardName || 'Unknown Card',
+                                    last4: dc.cardNumberLast4 || '',
+                                    status: dc.cardStatus || 'active'
                                 })),
                             upiHandles: userUPIHandles
                                 .filter(upi => upi.bankAccountId === account.id)
                                 .map(upi => ({
                                     handleId: upi.id,
-                                    upiHandle: upi.upiHandle,
-                                    isActive: upi.isActive
+                                    upiHandle: upi.upiHandle || '',
+                                    isActive: upi.isActive || false
                                 }))
                         }))
                 }))

@@ -222,12 +222,71 @@ export async function middleware(request: NextRequest) {
   // Verify token and get user context
   const userContext = await verifyToken(accessToken, apiUrl);
 
-  // Invalid token - clear cookie and redirect to login
+  // Invalid token - try to refresh if we have a refresh token
   if (!userContext) {
     console.log("❌ Middleware: Token verification failed for path:", pathname);
+
+    const refreshToken = request.cookies.get("refreshToken")?.value;
+    if (refreshToken) {
+      console.log("[Middleware] Access token invalid/expired, attempting refresh with refresh token");
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        const refreshResponse = await fetch(`${apiUrl}/api/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: `refreshToken=${refreshToken}` },
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeoutId));
+
+        if (refreshResponse.ok) {
+          const data = await refreshResponse.json();
+          const newAccessToken = data.accessToken;
+          console.log("[Middleware] Token refresh successful after verification failure");
+
+          const response = NextResponse.next();
+
+          // Forward the Set-Cookie headers from backend if any
+          const setCookieHeader = refreshResponse.headers.get('set-cookie');
+
+          response.cookies.set("accessToken", newAccessToken, {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'lax',
+            path: '/',
+            maxAge: 60 * 60
+          });
+
+          request.cookies.set("accessToken", newAccessToken);
+
+          // Re-verify with new token
+          const retryUserContext = await verifyToken(newAccessToken, apiUrl);
+          if (retryUserContext) {
+            // Check security level with new context
+            const hasAccess = checkSecurityLevel(retryUserContext, requiredLevel);
+            if (!hasAccess) {
+              // Security check fail logic
+              if (requiredLevel === "gmailConnected" && !retryUserContext.gmailConnected) {
+                return NextResponse.redirect(new URL(getGmailConnectPath(pathname), request.url));
+              } else if (requiredLevel === "admin" && !retryUserContext.isAdmin) {
+                return NextResponse.redirect(new URL("/dashboard", request.url));
+              } else {
+                return NextResponse.redirect(new URL(getSecurityRedirectPath(requiredLevel, pathname), request.url));
+              }
+            }
+            return response;
+          }
+        } else {
+          console.error("[Middleware] Refresh failed during retry:", refreshResponse.status);
+        }
+      } catch (err) {
+        console.error("[Middleware] Error during refresh retry:", err);
+      }
+    }
+
+    // If refresh failed or no refresh token, redirect to login
     const response = NextResponse.redirect(new URL("/login", request.url));
     response.cookies.delete("accessToken");
-    // Also clear refresh token if it exists to ensure clean slate
     response.cookies.delete("refreshToken");
     return response;
   }

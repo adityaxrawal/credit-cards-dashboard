@@ -38,6 +38,7 @@ export class BroadFinancialDetector {
             /advertising|advertisement|sponsored|ad\s+campaign/i,
             /survey|feedback|review|rate\s+our|tell\s+us/i,
             /delivery\s+(?:update|status|notification)(?!.*(?:charged|debited|paid))/i,
+            /bluchips|indigo\s+reward/i,
         ];
 
         for (const pattern of rejectionPatterns) {
