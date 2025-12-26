@@ -19,14 +19,7 @@ export class TerminatorService {
                 `INSERT INTO email_processing_log 
          (user_id, email_message_id, reason, stage, status_category, 
           processing_status, scan_job_id, raw_email_id, processed_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-         ON CONFLICT (email_message_id) DO UPDATE SET
-            reason = EXCLUDED.reason,
-            stage = EXCLUDED.stage,
-            status_category = EXCLUDED.status_category,
-            processing_status = EXCLUDED.processing_status,
-            scan_job_id = EXCLUDED.scan_job_id,
-            processed_at = NOW()`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
                 [userId, emailId, reason, stage, statusCategory, 'terminated', jobId, rawEmailId]
             );
 

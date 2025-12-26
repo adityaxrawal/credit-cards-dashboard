@@ -167,6 +167,21 @@ export class UniversalTransactionPipeline {
                     }
                 }
 
+                // CHECK: If GPT returned non_financial, terminate immediately
+                if (classificationResult && classificationResult.type === 'non_financial') {
+                    await this.deps.terminator.terminate(
+                        userId,
+                        cleanEmail.id,
+                        `GPT classification: non-financial (${classificationResult.metadata?.reason || 'No reason'})`,
+                        'stage_4_gpt_fallback',
+                        'NON_FINANCIAL',
+                        jobId,
+                        rawEmailId
+                    );
+                    logger.info(`<<< [PIPELINE END] ${rawEmail.messageId} - Terminated (GPT Non-Financial)`);
+                    return { status: 'terminated', reason: 'non_financial' };
+                }
+
                 classificationStage = 'stage_4_gpt_fallback';
             }
             logger.info(`[Pipeline] Stage 4 (Classify) took ${Date.now() - s4Start}ms via ${classificationMethod}`);
