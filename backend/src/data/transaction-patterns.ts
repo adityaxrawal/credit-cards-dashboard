@@ -37,7 +37,7 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
         keywords: [
             { pattern: /(?:bill|payment|amount)\s+(?:due|overdue|outstanding)/i, weight: 1.0 },
             { pattern: /total\s+(?:amount)?\s+due.*[₹Rs.INR]*/i, weight: 0.95 },
-            { pattern: /statement\s+(?:generated|available)/i, weight: 0.95 },
+            { pattern: /(?:bill|statement|e-?statement).{0,30}\s+(?:generated|available|ready)/i, weight: 1.0 },
             { pattern: /pay\s+by\s+(?:date|time)/i, weight: 0.9 },
         ],
         excludePatterns: [
