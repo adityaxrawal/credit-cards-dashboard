@@ -41,6 +41,7 @@ export async function runHistoricalScan(
     // Fetch ALL emails to ensure we never miss a transaction.
     const query = `after:${from} before:${to} in:inbox`;
 
+    // Initialize job status
     await pool.query(
       `UPDATE gmail_sync_jobs 
        SET status = 'PROCESSING', 
@@ -100,6 +101,15 @@ export async function runHistoricalScan(
 
         } while (pageToken);
         console.log(`[PHASE: FETCH] Fetch loop completed. Total fetched: ${totalFetched}`);
+
+        // OPTIMIZATION: If totalFetched is 0, we can finish early!
+        if (totalFetched === 0) {
+          logger.info(`[HistoricalScanner] No messages found for job ${jobId}. Completing early.`);
+          isFetching = false; // Stop consumer loop (it will do one check then exit)
+          // We'll let the processLoop finish naturally (it will see empty queue and isFetching=false)
+          // But we need to ensure updateJobStats doesn't get confused.
+        }
+
       } catch (err) {
         logger.error('[HistoricalScanner] Fetch loop error:', err);
         throw err;
@@ -241,10 +251,38 @@ export async function runHistoricalScan(
   } catch (error) {
     WorkflowLogger.error('FAILED', `Scan failed`, error, { jobId });
     await pool.query(
-      `UPDATE gmail_sync_jobs SET status = 'FAILED', errors = $1 WHERE id = $2`,
+      `UPDATE gmail_sync_jobs SET status = 'FAILED', errors = $1, completed_at = NOW() WHERE id = $2`,
       [JSON.stringify([{ error: error instanceof Error ? error.message : 'Unknown' }]), jobId]
     );
     throw error;
+  } finally {
+    // SAFETY NET: Ensure job is never left hanging
+    try {
+      const { rows } = await pool.query('SELECT status FROM gmail_sync_jobs WHERE id = $1', [jobId]);
+      if (rows.length > 0) {
+        const status = rows[0].status;
+        const activeStatuses = ['PENDING', 'PROCESSING', 'FETCHING', 'GPT_PROCESSING'];
+
+        if (activeStatuses.includes(status)) {
+          logger.warn(`[HistoricalScanner] Safety Net: Job ${jobId} ended in ${status} state. Forcing COMPLETED.`);
+          // If we are here, it means no error was thrown (caught above), but we are still not COMPLETED/FAILED.
+          // This usually implies a logic bug or race condition where the explicit 'COMPLETED' update was missed.
+          await pool.query(
+            `UPDATE gmail_sync_jobs 
+              SET status = 'COMPLETED', 
+                  current_step = 'COMPLETED', 
+                  progress = 100, 
+                  last_update_at = NOW(), 
+                  completed_at = NOW(),
+                  errors = COALESCE(errors, '[]'::jsonb) || $1
+              WHERE id = $2`,
+            [JSON.stringify([{ warning: 'Job force-completed by safety net' }]), jobId]
+          );
+        }
+      }
+    } catch (finalError) {
+      logger.error(`[HistoricalScanner] Critical: Failed to execute safety net for job ${jobId}`, finalError);
+    }
   }
 }
 

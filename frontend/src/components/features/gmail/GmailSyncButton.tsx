@@ -31,6 +31,10 @@ export function GmailSyncModal({
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [mappingMessageId, setMappingMessageId] = useState<string | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const [timeoutWarning, setTimeoutWarning] = useState(false);
+  const lastStatusChangeRef = useRef<number>(Date.now());
+  const lastStatusRef = useRef<ScanStatus | null>(null);
 
   // Initialize config when modal opens
   useEffect(() => {
@@ -41,6 +45,9 @@ export function GmailSyncModal({
       setFailed(false);
       setJobId(null);
       setProgress(null);
+      setTimeoutWarning(false);
+      lastStatusChangeRef.current = Date.now();
+      lastStatusRef.current = null;
       
       const loadDates = async () => {
         try {
@@ -66,10 +73,34 @@ export function GmailSyncModal({
   useEffect(() => {
     if (!jobId) return;
 
+    // Reset timeout tracking when job starts
+    lastStatusChangeRef.current = Date.now();
+    lastStatusRef.current = null;
+    setTimeoutWarning(false);
+
     const pollStatus = async () => {
       try {
         const status = await gmailApi.getScanStatus(jobId);
         setProgress(status);
+
+        // Check for progress changes to reset timeout
+        const prev = lastStatusRef.current;
+        const hasChanged = !prev || 
+          prev.status !== status.status || 
+          prev.processed !== status.processed || 
+          prev.fetched !== status.fetched ||
+          prev.currentStep !== status.currentStep;
+
+        if (hasChanged) {
+          lastStatusChangeRef.current = Date.now();
+          lastStatusRef.current = status;
+          setTimeoutWarning(false); // Clear warning if we see movement
+        } else {
+          // Check for timeout (30 seconds of no change)
+          if (Date.now() - lastStatusChangeRef.current > 30000) {
+            setTimeoutWarning(true);
+          }
+        }
 
         // Check if job is complete
         // Check if job is complete (Case insensitive)
@@ -108,6 +139,8 @@ export function GmailSyncModal({
     setCompleted(false);
     setFailed(false);
     setErrorMessage("");
+    setTimeoutWarning(false);
+    lastStatusChangeRef.current = Date.now();
 
     try {
       const result = await gmailApi.scanHistorical(
@@ -159,6 +192,7 @@ export function GmailSyncModal({
     setSyncing(false);
     setCompleted(true);
     setJobId(null);
+    setTimeoutWarning(false);
 
     // Refresh UI
     window.dispatchEvent(new CustomEvent("transactions-updated"));
@@ -177,13 +211,15 @@ export function GmailSyncModal({
   };
 
   const handleClose = () => {
-    if (!syncing) {
+    // FORCE close allowed if there's a timeout warning or not syncing
+    if (!syncing || timeoutWarning) {
       clearPolling();
       setJobId(null);
       setProgress(null);
       setCompleted(false);
       setFailed(false);
       setErrorMessage("");
+      setTimeoutWarning(false);
       onClose();
     }
   };
@@ -351,6 +387,21 @@ export function GmailSyncModal({
                       <p className="text-xs text-blue-900">
                         Scanning your Gmail for credit card transaction emails. 
                         This scans from {new Date(startDate).toLocaleDateString()} to {new Date(endDate).toLocaleDateString()}.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {timeoutWarning && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-4">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="text-yellow-600 flex-shrink-0 mt-0.5" size={16} />
+                    <div>
+                      <p className="text-sm font-medium text-yellow-900">Sync is taking longer than expected</p>
+                      <p className="text-xs text-yellow-700 mt-1">
+                        The background job hasn't reported progress for 30 seconds. It might be stuck or processing a large batch.
+                        You can safely close this window; the sync will continue in the background.
                       </p>
                     </div>
                   </div>
