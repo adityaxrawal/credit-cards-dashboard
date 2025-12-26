@@ -1,4 +1,5 @@
 import { TransactionType, CleanEmail, ExtractedTransaction } from '../../../types/transaction.types';
+import { CreditCardPaymentExtractor } from './extractors/CreditCardPaymentExtractor';
 
 /**
  * Interface that all transaction extractors must implement
@@ -19,6 +20,11 @@ export class TransactionExtractorFactory {
 
     static register(type: TransactionType, Extractor: TransactionExtractorClass): void {
         this.extractors.set(type, Extractor);
+    }
+
+    // Register Default Extractors (Should probably be done at startup, but for now we can do static block or manual call)
+    static {
+        this.register(TransactionType.CREDIT_CARD_PAYMENT, CreditCardPaymentExtractor);
     }
 
     static getExtractor(type: TransactionType): TransactionExtractorClass {

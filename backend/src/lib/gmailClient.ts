@@ -299,7 +299,7 @@ export async function batchGetMessages(
   refreshToken: string,
   messageIds: string[],
   userId: string,  // Required for per-user rate limiting and cache isolation
-  concurrency: number = 100, // High concurrency for throughput
+  concurrency: number = 10, // Reduced concurrency for stability
   skipCache: boolean = true
 ): Promise<Array<gmail_v1.Schema$Message>> {
   // Use p-limit to control concurrency.

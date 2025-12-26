@@ -40,21 +40,7 @@ export function startTokenRefresh(
     }
   }, refreshInterval);
 
-  // Also do an immediate refresh check
-  setTimeout(async () => {
-    try {
-      const response = await apiClient.post<{ success: boolean; data: unknown }>(
-        "/api/auth/refresh"
-      );
-
-      if (response.success && onRefreshSuccess) {
-        onRefreshSuccess();
-      }
-    } catch (error) {
-      console.error("Initial token refresh check failed:", error);
-      // Don't stop timer on initial check failure, might be just a flake
-    }
-  }, 1000);
+  // Initial check removed - AuthContext handles the first check via /api/auth/me
 }
 
 /**

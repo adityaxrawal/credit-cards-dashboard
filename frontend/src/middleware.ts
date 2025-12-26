@@ -210,7 +210,13 @@ export async function middleware(request: NextRequest) {
     if (pathname !== "/login") {
       loginUrl.searchParams.set("next", pathname);
     }
-    return NextResponse.redirect(loginUrl);
+    const response = NextResponse.redirect(loginUrl);
+    // Clear potentially invalid refresh token to prevent infinite loop
+    if (refreshToken) {
+      console.log("Cleaning up invalid refresh token");
+      response.cookies.delete("refreshToken");
+    }
+    return response;
   }
 
   // Verify token and get user context
@@ -221,6 +227,8 @@ export async function middleware(request: NextRequest) {
     console.log("❌ Middleware: Token verification failed for path:", pathname);
     const response = NextResponse.redirect(new URL("/login", request.url));
     response.cookies.delete("accessToken");
+    // Also clear refresh token if it exists to ensure clean slate
+    response.cookies.delete("refreshToken");
     return response;
   }
 

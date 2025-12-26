@@ -66,9 +66,9 @@ export async function runHistoricalScan(
     const stats = { success: 0, failed: 0, needs_review: 0, terminated: 0, duplicate: 0 };
 
     // Config
-    const FETCH_BATCH_SIZE = 200;  // Increased for throughput
-    const HIGH_WATER_MARK = 500;  // Buffer more items before pausing
-    const LOW_WATER_MARK = 100;   // Resume sooner
+    const FETCH_BATCH_SIZE = 50;  // Reduced for stability
+    const HIGH_WATER_MARK = 200;  // Buffer more items before pausing
+    const LOW_WATER_MARK = 50;   // Resume sooner
 
     // --- PRODUCER LOOP (FETCH) ---
     const fetchLoop = async () => {
@@ -121,7 +121,7 @@ export async function runHistoricalScan(
     // --- CONSUMER LOOP (PROCESS) ---
     const processLoop = async () => {
       logger.info(`[PROCESS] Starting consumer loop for job ${jobId}`);
-      console.log(`\nStarting Parallel Process Loop (Concurrency: 100)`);
+      console.log(`\nStarting Parallel Process Loop (Concurrency: 10)`);
 
       while (isFetching || processingQueue.length > 0) {
         if (processingQueue.length === 0) {
@@ -131,7 +131,7 @@ export async function runHistoricalScan(
         }
 
         // Take a chunk off the queue
-        const batchSize = 100;
+        const batchSize = 10;
         const batch = processingQueue.splice(0, batchSize);
         const batchStartTime = Date.now();
 
