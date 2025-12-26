@@ -16,7 +16,7 @@ const csrfMiddleware = csurf({
 });
 
 export const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
-    if (req.path === '/auth/google' || req.path === '/api/auth/google' || req.path === '/api/gmail/scan-historical') {
+    if (req.path === '/auth/google' || req.path === '/api/auth/google' || req.path === '/api/gmail/scan-historical' || req.path === '/api/auth/refresh') {
         return next();
     }
     return csrfMiddleware(req, res, next);

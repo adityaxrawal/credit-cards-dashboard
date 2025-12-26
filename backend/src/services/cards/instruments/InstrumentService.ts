@@ -27,15 +27,15 @@ export class InstrumentService {
                 `SELECT 
                     ui.id, 
                     ui.user_id, 
-                    ui.instrument_type, 
+                    ui.type as instrument_type, 
                     b.name as bank_name, 
-                    ui.identifier_mask as account_number_masked,
-                    ui.is_active, 
+                    COALESCE(ui.identifier, CONCAT('XXXX', ui.last4)) as account_number_masked,
+                    CASE WHEN ui.status = 'active' THEN true ELSE false END as is_active, 
                     ui.is_primary,
-                    ui.instrument_id
-                 FROM user_instruments ui
+                    ui.id as instrument_id
+                 FROM instruments ui
                  LEFT JOIN banks b ON ui.bank_id = b.id
-                 WHERE ui.user_id = $1 AND ui.is_active = true`,
+                 WHERE ui.user_id = $1 AND ui.status = 'active'`,
                 [userId]
             );
 

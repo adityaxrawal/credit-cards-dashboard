@@ -365,9 +365,10 @@ export class GmailService {
             // Force link to the user-provided card
             await this.deps.pool.query(
               `UPDATE transactions SET card_id = $1, instrument_id = (
-                SELECT id FROM user_instruments 
-                WHERE user_id = $2 AND bank_name = $3 AND instrument_type = 'credit_card' 
-                AND account_number_masked LIKE $4 LIMIT 1
+                SELECT ui.id FROM instruments ui 
+                LEFT JOIN banks b ON ui.bank_id = b.id
+                WHERE ui.user_id = $2 AND b.name = $3 AND ui.type = 'credit_card' 
+                AND (ui.identifier LIKE $4 OR ui.last4 = RIGHT($4, 4)) LIMIT 1
               ) WHERE id = $5`,
               [card.id, userId, cardInfo.bankName, `%${cardInfo.last4}`, txnId]
             );
