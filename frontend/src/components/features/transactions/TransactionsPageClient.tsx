@@ -48,6 +48,8 @@ interface TransactionModalData {
   description: string;
 }
 
+import { queryKeys } from "@/lib/react-query/keys";
+
 export default function TransactionsPage() {
   const queryClient = useQueryClient();
   const { success, error: errorToast } = useToast();
@@ -75,7 +77,7 @@ export default function TransactionsPage() {
 
   // Fetch cards for filter dropdown
   const { data: cards = [] } = useQuery({
-    queryKey: ["cards"],
+    queryKey: queryKeys.cards.all,
     queryFn: () => cardApi.getCards(),
   });
 
@@ -116,7 +118,7 @@ export default function TransactionsPage() {
     isLoading,
     error: fetchError,
   } = useQuery({
-    queryKey: ["transactions", appliedFilters],
+    queryKey: queryKeys.transactions.list(appliedFilters),
     queryFn: () => transactionApi.getTransactions(appliedFilters),
   });
 
@@ -129,9 +131,9 @@ export default function TransactionsPage() {
     mutationFn: (data: TransactionFormData) =>
       transactionApi.createTransaction(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["cards"] });
-      queryClient.invalidateQueries({ queryKey: ["analytics"] }); // If we had one
+      queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.cards.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
       window.dispatchEvent(new CustomEvent("transactions-updated"));
       success("Transaction added successfully");
       setShowModal(false);
@@ -152,8 +154,8 @@ export default function TransactionsPage() {
       data: Partial<TransactionFormData>;
     }) => transactionApi.updateTransaction(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["cards"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.cards.all });
       window.dispatchEvent(new CustomEvent("transactions-updated"));
       success("Transaction updated successfully");
       setShowModal(false);
@@ -170,8 +172,9 @@ export default function TransactionsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => transactionApi.deleteTransaction(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["cards"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.cards.all });
+
       window.dispatchEvent(new CustomEvent("transactions-updated"));
       success("Transaction deleted successfully");
     },

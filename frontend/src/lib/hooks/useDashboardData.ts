@@ -1,5 +1,7 @@
-import { useState, useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/react-query/keys";
 import {
     analyticsApi,
     type DashboardOverview,
@@ -21,17 +23,58 @@ export interface UpcomingBill {
 
 export function useDashboardData() {
     const { user } = useAuth();
-    const [overview, setOverview] = useState<DashboardOverview | null>(null);
-    const [budgetStatus, setBudgetStatus] = useState<BudgetStatus | null>(null);
-    const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
-    const [upcomingBills, setUpcomingBills] = useState<UpcomingBill[]>([]);
-    const [spendingTrend, setSpendingTrend] = useState<SpendingTrendItem[]>([]);
-    const [totalBalance, setTotalBalance] = useState(0);
-    const [totalCards, setTotalCards] = useState(0);
-    const [totalRewards, setTotalRewards] = useState(0);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
 
-    const calculateUpcomingBills = useCallback((cards: Card[]): UpcomingBill[] => {
+    // 1. Overview Data
+    const { data: overview, isLoading: overviewLoading } = useQuery({
+        queryKey: queryKeys.analytics.overview,
+        queryFn: () => analyticsApi.getOverview(),
+        enabled: !!user,
+    });
+
+    // 2. Recent Transactions
+    const { data: transactionsData, isLoading: transactionsLoading } = useQuery({
+        queryKey: queryKeys.transactions.list({ limit: 5 }),
+        queryFn: () => transactionApi.getTransactions({ limit: 5 }),
+        enabled: !!user,
+    });
+    const recentTransactions = transactionsData?.data || [];
+
+    // 3. Cards Data
+    const { data: cards = [], isLoading: cardsLoading } = useQuery({
+        queryKey: queryKeys.cards.all,
+        queryFn: () => cardApi.getCards(),
+        enabled: !!user,
+    });
+
+    // 4. Budget Status
+    const { data: budgetStatus, isLoading: budgetLoading } = useQuery({
+        queryKey: queryKeys.budget.current,
+        queryFn: () => budgetApi.getCurrentBudget(),
+        enabled: !!user,
+    });
+
+    // 5. Spending Trends
+    const { data: spendingTrend = [], isLoading: trendLoading } = useQuery({
+        queryKey: queryKeys.analytics.trends("6m"),
+        queryFn: () => analyticsApi.getTrends("6m"),
+        enabled: !!user,
+    });
+
+    // 6. Rewards Summary
+    const { data: rewardData, isLoading: rewardsLoading } = useQuery({
+        queryKey: queryKeys.rewards.summary,
+        queryFn: () => rewardsApi.getSummary(),
+        enabled: !!user,
+    });
+    const totalRewards = rewardData?.summary?.total_points_balance || 0;
+
+    // Derived State
+    const { totalBalance, totalCards, upcomingBills } = useMemo(() => {
+        if (!cards.length) return { totalBalance: 0, totalCards: 0, upcomingBills: [] };
+
+        const balance = cards.reduce((sum, card) => sum + (card.current_balance || 0), 0);
+
         const today = new Date();
         const bills: UpcomingBill[] = [];
 
@@ -55,59 +98,44 @@ export function useDashboardData() {
             }
         });
 
-        return bills.sort((a, b) => a.days_until_due - b.days_until_due);
-    }, []);
+        bills.sort((a, b) => a.days_until_due - b.days_until_due);
 
-    const loadDashboardData = useCallback(async (refresh = false) => {
-        try {
-            if (!refresh) {
-                setLoading(true);
-            }
+        return {
+            totalBalance: balance,
+            totalCards: cards.length,
+            upcomingBills: bills
+        };
+    }, [cards]);
 
-            const [
-                overviewData,
-                transactionsData,
-                cardsData,
-                budgetData,
-                trendData,
-                rewardData
-            ] = await Promise.all([
-                analyticsApi.getOverview().catch((err) => { console.error('Overview error:', err); return null; }),
-                transactionApi.getTransactions({ limit: 5 }).catch((err) => { console.error('Transactions error:', err); return { data: [], pagination: { page: 1, limit: 5, total: 0, totalPages: 0 } }; }),
-                cardApi.getCards().catch((err) => { console.error('Cards error:', err); return []; }),
-                budgetApi.getCurrentBudget().catch(() => null),
-                analyticsApi.getTrends("6m").catch((err) => { console.error('Trends error:', err); return []; }),
-                rewardsApi.getSummary().catch((err) => { console.error('Rewards error:', err); return null; }),
+    // Combined Loading State
+    const loading = overviewLoading || transactionsLoading || cardsLoading || budgetLoading || trendLoading || rewardsLoading;
+
+    // Manual Refresh Function (Invalidate all queries)
+    const loadDashboardData = useCallback(async (force = false) => {
+        if (force) {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: queryKeys.analytics.overview }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.transactions.list({ limit: 5 }) }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.cards.all }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.budget.current }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.analytics.trends("6m") }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.rewards.summary }),
             ]);
-
-            if (overviewData) setOverview(overviewData);
-            if (transactionsData?.data) setRecentTransactions(transactionsData.data);
-            if (budgetData) setBudgetStatus(budgetData);
-            if (trendData) setSpendingTrend(trendData);
-
-            if (cardsData) {
-                setTotalCards(cardsData.length);
-                const balance = cardsData.reduce((sum, card) => sum + (card.current_balance || 0), 0);
-                setTotalBalance(balance);
-                setUpcomingBills(calculateUpcomingBills(cardsData));
-            }
-
-            if (rewardData?.summary) {
-                setTotalRewards(rewardData.summary.total_points_balance);
-            }
-
-        } catch (error) {
-            console.error("Failed to load dashboard data:", error);
-        } finally {
-            if (!refresh) {
-                setLoading(false);
-            }
+        } else {
+            await Promise.all([
+                queryClient.refetchQueries({ queryKey: queryKeys.analytics.overview }),
+                queryClient.refetchQueries({ queryKey: queryKeys.transactions.list({ limit: 5 }) }),
+                queryClient.refetchQueries({ queryKey: queryKeys.cards.all }),
+                queryClient.refetchQueries({ queryKey: queryKeys.budget.current }),
+                queryClient.refetchQueries({ queryKey: queryKeys.analytics.trends("6m") }),
+                queryClient.refetchQueries({ queryKey: queryKeys.rewards.summary }),
+            ]);
         }
-    }, [calculateUpcomingBills]);
+    }, [queryClient]);
 
     return {
-        overview,
-        budgetStatus,
+        overview: overview || null,
+        budgetStatus: budgetStatus || null,
         recentTransactions,
         upcomingBills,
         spendingTrend,

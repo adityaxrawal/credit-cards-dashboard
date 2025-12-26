@@ -65,18 +65,20 @@ interface KPI {
   description: string;
 }
 
+import { queryKeys } from "@/lib/react-query/keys";
+
 export default function AnalyticsPage() {
   const [trendRange, setTrendRange] = useState<"6m" | "12m">("6m");
 
   // Fetch KPI dashboard (Overview)
   const { data: overviewData, isLoading: kpiLoading } = useQuery({
-    queryKey: ["analytics", "overview"],
+    queryKey: queryKeys.analytics.overview,
     queryFn: () => analyticsApi.getOverview(),
   });
 
   // Fetch trends
   const { data: trendsData, isLoading: trendsLoading } = useQuery({
-    queryKey: ["analytics", "trends", trendRange],
+    queryKey: queryKeys.analytics.trends(trendRange),
     queryFn: () => analyticsApi.getTrends(trendRange),
   });
 
@@ -85,13 +87,13 @@ export default function AnalyticsPage() {
   const currentYear = new Date().getFullYear();
   
   const { data: categoryData, isLoading: categoryLoading } = useQuery({
-    queryKey: ["analytics", "categories", currentMonth, currentYear],
+    queryKey: queryKeys.analytics.categories(currentMonth, currentYear),
     queryFn: () => analyticsApi.getCategoryBreakdown(currentMonth, currentYear),
   });
 
   // Fetch top merchants
   const { data: merchantData, isLoading: merchantLoading } = useQuery({
-    queryKey: ["analytics", "merchants", currentMonth, currentYear],
+    queryKey: queryKeys.analytics.merchants(currentMonth, currentYear),
     queryFn: () => analyticsApi.getTopMerchants(currentMonth, currentYear),
   });
 

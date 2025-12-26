@@ -1,6 +1,5 @@
-import { apiGet } from "./client";
+import { apiClient } from "@/lib/api-client";
 import { SpendingReport, CategoryReport, MonthlyReport } from "../../types/reports";
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export interface DashboardOverview {
   currentMonth: {
@@ -35,6 +34,7 @@ export interface SpendingTrendItem {
   year: number;
   totalSpent: number;
   transactionCount: number;
+  byCategory?: Record<string, number>;
 }
 
 export interface TopMerchant {
@@ -48,9 +48,16 @@ export const analyticsApi = {
    * Get dashboard overview statistics
    */
   getOverview: async (): Promise<DashboardOverview> => {
-    return apiGet<{ data: DashboardOverview }>("/api/analytics/overview").then(
-      (res) => res.data
-    );
+    const response = await apiClient.get<{ data: DashboardOverview }>("/api/analytics/overview");
+    // apiClient unwraps response.data, but sometimes the API returns { data: ... } inside that
+    // Let's check based on API response structure. The apiClient.get returns ApiResponse<T>['data'] which is T if success.
+    // However, if the API returns `{ success: true, data: { ... } }`, apiClient returns `{ ... }`.
+    // But if the backend endpoint returns just the object, it returns that.
+    // Looking at previous analytics.ts, it expected `res.data` from `apiGet`.
+    // `apiGet` in client.ts returned `data.data` if available.
+    // `apiClient` in api-client.ts also returns `data.data` if available.
+    // So the signature of `get` is `Promise<DashboardOverview>`.
+    return response as any as DashboardOverview;
   },
 
   /**
@@ -60,13 +67,12 @@ export const analyticsApi = {
     month?: number,
     year?: number
   ): Promise<CategoryBreakdown> => {
-    const params = new URLSearchParams();
-    if (month) params.append("month", month.toString());
-    if (year) params.append("year", year.toString());
+    const params: Record<string, any> = {};
+    if (month) params.month = month;
+    if (year) params.year = year;
 
-    return apiGet<{ data: CategoryBreakdown }>(
-      `/api/analytics/categories?${params.toString()}`
-    ).then((res) => res.data);
+    const response = await apiClient.get<CategoryBreakdown>("/api/analytics/categories", params);
+    return response as any as CategoryBreakdown;
   },
 
   /**
@@ -75,9 +81,8 @@ export const analyticsApi = {
   getTrends: async (
     range: "6m" | "12m" = "6m"
   ): Promise<SpendingTrendItem[]> => {
-    return apiGet<{ data: SpendingTrendItem[] }>(
-      `/api/analytics/trends?range=${range}`
-    ).then((res) => res.data);
+    const response = await apiClient.get<SpendingTrendItem[]>(`/api/analytics/trends`, { range });
+    return response as any as SpendingTrendItem[];
   },
 
   /**
@@ -88,42 +93,39 @@ export const analyticsApi = {
     year?: number,
     limit: number = 10
   ): Promise<{ month: number; year: number; merchants: TopMerchant[] }> => {
-    const params = new URLSearchParams();
-    if (month) params.append("month", month.toString());
-    if (year) params.append("year", year.toString());
-    params.append("limit", limit.toString());
+    const params: Record<string, any> = { limit };
+    if (month) params.month = month;
+    if (year) params.year = year;
 
-    return apiGet<{ data: { month: number; year: number; merchants: TopMerchant[] } }>(
-      `/api/analytics/merchants?${params.toString()}`
-    ).then((res) => res.data);
+    const response = await apiClient.get<{ month: number; year: number; merchants: TopMerchant[] }>("/api/analytics/merchants", params);
+    return response as any as { month: number; year: number; merchants: TopMerchant[] };
   },
 
   async getSpendingReport(fromDate: Date, toDate: Date): Promise<SpendingReport> {
-    const query = new URLSearchParams({
+    const params = {
       startDate: fromDate.toISOString(),
       endDate: toDate.toISOString()
-    });
-    const response = await apiGet<{ data: SpendingReport }>(`/api/reports/spending?${query}`);
-    return response.data;
+    };
+    const response = await apiClient.get<SpendingReport>("/api/reports/spending", params);
+    return response as any as SpendingReport;
   },
 
   async getCategoryReport(month: number, year: number): Promise<CategoryReport[]> {
-    const response = await apiGet<{ data: CategoryReport[] }>(
-      `/api/reports/category?month=${month}&year=${year}`
-    );
-    return response.data;
+    const response = await apiClient.get<CategoryReport[]>(`/api/reports/category`, { month, year });
+    return response as any as CategoryReport[];
   },
 
   async getMonthlyReport(year: number): Promise<MonthlyReport[]> {
-    const response = await apiGet<{ data: MonthlyReport[] }>(`/api/reports/monthly?year=${year}`);
-    return response.data;
+    const response = await apiClient.get<MonthlyReport[]>(`/api/reports/monthly`, { year });
+    return response as any as MonthlyReport[];
   },
 
   async exportData(format: 'csv' | 'pdf'): Promise<Blob> {
-    const response = await fetch(`${API_BASE_URL}/api/reports/export?format=${format}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    return response.blob();
+    const response = await apiClient.getClient().post(
+      `/api/reports/export?format=${format}`,
+      {},
+      { responseType: 'blob' }
+    );
+    return response.data;
   }
 };

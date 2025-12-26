@@ -1,3 +1,5 @@
+import { apiClient } from "@/lib/api-client";
+
 /**
  * Token Refresh Utility
  * Automatically refreshes access token before it expires
@@ -21,24 +23,12 @@ export function startTokenRefresh(
 
   refreshTimer = setInterval(async () => {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/refresh`,
-        {
-          method: "POST",
-          credentials: "include", // Send httpOnly refresh token cookie
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
+      // apiClient handles CSRF token automatically
+      const response = await apiClient.post<{ success: boolean; data: any }>(
+        "/api/auth/refresh"
       );
 
-      if (!response.ok) {
-        throw new Error("Token refresh failed");
-      }
-
-      const data = await response.json();
-
-      if (data.success && onRefreshSuccess) {
+      if (response.success && onRefreshSuccess) {
         onRefreshSuccess();
       }
     } catch (error) {
@@ -53,22 +43,16 @@ export function startTokenRefresh(
   // Also do an immediate refresh check
   setTimeout(async () => {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/refresh`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
+      const response = await apiClient.post<{ success: boolean; data: any }>(
+        "/api/auth/refresh"
       );
 
-      if (response.ok && onRefreshSuccess) {
+      if (response.success && onRefreshSuccess) {
         onRefreshSuccess();
       }
     } catch (error) {
       console.error("Initial token refresh check failed:", error);
+      // Don't stop timer on initial check failure, might be just a flake
     }
   }, 1000);
 }
@@ -88,18 +72,8 @@ export function stopTokenRefresh() {
  */
 export async function refreshAccessToken(): Promise<boolean> {
   try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/auth/refresh`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    return response.ok;
+    await apiClient.post("/api/auth/refresh");
+    return true;
   } catch (error) {
     console.error("Manual token refresh failed:", error);
     return false;

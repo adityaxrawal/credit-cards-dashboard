@@ -7,6 +7,8 @@ import { formatDate, cn } from "@/lib/utils";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
 
+import { queryKeys } from "@/lib/react-query/keys";
+
 interface Reminder {
   id: string;
   card_id: string;
@@ -20,7 +22,7 @@ interface Reminder {
 
 export function RemindersWidget() {
   const { data: reminders, isLoading } = useQuery({
-    queryKey: ["upcoming-reminders"],
+    queryKey: queryKeys.bills.upcomingReminders,
     queryFn: async () => {
       const data = await apiClient.get<{ reminders: Reminder[] }>(
         "/api/bills/upcoming?days=14"
