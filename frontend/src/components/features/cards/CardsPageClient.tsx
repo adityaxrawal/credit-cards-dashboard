@@ -46,8 +46,9 @@ export default function CardsPage() {
       setIsAddModalOpen(false);
       setSelectedCard(null);
     },
-    onError: (error: any) => {
-      errorToast(error.response?.data?.message || "Failed to add card");
+    onError: (error: unknown) => {
+      const err = error as unknown as { response?: { data?: { message?: string } } };
+      errorToast(err.response?.data?.message || "Failed to add card");
     },
   });
 
@@ -62,8 +63,9 @@ export default function CardsPage() {
       setIsAddModalOpen(false);
       setSelectedCard(null);
     },
-    onError: (error: any) => {
-      errorToast(error.response?.data?.message || "Failed to update card");
+    onError: (error: unknown) => {
+      const err = error as unknown as { response?: { data?: { message?: string } } };
+      errorToast(err.response?.data?.message || "Failed to update card");
     },
   });
 
@@ -75,8 +77,9 @@ export default function CardsPage() {
       window.dispatchEvent(new CustomEvent("cards-updated"));
       success("Card deleted successfully");
     },
-    onError: (error: any) => {
-      errorToast(error.response?.data?.message || "Failed to delete card");
+    onError: (error: unknown) => {
+      const err = error as unknown as { response?: { data?: { message?: string } } };
+      errorToast(err.response?.data?.message || "Failed to delete card");
     },
   });
 

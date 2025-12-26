@@ -4,7 +4,7 @@
  */
 
 import { apiGet, apiPost, apiPut, apiDelete } from '../core/client';
-import type { CreditCard, CardFormData, CreateCardRequest } from '@/types/card';
+import type { CreditCard, CreateCardRequest } from '@/types/card';
 
 /**
  * Card statement response
@@ -16,7 +16,7 @@ export interface CardStatement {
     end: string;
     dueDate: string;
   };
-  transactions: any[]; // Use Transaction type when cross-importing
+  transactions: unknown[]; // Use Transaction type when cross-importing
   summary: {
     totalDebits: number;
     totalCredits: number;

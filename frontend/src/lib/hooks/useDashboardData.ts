@@ -4,12 +4,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/react-query/keys";
 import {
     analyticsApi,
-    type DashboardOverview,
-    type SpendingTrendItem,
 } from "@/lib/api/analytics";
-import { transactionApi, type Transaction } from "@/lib/api/transactions";
-import { cardApi, type Card } from "@/lib/api/cards";
-import { budgetApi, type BudgetStatus } from "@/lib/api/budget";
+import { transactionApi } from "@/lib/api/transactions";
+import { cardApi } from "@/lib/api/cards";
+import { budgetApi } from "@/lib/api/budget";
 import { rewardsApi } from "@/lib/api/rewards";
 
 export interface UpcomingBill {

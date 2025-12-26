@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+  // const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const router = useRouter();
 
   // Use a ref to track if auth check has run/is running, to survive strict mode re-mounts

@@ -19,7 +19,7 @@ export function TransactionFilters({
 }: TransactionFiltersProps) {
   const [isOpen, setIsOpen] = React.useState(false);
 
-  const handleChange = (key: keyof FilterType, value: any) => {
+  const handleChange = (key: keyof FilterType, value: unknown) => {
     onFilterChange({ ...filters, [key]: value });
   };
 

@@ -94,7 +94,8 @@ function SpendingLimitsSettings() {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
     },
     onError: (error: Error) => {
-      errorToast((error as any)?.response?.data?.message || "Failed to update settings");
+      const err = error as unknown as { response?: { data?: { message?: string } } };
+      errorToast(err.response?.data?.message || "Failed to update settings");
     },
   });
 

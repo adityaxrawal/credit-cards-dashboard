@@ -27,6 +27,23 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
     // HIGH PRIORITY TRANSACTION PATTERNS (8-10)
     // ============================================
 
+    PAYMENT_RECEIVED: {
+        priority: 11,
+        isTransaction: true,
+        transactionType: 'cc_payment',
+        direction: 'credit',
+        keywords: [
+            { pattern: /(?:payment|transaction)\s+(?:received|credited|thank\s+you)/i, weight: 1.0 },
+            { pattern: /thank\s+you\s+for\s+(?:making|your)\s+payment/i, weight: 1.0 },
+            { pattern: /payment\s+(?:of|for)?\s*[₹Rs.INR]*\s*[\d,]+\s+(?:received|credited)/i, weight: 0.95 },
+            { pattern: /credited\s+your\s+(?:card|account)\s+with\s+(?:payment|amount)/i, weight: 0.9 },
+        ],
+        excludePatterns: [
+            /will\s+be\s+(?:received|credited)/i, // Future tense
+            /fail|decline/i
+        ]
+    },
+
     // ============================================
     // CRITICAL PRIORITY (11+)
     // ============================================

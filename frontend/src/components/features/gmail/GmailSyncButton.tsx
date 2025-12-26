@@ -400,7 +400,7 @@ export function GmailSyncModal({
                     <div>
                       <p className="text-sm font-medium text-yellow-900">Sync is taking longer than expected</p>
                       <p className="text-xs text-yellow-700 mt-1">
-                        The background job hasn't reported progress for 30 seconds. It might be stuck or processing a large batch.
+                        The background job hasn&apos;t reported progress for 30 seconds. It might be stuck or processing a large batch.
                         You can safely close this window; the sync will continue in the background.
                       </p>
                     </div>
@@ -413,16 +413,16 @@ export function GmailSyncModal({
                 <div className="mt-4 border-t border-border-color pt-4">
                   <h3 className="text-sm font-semibold text-primary-text mb-2">Failed Items</h3>
                   <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {progress.errorList.map((err: any, idx: number) => (
+                    {progress.errorList.map((err: unknown, idx: number) => (
                       <div key={idx} className="flex items-center justify-between bg-hover-bg p-2 rounded text-xs">
-                        <span className="truncate flex-1 mr-2 text-red-500" title={err.error}>
-                          {err.error || "Unknown error"}
+                        <span className="truncate flex-1 mr-2 text-red-500" title={(err as unknown as { error?: string }).error}>
+                          {(err as unknown as { error?: string }).error || "Unknown error"}
                         </span>
                         <Button 
                           size="sm" 
                           variant="ghost" 
                           className="h-6 text-[10px]"
-                          onClick={() => setMappingMessageId(err.messageId)}
+                          onClick={() => setMappingMessageId((err as unknown as { messageId: string }).messageId)}
                         >
                           Map Card
                         </Button>

@@ -24,7 +24,7 @@ export function startTokenRefresh(
   refreshTimer = setInterval(async () => {
     try {
       // apiClient handles CSRF token automatically
-      const response = await apiClient.post<{ success: boolean; data: any }>(
+      const response = await apiClient.post<{ success: boolean; data: unknown }>(
         "/api/auth/refresh"
       );
 
@@ -43,7 +43,7 @@ export function startTokenRefresh(
   // Also do an immediate refresh check
   setTimeout(async () => {
     try {
-      const response = await apiClient.post<{ success: boolean; data: any }>(
+      const response = await apiClient.post<{ success: boolean; data: unknown }>(
         "/api/auth/refresh"
       );
 

@@ -40,7 +40,7 @@ export interface CardStatement {
     end: string;
     dueDate: string;
   };
-  transactions: any[]; // We can type this properly later
+  transactions: unknown[]; // We can type this properly later
   summary: {
     totalDebits: number;
     totalCredits: number;
@@ -70,8 +70,8 @@ export const cardApi = {
    * Get card statement for a specific month/year
    */
   getCardStatement: async (
-    cardId: string, 
-    month: number, 
+    cardId: string,
+    month: number,
     year: number
   ): Promise<CardStatement> => {
     return apiGet<{ data: CardStatement }>(

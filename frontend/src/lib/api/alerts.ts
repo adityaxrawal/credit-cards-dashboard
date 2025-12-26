@@ -8,7 +8,7 @@ export interface Alert {
   message: string;
   is_read: boolean;
   priority: "low" | "medium" | "high";
-  metadata?: any;
+  metadata?: unknown;
   created_at: string;
 }
 

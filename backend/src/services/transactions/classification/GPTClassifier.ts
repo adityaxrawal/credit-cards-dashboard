@@ -114,7 +114,7 @@ For each email, return an object in the "results" array:
   "messageId": "string",
   "is_transaction": boolean,
   "reasoning": "string", // rigorous Chain of Thought
-  "type": "string", // One of: cc_spend, cc_upi, bank_debit, bank_credit, bank_upi_debit, bank_upi_credit, refund, unclassified
+  "type": "string", // One of: cc_spend, cc_payment, cc_upi, bank_debit, bank_credit, bank_upi_debit, bank_upi_credit, refund, unclassified
   "confidence": number, // 0-1
   "extracted": {
     "merchant": "string",
@@ -200,6 +200,7 @@ For each email, return an object in the "results" array:
                         // Type Normalization (Fixing hallucinations)
                         let normalizedType = result.type;
                         if (normalizedType === 'cc_debit') normalizedType = 'cc_spend';
+                        // Do NOT normalize cc_payment
                         if (normalizedType === 'bank_transfer') normalizedType = 'bank_debit';
 
                         batch.resolveCallbacks[index]({

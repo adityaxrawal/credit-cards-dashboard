@@ -63,8 +63,9 @@ export default function CardDetailPage() {
       success("Card deleted successfully");
       router.push("/cards");
     },
-    onError: (error: any) => {
-      errorToast(error.response?.data?.message || "Failed to delete card");
+    onError: (error: unknown) => {
+      const err = error as unknown as { response?: { data?: { message?: string } } };
+      errorToast(err.response?.data?.message || "Failed to delete transaction");
     },
   });
 
@@ -78,8 +79,9 @@ export default function CardDetailPage() {
       success("Card updated successfully");
       setShowEditCard(false);
     },
-    onError: (error: any) => {
-      errorToast(error.response?.data?.message || "Failed to update card");
+    onError: (error: unknown) => {
+      const err = error as unknown as { response?: { data?: { message?: string } } };
+      errorToast(err.response?.data?.message || "Failed to update transaction");
     },
   });
 
@@ -93,8 +95,9 @@ export default function CardDetailPage() {
       success("Transaction added successfully");
       setShowAddTransaction(false);
     },
-    onError: (error: any) => {
-      errorToast(error.response?.data?.message || "Failed to add transaction");
+    onError: (error: unknown) => {
+      const err = error as unknown as { response?: { data?: { message?: string } } };
+      errorToast(err.response?.data?.message || "Failed to add transaction");
     },
   });
 
@@ -365,7 +368,7 @@ function TransactionsTab({
 
 // Insights Tab Component
 interface InsightsTabProps {
-  statement?: any; // Replace with proper type
+  statement?: unknown; // Replace with proper type
   isLoading: boolean;
 }
 
@@ -383,7 +386,7 @@ function InsightsTab({
 
     // Transform stats for charts
     // Using statement summary
-    const categoryData: any[] = []; // Statement doesn't have category breakdown yet, would need to aggregate transactions
+    const categoryData: unknown[] = []; // Statement doesn't have category breakdown yet, would need to aggregate transactions
 
     return (
     <div className="space-y-6">
@@ -402,25 +405,25 @@ function InsightsTab({
             <div className="flex justify-between items-center">
               <span className="text-secondary-text">Total Debits</span>
               <span className="font-semibold text-primary-text">
-                {formatCurrency(statement.summary.totalDebits || 0)}
+                {formatCurrency((statement as any)?.summary?.total_spends || 0)}
               </span>
             </div>
              <div className="flex justify-between items-center">
               <span className="text-secondary-text">Total Credits</span>
               <span className="font-semibold text-success">
-                {formatCurrency(statement.summary.totalCredits || 0)}
+                {formatCurrency((statement as any)?.summary?.total_payments || 0)}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-secondary-text">Net Amount</span>
               <span className="font-semibold text-primary-text">
-                {formatCurrency(statement.summary.netAmount || 0)}
+                {formatCurrency((statement as any)?.summary?.min_due || 0)}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-secondary-text">Transaction Count</span>
               <span className="font-semibold text-primary-text">
-                {statement.summary.transactionCount || 0}
+                {(statement as any)?.summary?.transactionCount || 0}
               </span>
             </div>
           </div>

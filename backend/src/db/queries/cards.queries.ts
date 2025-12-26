@@ -12,10 +12,12 @@ export async function getUserCards(userId: string): Promise<Array<Card & { outst
   const { rows } = await pool.query(
     `SELECT c.*, 
       COALESCE((
-        SELECT SUM(t.amount) 
+        SELECT (
+          COALESCE(SUM(CASE WHEN t.direction = 'debit' THEN t.amount ELSE 0 END), 0) -
+          COALESCE(SUM(CASE WHEN t.direction = 'credit' THEN t.amount ELSE 0 END), 0)
+        )
         FROM transactions t 
         WHERE t.card_id = c.id 
-          AND t.transaction_type = 'debit' 
           AND t.is_settled = false
       ), 0) as outstanding_balance
      FROM credit_cards c 
@@ -210,10 +212,12 @@ export async function findCardByLastFour(
  */
 export async function getCardUtilization(cardId: string): Promise<number> {
   const { rows } = await pool.query(
-    `SELECT COALESCE(SUM(amount), 0) as outstanding
+    `SELECT (
+        COALESCE(SUM(CASE WHEN direction = 'debit' THEN amount ELSE 0 END), 0) -
+        COALESCE(SUM(CASE WHEN direction = 'credit' THEN amount ELSE 0 END), 0)
+     ) as outstanding
      FROM transactions
      WHERE card_id = $1 
-       AND transaction_type = 'debit'
        AND is_settled = false`,
     [cardId]
   );

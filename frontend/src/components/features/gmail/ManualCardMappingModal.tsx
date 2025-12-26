@@ -32,9 +32,8 @@ export function ManualCardMappingModal({
       await gmailApi.manualMap(messageId, { bankName, last4 });
       onSuccess();
       onClose();
-    } catch (err: any) {
-      console.error("Manual map failed:", err);
-      setError(err.message || "Failed to map card");
+    } catch (err: unknown) {
+      setError((err as Error).message || "Failed to save mapping");
     } finally {
       setLoading(false);
     }

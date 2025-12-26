@@ -27,23 +27,31 @@ export function initializeWebSocket(httpServer: Server) {
         logger.info(`Client connected: ${socket.id}`);
 
         socket.on('subscribe', (data) => {
-            const { jobId } = data;
-            socket.join(`job-${jobId}`);
-            logger.info(`Client ${socket.id} subscribed to job ${jobId}`);
+            const { jobId, userId } = data;
 
-            // Send current status immediately
-            const job = activeJobs.get(jobId);
-            if (job) {
-                socket.emit('processing_update', {
-                    type: 'processing_update',
-                    payload: {
-                        totalProcessed: job.totalProcessed,
-                        totalEmails: job.totalEmails,
-                        totalTransactions: job.totalTransactions,
-                        totalErrors: job.totalErrors,
-                        queueStatus: job.queueStatus,
-                    },
-                });
+            if (jobId) {
+                socket.join(`job-${jobId}`);
+                logger.info(`Client ${socket.id} subscribed to job ${jobId}`);
+
+                // Send current status immediately
+                const job = activeJobs.get(jobId);
+                if (job) {
+                    socket.emit('processing_update', {
+                        type: 'processing_update',
+                        payload: {
+                            totalProcessed: job.totalProcessed,
+                            totalEmails: job.totalEmails,
+                            totalTransactions: job.totalTransactions,
+                            totalErrors: job.totalErrors,
+                            queueStatus: job.queueStatus,
+                        },
+                    });
+                }
+            }
+
+            if (userId) {
+                socket.join(`user-${userId}`);
+                logger.info(`Client ${socket.id} subscribed to user ${userId}`);
             }
         });
 
@@ -53,6 +61,20 @@ export function initializeWebSocket(httpServer: Server) {
     });
 
     return io;
+}
+
+/**
+ * Send alert to specific user
+ */
+export function sendUserAlert(userId: string, alert: any) {
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const io = (global as any).ioServer;
+    if (!io) return;
+
+    io.to(`user-${userId}`).emit('new_alert', {
+        type: 'new_alert',
+        payload: alert
+    });
 }
 
 /**

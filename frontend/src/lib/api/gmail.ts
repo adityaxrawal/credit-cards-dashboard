@@ -17,7 +17,7 @@ export interface ScanStatus {
   progress?: number;
   inserted?: number;
   errors?: number;
-  errorList?: any[];
+  errorList?: unknown[];
   startedAt?: string;
   completedAt?: string;
   errorMessage?: string;
@@ -64,7 +64,7 @@ export const gmailApi = {
       }
     );
     // Backend returns { data: { jobId, status, ... } }
-    return response.data || response as any;
+    return response.data || response as unknown as { jobId: string; status: string };
   },
 
   /**
@@ -72,7 +72,7 @@ export const gmailApi = {
    */
   getScanStatus: async (jobId: string): Promise<ScanStatus> => {
     const response = await apiGet<{ data: ScanStatus }>(`/api/gmail/jobs/${jobId}`);
-    return response.data || response as any;
+    return response.data || response as unknown as ScanStatus;
   },
 
   /**
@@ -95,8 +95,8 @@ export const gmailApi = {
   /**
    * Trigger manual Gmail sync
    */
-  syncGmail: async (): Promise<any> => {
-    return apiPost<any>("/api/gmail/sync");
+  syncGmail: async (): Promise<unknown> => {
+    return apiPost<unknown>("/api/gmail/sync");
   },
 
   /**

@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { MoreHorizontal, Eye, Edit2, Mail, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui";
-import { cn } from "@/lib/utils";
 
 interface TransactionActionsProps {
   onViewDetails: () => void;
@@ -32,16 +31,18 @@ export function TransactionActions({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const toggleMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsOpen(!isOpen);
+  };
+
   return (
     <div className="relative" ref={menuRef}>
       <Button
         variant="ghost"
         size="icon"
         className="h-8 w-8"
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsOpen(!isOpen);
-        }}
+        onClick={toggleMenu}
       >
         <MoreHorizontal className="h-4 w-4" />
       </Button>

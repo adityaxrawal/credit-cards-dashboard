@@ -17,6 +17,9 @@ interface Alert {
   card_name?: string;
 }
 
+import { io, Socket } from "socket.io-client";
+import { useAuth } from "@/lib/auth/AuthContext";
+import { useQueryClient } from "@tanstack/react-query";
 import { rewardsApi } from "@/lib/api/rewards";
 import { gmailApi } from "@/lib/api/gmail";
 
@@ -24,8 +27,35 @@ import { gmailApi } from "@/lib/api/gmail";
 
 export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
 
-  // Fetch unread count
+  // Socket Connection for Real-time Alerts
+  React.useEffect(() => {
+    if (!user?.id) return;
+
+    const socket: Socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000', {
+      transports: ['websocket'],
+    });
+
+    socket.on('connect', () => {
+      console.log('Connected to WebSocket');
+      socket.emit('subscribe', { userId: user.id });
+    });
+
+    socket.on('new_alert', (data) => {
+      console.log('New Alert Received:', data);
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ["notifications-unread-count"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-alerts"] });
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user?.id, queryClient]);
+
+  // Fetch unread count (Initial fetch, no polling)
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ["notifications-unread-count"],
     queryFn: async () => {
@@ -34,7 +64,7 @@ export function NotificationBell() {
       );
       return data.data?.total || 0;
     },
-    refetchInterval: 60000,
+    // refetchInterval: 60000, // Removed Polling
   });
 
   // Fetch Rewards Summary for Alerts

@@ -6,7 +6,6 @@ import {
   Filter as FilterIcon,
   X,
   Upload,
-  Download,
   AlertTriangle,
   Brain,
   Zap,
@@ -85,7 +84,7 @@ export default function TransactionsPage() {
     key: string;
     direction: "asc" | "desc";
   } | null>(null);
-  const [sortScope, setSortScope] = useState<"page" | "all">("page");
+  const [sortScope] = useState<"page" | "all">("page");
 
   // Build filters object
   const appliedFilters = useMemo(() => {
@@ -103,7 +102,7 @@ export default function TransactionsPage() {
     else if (activeTab === "income") f.transactionType = "credit"; 
     else if (activeTab === "bills") f.transactionType = "bill_payment";
     else if (activeTab === "review") {
-        (f as any).needsReview = true;
+        (f as unknown as { needsReview: boolean }).needsReview = true;
     }
 
     // Apply backend sorting if scope is 'all'
@@ -121,13 +120,12 @@ export default function TransactionsPage() {
     isLoading,
     error: fetchError,
   } = useQuery({
-    queryKey: queryKeys.transactions.list(appliedFilters),
+    queryKey: queryKeys.transactions.list(appliedFilters as unknown as Record<string, unknown>),
     queryFn: () => transactionApi.getTransactions(appliedFilters),
   });
 
-  const transactions = transactionsResponse?.data || [];
+  const transactions = useMemo(() => transactionsResponse?.data || [], [transactionsResponse]);
   const pagination = transactionsResponse?.pagination;
-  const aggregations = transactionsResponse?.aggregations;
 
   // Create mutation
   const createMutation = useMutation({
@@ -143,7 +141,8 @@ export default function TransactionsPage() {
       setEditingTransaction(null);
     },
     onError: (error: Error) => {
-      errorToast((error as any)?.response?.data?.message || "Failed to add transaction");
+      const err = error as unknown as { response?: { data?: { message?: string } } };
+      errorToast(err.response?.data?.message || "Failed to add transaction");
     },
   });
 
@@ -165,8 +164,9 @@ export default function TransactionsPage() {
       setEditingTransaction(null);
     },
     onError: (error: Error) => {
+      const err = error as unknown as { response?: { data?: { message?: string } } };
       errorToast(
-        (error as any)?.response?.data?.message || "Failed to update transaction"
+        err.response?.data?.message || "Failed to update transaction"
       );
     },
   });
@@ -182,8 +182,9 @@ export default function TransactionsPage() {
       success("Transaction deleted successfully");
     },
     onError: (error: Error) => {
+      const err = error as unknown as { response?: { data?: { message?: string } } };
       errorToast(
-        (error as any)?.response?.data?.message || "Failed to delete transaction"
+        err.response?.data?.message || "Failed to delete transaction"
       );
     },
   });
@@ -260,8 +261,8 @@ export default function TransactionsPage() {
     if (!sortConfig) return transactions;
     
     const sorted = [...transactions].sort((a, b) => {
-      let aValue: any = a[sortConfig.key as keyof Transaction];
-      let bValue: any = b[sortConfig.key as keyof Transaction];
+      let aValue: string | number = a[sortConfig.key as keyof Transaction] as string | number;
+      let bValue: string | number = b[sortConfig.key as keyof Transaction] as string | number;
       
       if (sortConfig.key === "transaction_date") {
         aValue = new Date(aValue).getTime();

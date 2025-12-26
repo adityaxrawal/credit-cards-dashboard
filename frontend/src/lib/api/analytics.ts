@@ -57,7 +57,7 @@ export const analyticsApi = {
     // `apiGet` in client.ts returned `data.data` if available.
     // `apiClient` in api-client.ts also returns `data.data` if available.
     // So the signature of `get` is `Promise<DashboardOverview>`.
-    return response as any as DashboardOverview;
+    return response as unknown as DashboardOverview;
   },
 
   /**
@@ -67,12 +67,12 @@ export const analyticsApi = {
     month?: number,
     year?: number
   ): Promise<CategoryBreakdown> => {
-    const params: Record<string, any> = {};
+    const params: Record<string, unknown> = {};
     if (month) params.month = month;
     if (year) params.year = year;
 
     const response = await apiClient.get<CategoryBreakdown>("/api/analytics/categories", params);
-    return response as any as CategoryBreakdown;
+    return response as unknown as CategoryBreakdown;
   },
 
   /**
@@ -82,7 +82,7 @@ export const analyticsApi = {
     range: "6m" | "12m" = "6m"
   ): Promise<SpendingTrendItem[]> => {
     const response = await apiClient.get<SpendingTrendItem[]>(`/api/analytics/trends`, { range });
-    return response as any as SpendingTrendItem[];
+    return response as unknown as SpendingTrendItem[];
   },
 
   /**
@@ -93,12 +93,12 @@ export const analyticsApi = {
     year?: number,
     limit: number = 10
   ): Promise<{ month: number; year: number; merchants: TopMerchant[] }> => {
-    const params: Record<string, any> = { limit };
+    const params: Record<string, unknown> = { limit };
     if (month) params.month = month;
     if (year) params.year = year;
 
     const response = await apiClient.get<{ month: number; year: number; merchants: TopMerchant[] }>("/api/analytics/merchants", params);
-    return response as any as { month: number; year: number; merchants: TopMerchant[] };
+    return response as unknown as { month: number; year: number; merchants: TopMerchant[] };
   },
 
   async getSpendingReport(fromDate: Date, toDate: Date): Promise<SpendingReport> {
@@ -107,17 +107,17 @@ export const analyticsApi = {
       endDate: toDate.toISOString()
     };
     const response = await apiClient.get<SpendingReport>("/api/reports/spending", params);
-    return response as any as SpendingReport;
+    return response as unknown as SpendingReport;
   },
 
   async getCategoryReport(month: number, year: number): Promise<CategoryReport[]> {
     const response = await apiClient.get<CategoryReport[]>(`/api/reports/category`, { month, year });
-    return response as any as CategoryReport[];
+    return response as unknown as CategoryReport[];
   },
 
   async getMonthlyReport(year: number): Promise<MonthlyReport[]> {
     const response = await apiClient.get<MonthlyReport[]>(`/api/reports/monthly`, { year });
-    return response as any as MonthlyReport[];
+    return response as unknown as MonthlyReport[];
   },
 
   async exportData(format: 'csv' | 'pdf'): Promise<Blob> {
