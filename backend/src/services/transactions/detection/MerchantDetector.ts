@@ -1,5 +1,6 @@
 import logger from '../../../utils/infrastructure/logger';
 import { BANK_PATTERNS, isKnownBankSender } from '../../../data/transaction-patterns';
+import { normalizeMerchant } from '../../../utils/merchants/merchantNormalizer';
 
 /**
  * Merchant category codes for common merchant types
@@ -111,30 +112,74 @@ export class MerchantDetector {
     }
 
     /**
+     * Common generic terms that are NOT merchants
+     */
+    private static GENERIC_TERMS = new Set([
+        'UPI', 'PAYMENT', 'TRANSACTION', 'BANK', 'CREDIT CARD', 'DEBIT CARD',
+        'ACCOUNT', 'IMPS', 'NEFT', 'RTGS', 'WIRE', 'TRANSFER', 'MONEY',
+        'CASH', 'ATM', 'WITHDRAWAL', 'DEPOSIT', 'REFUND', 'SENT', 'RECEIVED'
+    ]);
+
+    /**
      * Extract merchant from email text using patterns
      */
     private static extractFromText(text: string): MerchantResult | null {
         const lowerText = text.toLowerCase();
 
-        // Pattern 1: "at <Merchant>" or "from <Merchant>"
-        const atFromPatterns = [
+        // Pattern 1: "at <Merchant>" or "from <Merchant>" - Enhanced
+        const patterns = [
             /(?:at|from|via|to|with)\s+([A-Z][A-Za-z0-9\s&'.-]{2,40})(?:\s+for|\s+of|\s+on|\.|,|$)/g,
             /(?:purchase|payment|order|transaction)\s+(?:at|from|with)\s+([A-Z][A-Za-z0-9\s&'.-]{2,40})/gi,
             /(?:paid|sent|transferred)\s+(?:to|at)\s+([A-Z][A-Za-z0-9\s&'.-]{2,40})/gi,
+            /(?:spent|spend)\s+(?:on|at)\s+([A-Z][A-Za-z0-9\s&'.-]{2,40})/gi,
+            /(?:paid)\s+([A-Z][A-Za-z0-9\s&'.-]{2,40})/gi,
         ];
 
-        for (const pattern of atFromPatterns) {
-            const match = pattern.exec(text);
-            if (match) {
-                const merchantName = match[1].trim();
-                if (this.isValidMerchantName(merchantName)) {
+        for (const pattern of patterns) {
+            let match;
+            while ((match = pattern.exec(text)) !== null) {
+                const rawName = match[1].trim();
+
+                if (this.isValidMerchantName(rawName)) {
+                    const normalized = normalizeMerchant(rawName);
+
+                    // If it's a known generic term, treat as low confidence or ignore
+                    const upperRaw = rawName.toUpperCase();
+                    const firstWord = upperRaw.split(' ')[0];
+
+                    if (this.GENERIC_TERMS.has(normalized) ||
+                        this.GENERIC_TERMS.has(upperRaw) ||
+                        this.GENERIC_TERMS.has(firstWord)) {
+                        return {
+                            merchantName: rawName,
+                            category: 'Others',
+                            confidence: 0.2, // Very low confidence, prefer GPT
+                            source: 'text_pattern'
+                        };
+                    }
+
                     // Check if this matches a known merchant
-                    const knownMatch = this.matchKnownMerchant(merchantName);
+                    const knownMatch = this.matchKnownMerchant(normalized);
                     if (knownMatch) {
                         return { ...knownMatch, source: 'text_pattern' };
                     }
+
+                    // If normalization changed it significantly (it found a match in DB), trust it more
+                    if (normalized !== 'UNKNOWN' && normalized !== rawName.toUpperCase()) {
+                        // We can try to look up the category for the normalized name if we had access to the full map here,
+                        // but matchKnownMerchant should have covered it if it was in MERCHANT_CATEGORIES.
+                        // If normalizeMerchant found it but it wasn't in MERCHANT_CATEGORIES (rare but possible if maps differ),
+                        // we return the normalized name.
+                        return {
+                            merchantName: this.titleCase(normalized),
+                            category: 'Others',
+                            confidence: 0.8,
+                            source: 'text_pattern'
+                        };
+                    }
+
                     return {
-                        merchantName: merchantName,
+                        merchantName: rawName,
                         category: 'Others',
                         confidence: 0.7,
                         source: 'text_pattern'
