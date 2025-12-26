@@ -9,7 +9,7 @@ export { default as HistoricalScanProgress } from './gmail/HistoricalScanProgres
 export { default as ManualReviewQueue } from './gmail/ManualReviewQueue';
 
 // Dashboard Features
-export { KPICards } from './dashboard/KPICards';
+
 export { SpendingTrendChart } from './dashboard/SpendingTrendChart';
 export { TransactionsPreview } from './dashboard/TransactionsPreview';
 export { CardsPreview } from './dashboard/CardsPreview';

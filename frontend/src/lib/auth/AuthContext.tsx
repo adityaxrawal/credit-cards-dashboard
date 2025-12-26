@@ -93,11 +93,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function checkAuth() {
     try {
       console.log("📡 Making /api/auth/me request");
-      // @ts-ignore - The response type might be inconsistent (wrapped vs unwrapped)
+      // @ts-expect-error - The response type might be inconsistent (wrapped vs unwrapped)
       const response = await apiClient.get<User | ApiResponse<User>>("/api/auth/me");
 
       // Handle both wrapped ApiResponse and direct User object
-      // @ts-ignore
+
       const userData = response.data || response;
 
       if (userData && userData.id && userData.email) {

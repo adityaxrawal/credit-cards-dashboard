@@ -21,7 +21,7 @@ export * from './feedback/ProgressBar';
 
 // Data display components (from subdirectory)
 export * from './data-display/DataTable';
-export * from './data-display/StatCard';
+
 export * from './data-display/CardVisual';
 
 // Form components (from subdirectory)
@@ -33,4 +33,4 @@ export * from './forms/switch';
 export * from './data-display/tabs';
 
 // Feedback components
-export * from './feedback/progress';
+

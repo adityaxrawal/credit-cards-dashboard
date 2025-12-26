@@ -11,13 +11,12 @@ import {
   BarChart3,
   Settings,
   User,
-  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigationItems = [
   { icon: LayoutDashboard, href: "/dashboard", label: "Dashboard" },
-  { icon: Building2, href: "/dashboard/instruments", label: "Instruments" },
+
   { icon: CreditCard, href: "/cards", label: "Cards" },
   { icon: ArrowRightLeft, href: "/transactions", label: "Transactions" },
   { icon: Receipt, href: "/bills", label: "Bills" },

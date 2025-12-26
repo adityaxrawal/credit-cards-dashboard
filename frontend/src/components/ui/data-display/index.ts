@@ -3,5 +3,5 @@
  */
 
 export * from './DataTable';
-export * from './StatCard';
+
 export * from './CardVisual';

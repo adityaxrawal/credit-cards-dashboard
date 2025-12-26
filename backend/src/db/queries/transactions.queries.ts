@@ -1,59 +1,6 @@
 import pool from '../../lib/db';
 
-export interface Transaction {
-  id: string;
-  user_id: string;
-  card_id: string;
-  transaction_date: Date;
-  merchant: string;
-  category: string;
-  amount: number;
-  transaction_type: string;
-  description: string | null;
-  bill_month: number | null;
-  bill_year: number | null;
-  is_settled: boolean;
-  email_message_id: string | null;
-  is_manually_added: boolean;
-  metadata: any;
-  created_at: Date;
-  updated_at: Date;
-  exact_timestamp?: Date;
-  email_subject?: string;
-  gmail_thread_id?: string;
-  gmail_account_index?: number;
-  currency_code?: string;
-  original_amount?: number;
-  reference_number?: string;
-  transaction_subtype?: string;
-  direction?: string;
-  instrument_type?: string;
-  instrument_id?: string;
-  classification_method?: string;
-  confidence_score?: number;
-  needs_review?: boolean;
-  review_reason?: string;
-  counterparty_name?: string;
-  counterparty_identifier?: string;
-}
-
-export interface TransactionFilters {
-  cardId?: string;
-  instrumentType?: string;
-  instrumentId?: string;
-  direction?: string;
-  from?: Date;
-  to?: Date;
-  billMonth?: number;
-  billYear?: number;
-  category?: string;
-  transactionType?: string;
-  merchant?: string;
-  limit?: number;
-  offset?: number;
-  needsReview?: boolean;
-  search?: string;
-}
+import { Transaction, TransactionFilters } from '../../types/transaction.types';
 
 /**
  * Get pending review transactions

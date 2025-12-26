@@ -82,15 +82,6 @@ pool.on('error', (err, client) => {
   // Don't exit process - pool will automatically reconnect
 });
 
-// Handle pool connect events - SILENCED to reduce noise
-// pool.on('connect', (client) => {
-//   logger.debug('[DB Pool] New client connected');
-// });
-
-// pool.on('remove', (client) => {
-//   logger.debug('[DB Pool] Client removed from pool');
-// });
-
 export const query = async (text: string, params?: any[]) => {
   const start = Date.now();
   try {
