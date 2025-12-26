@@ -34,6 +34,25 @@ export class EnhancedRuleClassifier {
     private static readonly BANK_SENDER_BONUS = 0.15;
 
     /**
+     * Check if email matches any exclusion patterns (High Priority)
+     */
+    static checkExclusions(cleanEmail: CleanEmail): { isExcluded: boolean; matchedPattern?: string } {
+        const fullText = `${cleanEmail.subject} ${cleanEmail.cleanedBody}`.toLowerCase();
+
+        // Check explicitly defined exclusions in patterns (like OTP_EXCLUSION)
+        for (const [category, pattern] of Object.entries(TRANSACTION_PATTERNS)) {
+            if (pattern.isTransaction === false && pattern.transactionType === 'non_financial') {
+                // This is a rejection group
+                const result = this.scorePattern(category, pattern, fullText);
+                if (result && result.score > 0.8) {
+                    return { isExcluded: true, matchedPattern: category };
+                }
+            }
+        }
+        return { isExcluded: false };
+    }
+
+    /**
      * Classify an email using rule-based pattern matching
      */
     static classify(cleanEmail: CleanEmail): EnhancedClassificationResult | null {
@@ -141,13 +160,13 @@ export class EnhancedRuleClassifier {
         }
 
         // Calculate final score
-        // Formula: (matched_keywords / total_keywords) * (matched_weight / matched_count) * (priority / 10)
-        const keywordRatio = matchedCount / pattern.keywords.length;
+        // Fixed Formula: (matched_weight / matched_count) * (priority / 10)
+        // We do NOT divide by totalKeywords because patterns in a group are often alternatives (OR), not cumulative requirements (AND).
         const avgWeight = matchedWeight / matchedCount;
         const priorityFactor = pattern.priority / 10;
 
-        // Base score combines all factors
-        let score = keywordRatio * avgWeight * priorityFactor;
+        // Base score
+        let score = avgWeight * priorityFactor;
 
         // Boost score if multiple keywords matched (more reliable)
         if (matchedCount >= 2) {
@@ -209,7 +228,7 @@ export class EnhancedRuleClassifier {
         const rejectionPatterns = [
             /unsubscribe|email\s+preferences/i,
             /newsletter|blog|news\s+update/i,
-            /otp|verification\s+code|one[- ]?time\s+password/i,
+            // /otp|verification\s+code|one[- ]?time\s+password/i, // Removed: Causes false negatives when found in footers
             /password\s+reset|confirm.*(?:email|account)/i,
         ];
 

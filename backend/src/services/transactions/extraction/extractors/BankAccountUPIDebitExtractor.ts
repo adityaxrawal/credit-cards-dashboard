@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
 import { InstrumentService } from '../../../cards/instruments/InstrumentService';
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
@@ -20,9 +21,13 @@ export class BankAccountUPIDebitExtractor {
             if (account) instrumentId = account.id;
         }
 
-        const fingerprint = crypto.createHash('sha256')
-            .update(`${email.id}-${date.toISOString()}-${amount}-${recipientUPI}`)
-            .digest('hex');
+        const fingerprint = TransactionDeduplicator.generateFingerprint({
+            amount,
+            merchant: recipientUPI || 'UPI Merchant',
+            date: date,
+            cardLastFour: accountLast4 || undefined,
+            direction: TransactionDirection.DEBIT
+        });
 
         // Try to find a merchant name in the text if UPI handle is generic
         const merchant = this.extractMerchant(combined) || recipientUPI || 'UPI Merchant';

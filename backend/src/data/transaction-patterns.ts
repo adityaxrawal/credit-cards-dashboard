@@ -27,14 +27,47 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
     // HIGH PRIORITY TRANSACTION PATTERNS (8-10)
     // ============================================
 
+    // ============================================
+    // CRITICAL PRIORITY (11+)
+    // ============================================
+
+    BILL_REMINDER: {
+        priority: 11,
+        isTransaction: false,
+        keywords: [
+            { pattern: /(?:bill|payment|amount)\s+(?:due|overdue|outstanding)/i, weight: 1.0 },
+            { pattern: /total\s+(?:amount)?\s+due.*[₹Rs.INR]*/i, weight: 0.95 },
+            { pattern: /statement\s+(?:generated|available)/i, weight: 0.95 },
+            { pattern: /pay\s+by\s+(?:date|time)/i, weight: 0.9 },
+        ],
+        excludePatterns: [
+            /(?:payment|txn|transaction)\s+(?:successful|confirmed|received|processed)/i,
+            /thank\s+you\s+for\s+(?:making|your)\s+payment/i
+        ]
+    },
+
+    OTP_EXCLUSION: {
+        priority: 100, // Highest priority
+        isTransaction: false,
+        transactionType: 'non_financial',
+        keywords: [
+            { pattern: /otp\s+is\s+|verification\s+code|one\s+time\s+password/i, weight: 1.0 },
+            { pattern: /authori[zs]e\s+payment|authenticate\s+transaction/i, weight: 0.95 },
+            { pattern: /do\s+not\s+share\s+this\s+code/i, weight: 0.9 },
+            { pattern: /login\s+alert|new\s+device\s+detected/i, weight: 0.9 }
+        ]
+    },
+
     PAYMENT_CONFIRMATION: {
         priority: 10,
         isTransaction: true,
         transactionType: 'cc_spend',
         direction: 'debit',
         keywords: [
-            { pattern: /your\s+(?:payment|transaction)\s+(?:of|for)?\s*[₹Rs.INR]*\s*[\d,]+/i, weight: 1.0 },
-            { pattern: /(?:payment|txn|transaction)\s+(?:successful|confirmed|processed|approved|completed)/i, weight: 0.95 },
+            // Strict: "Transaction of Rs 500" - Must have currency or be very clear
+            { pattern: /your\s+(?:payment|transaction)\s+(?:of|for)?\s*[₹Rs.INR]+[\s.]*[\d,]+(?:\.\d{2})?/i, weight: 1.0 },
+            // Strict: Lookahead to ensure it's not a request
+            { pattern: /(?:payment|txn|transaction)\s+(?:was\s+)?(?:successful|approved|processed)(?!.*otp)/i, weight: 0.95 },
             { pattern: /amount\s+[₹Rs.INR]*\s*[\d,]+\.?\d*\s+(?:debited|charged|deducted)/i, weight: 0.95 },
             { pattern: /spent\s+[₹Rs.INR]*\s*[\d,]+/i, weight: 0.9 },
             { pattern: /purchase\s+(?:of|for)?\s*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.9 },
@@ -43,6 +76,7 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
         excludePatterns: [
             /promotion|offer|discount|coupon|deal|bonus|apply\s+(?:for|now)/i,
             /otp|verification|confirm.*(?:email|identity|account)/i,
+            /request\s+received/i // "We received your request for transaction..."
         ],
     },
 
@@ -184,15 +218,8 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
     // LOW PRIORITY / REJECTION PATTERNS (1-4)
     // ============================================
 
-    OTP_SECURITY: {
-        priority: 2,
-        isTransaction: false,
-        keywords: [
-            { pattern: /otp|one[- ]?time\s+password|verification\s+code/i, weight: 1.0 },
-            { pattern: /do\s+not\s+share.*(?:otp|code|password)/i, weight: 0.95 },
-            { pattern: /(?:2fa|two[- ]?factor)\s+(?:code|authentication)/i, weight: 0.9 },
-        ],
-    },
+    // OTP_SECURITY moved to top as OTP_EXCLUSION with high priority
+
 
     PROMOTIONAL: {
         priority: 1,

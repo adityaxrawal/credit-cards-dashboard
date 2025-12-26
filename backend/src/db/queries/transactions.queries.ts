@@ -324,7 +324,13 @@ export async function createTransaction(data: {
       data.scanJobId || null,
       data.rawEmailId || null
     ]
-  );
+  ).catch(err => {
+    // 23505 is Unique Violation (for logical_fingerprint)
+    if (err.code === '23505') {
+      return { rows: [] };
+    }
+    throw err;
+  });
   return rows[0] || null;
 }
 

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
 import { InstrumentService } from '../../../cards/instruments/InstrumentService';
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
@@ -20,9 +21,13 @@ export class BankAccountDebitExtractor {
             if (account) instrumentId = account.id;
         }
 
-        const fingerprint = crypto.createHash('sha256')
-            .update(`${email.id}-${date.toISOString()}-${amount}-${recipient}`)
-            .digest('hex');
+        const fingerprint = TransactionDeduplicator.generateFingerprint({
+            amount,
+            merchant: recipient,
+            date: date,
+            cardLastFour: accountLast4 || undefined,
+            direction: TransactionDirection.DEBIT
+        });
 
         return {
             type: TransactionType.BANK_DEBIT,

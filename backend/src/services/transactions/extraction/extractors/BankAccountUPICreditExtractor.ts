@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
 import { InstrumentService } from '../../../cards/instruments/InstrumentService';
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
@@ -19,9 +20,13 @@ export class BankAccountUPICreditExtractor {
             if (account) instrumentId = account.id;
         }
 
-        const fingerprint = crypto.createHash('sha256')
-            .update(`${email.id}-${date.toISOString()}-${amount}-${senderUPI}`)
-            .digest('hex');
+        const fingerprint = TransactionDeduplicator.generateFingerprint({
+            amount,
+            merchant: senderUPI || 'UPI Sender',
+            date: date,
+            cardLastFour: accountLast4 || undefined,
+            direction: TransactionDirection.CREDIT
+        });
 
         return {
             type: TransactionType.BANK_ACCOUNT_UPI_CREDIT,

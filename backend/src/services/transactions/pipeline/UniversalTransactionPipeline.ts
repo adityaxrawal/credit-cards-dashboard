@@ -91,6 +91,22 @@ export class UniversalTransactionPipeline {
                 return { status: 'terminated', reason: 'non_financial' };
             }
 
+            // NEW: Exclusion Layer (Stage 2.5)
+            const exclusionCheck = this.deps.enhancedClassifier.checkExclusions(cleanEmail);
+            if (exclusionCheck.isExcluded) {
+                await this.deps.terminator.terminate(
+                    userId,
+                    cleanEmail.id,
+                    `Excluded by pattern: ${exclusionCheck.matchedPattern}`,
+                    'stage_2_exclusion',
+                    'NON_FINANCIAL',
+                    jobId,
+                    rawEmailId
+                );
+                logger.info(`<<< [PIPELINE END] ${rawEmail.messageId} - Terminated (Excluded: ${exclusionCheck.matchedPattern})`);
+                return { status: 'terminated', reason: 'exclusion_match' };
+            }
+
             // ========================================
             // STAGE 4: CLASSIFY TYPE (What kind?)
             // ========================================
@@ -99,60 +115,61 @@ export class UniversalTransactionPipeline {
             let classificationMethod = 'rule_based';
             let classificationStage = 'stage_4_rule_based';
 
-            // STEP 1: Try Enhanced Rule Classifier first (highest accuracy)
+            // STEP 1: Try Enhanced Rule Classifier
             try {
                 const enhancedResult = this.deps.enhancedClassifier.classify(cleanEmail);
-                if (enhancedResult && enhancedResult.confidence >= 0.7 && enhancedResult.type !== 'non_financial') {
-                    classificationResult = enhancedResult;
-                    classificationMethod = 'enhanced_rule';
-                    logger.info(`[Pipeline] Enhanced Rule Match: ${enhancedResult.type} (${enhancedResult.confidence.toFixed(2)})`);
-                } else if (enhancedResult && enhancedResult.type === 'non_financial') {
-                    // Enhanced classifier determined this is not a transaction
-                    await this.deps.terminator.terminate(
-                        userId,
-                        cleanEmail.id,
-                        `Enhanced classifier: non-financial (${enhancedResult.metadata?.pattern})`,
-                        'stage_4_enhanced_rule',
-                        'NON_FINANCIAL',
-                        jobId,
-                        rawEmailId
-                    );
-                    logger.info(`<<< [PIPELINE END] ${rawEmail.messageId} - Terminated (Non-Financial by Enhanced Rule)`);
-                    return { status: 'terminated', reason: 'non_financial' };
+                if (enhancedResult) {
+                    if (enhancedResult.confidence >= 0.85 && enhancedResult.type !== 'non_financial') {
+                        // High confidence rule match
+                        classificationResult = enhancedResult;
+                        classificationMethod = 'enhanced_rule';
+                        logger.info(`[Pipeline] Enhanced Rule Match: ${enhancedResult.type} (${enhancedResult.confidence.toFixed(2)})`);
+                    } else if (enhancedResult.type === 'non_financial') {
+                        // Explicit non-financial match
+                        await this.deps.terminator.terminate(
+                            userId,
+                            cleanEmail.id,
+                            `Enhanced classifier: non-financial (${enhancedResult.metadata?.pattern})`,
+                            'stage_4_enhanced_rule',
+                            'NON_FINANCIAL',
+                            jobId,
+                            rawEmailId
+                        );
+                        return { status: 'terminated', reason: 'non_financial' };
+                    }
                 }
             } catch (error) {
                 logger.warn('[Pipeline] EnhancedRuleClassifier failed:', error);
             }
 
-            // STEP 2: Try each registered deterministic classifier
-            if (!classificationResult) {
-                const classifiers = this.deps.classifierRegistry.getClassifiers();
-                for (const Classifier of classifiers) {
-                    try {
-                        const result = await Classifier.classify(userId, cleanEmail);
-                        if (result && result.confidence >= 0.75) {
-                            classificationResult = result;
-                            logger.info(`[Pipeline] Registry Match: ${result.type} (${result.confidence.toFixed(2)})`);
-                            break;
-                        }
-                    } catch (error) {
-                        logger.warn(`[Pipeline] Classifier ${Classifier.name} failed:`, error);
-                        continue;
+            // STEP 2: GPT Fallback with strict checks
+            const isLowConfidence = !classificationResult || (classificationResult.confidence < 0.85);
+
+            if (isLowConfidence) {
+                logger.info(`[Pipeline] Low confidence/No rule match, attempting GPT classification...`);
+                const gptResult = await this.classifyWithGPT(userId, cleanEmail);
+
+                if (gptResult) {
+                    // Result Merging Strategy
+                    // If we had a weak rule match, we might want to combine insights
+                    if (classificationResult && classificationResult.type === gptResult.type) {
+                        // Same type, boost confidence?
+                        // For now, trust GPT if confidence is decent
+                        classificationResult = gptResult;
+                        classificationMethod = 'gpt';
+                    } else if (gptResult.confidence > 0.7) {
+                        // GPT found something significant
+                        classificationResult = gptResult;
+                        classificationMethod = 'gpt';
                     }
                 }
-            }
 
-            // If no high-confidence rule, try GPT
-            if (!classificationResult || classificationResult.confidence < 0.75) {
-                logger.info(`[Pipeline] No rule match, attempting GPT classification...`);
-                classificationResult = await this.classifyWithGPT(userId, cleanEmail);
-                classificationMethod = 'gpt';
                 classificationStage = 'stage_4_gpt_fallback';
             }
             logger.info(`[Pipeline] Stage 4 (Classify) took ${Date.now() - s4Start}ms via ${classificationMethod}`);
 
-            // If still low confidence, mark for review
-            if (!classificationResult || classificationResult.confidence < 0.50) {
+            // If verification failed or confidence is low, set needs_review
+            if (!classificationResult || classificationResult.confidence < 0.75) {
                 logger.warn(`[Pipeline] Low confidence (${classificationResult?.confidence || 0}), marking for review`);
                 await this.deps.terminator.terminate(
                     userId,

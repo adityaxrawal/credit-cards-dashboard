@@ -83,26 +83,33 @@ export class GPTClassifier {
 
             // 1. Prepare Prompt
             const emailTexts = batch.emails
-                .map((e, i) => `Email ${i + 1} (ID: ${e.messageId}):\nSubject: ${e.email.subject}\nFrom: ${e.email.from}\nBody: ${e.email.cleanedBody.substring(0, 1000)}`) // Truncate body
+                .map((e, i) => `Email ${i + 1} (ID: ${e.messageId}):\nSubject: ${e.email.subject}\nFrom: ${e.email.from}\nBody: ${e.email.cleanedBody.substring(0, 1500)}`) // Truncate body
                 .join('\n---\n');
 
-            const systemPrompt = `You are a financial transaction classifier. For each email, determine:
-1. Transaction type (strictly one of: cc_spend, cc_upi, bank_credit, bank_debit, bank_upi_debit, bank_upi_credit, salary, refund, chargeback, statement_txn, unclassified). 
-   - Use 'unclassified' ONLY if the email is financial but does not fit any other type. 
-   - For non-financial emails, if they reached here, still try to find the closest financial type or use 'unclassified'.
-   - Do not invent new types like 'cc_debit'.
-2. Confidence (0-1 scale)
-3. Extracted fields (amount, merchant, date, etc.). Merchant should be the actual vendor name, not phrases like "help you" or "thank you".
+            const systemPrompt = `You are a precision financial auditor. Your task is to extract ONE transaction event from the email text.
 
-Context:
-User Instruments: ${JSON.stringify(instruments.map(i => ({ type: i.instrument_type, bank: i.bank_name, last4: i.account_number_masked })))}
+CRITICAL RULES:
+1. IGNORE "Available Balance", "Credit Limit", or "Outstanding Due". These are NOT the transaction amount.
+2. IGNORE OTPs, Login Alerts, or Marketing. Return "is_transaction": false.
+3. If the email contains multiple transactions (e.g. a statement), extract the most recent one only.
+4. Merchant Name: Extract the CLEAN merchant name (e.g., "Uber" instead of "Uber India Tech Pvt Ltd").
+5. Amount: Must be a number. Ignore commas.
 
-Return a JSON object with a key "results" which is an array of objects corresponding to the emails in order.
-Each result object must have:
-- messageId (from input)
-- type
-- confidence
-- extracted (object with amount, merchant, etc.)
+OUTPUT FORMAT (JSON):
+For each email, return an object in the "results" array:
+{
+  "messageId": "string",
+  "is_transaction": boolean,
+  "reasoning": "string", // Explain why this is/is not a transaction (Chain of Thought)
+  "type": "string", // One of: cc_spend, cc_upi, bank_debit, bank_credit, bank_upi_debit, bank_upi_credit, refund, unclassified
+  "confidence": number, // 0-1
+  "extracted": {
+    "merchant": "string",
+    "amount": number,
+    "currency": "INR", // or USD
+    "date": "YYYY-MM-DD"
+  }
+}
 `;
 
             const userPrompt = `Classify these ${batch.emails.length} emails:\n\n${emailTexts}`;
@@ -124,13 +131,26 @@ Each result object must have:
             const content = response.choices[0].message.content;
             if (!content) throw new Error('Empty GPT response');
 
-            const parsed = JSON.parse(content);
-            const results = parsed.results as Array<{ messageId: string; type: any; confidence: number; extracted: any }>;
+            let parsed: any;
+            try {
+                parsed = JSON.parse(content);
+            } catch (jsonError) {
+                logger.error('[GPT] JSON Parse Error:', { content });
+                throw new Error('Malformed JSON response from GPT');
+            }
+
+            const results = parsed.results as Array<{ messageId: string; is_transaction: boolean; type: any; confidence: number; extracted: any; reasoning?: string }>;
+
+            // Validate results array
+            if (!Array.isArray(results)) {
+                logger.error('[GPT] Invalid results format:', { parsed });
+                throw new Error('GPT response missing results array');
+            }
 
             console.log(`[GPT] Batch processed in ${Date.now() - startStr}ms`);
 
-            // 3. Store Batch Log
-            await pool.query(
+            // 3. Store Batch Log (Fire and forget)
+            pool.query(
                 `INSERT INTO gpt_batch_requests 
          (batch_id, queue_id, email_message_ids, batch_size, status, 
           response_payload, prompt_tokens, completion_tokens, created_at)
@@ -147,29 +167,46 @@ Each result object must have:
                 ]
             ).catch(e => logger.warn('Failed to log GPT batch', e));
 
-            // 4. Resolve Promises
+            // 4. Resolve Promises Safely
             batch.emails.forEach((req, index) => {
-                const result = results.find(r => r.messageId === req.messageId) || results[index];
+                try {
+                    // Try to find by messageId, fallback to index
+                    const result = results.find(r => r.messageId === req.messageId) || results[index];
 
-                if (result) {
-                    // Type Normalization (Fixing hallucinations)
-                    let normalizedType = result.type;
-                    if (normalizedType === 'cc_debit') normalizedType = 'cc_spend';
-                    if (normalizedType === 'bank_transfer') normalizedType = 'bank_debit';
+                    if (result) {
+                        // Check if GPT thinks it's a transaction
+                        if (result.is_transaction === false) {
+                            batch.resolveCallbacks[index]({
+                                type: 'non_financial' as any,
+                                confidence: result.confidence || 0.9, // High confidence that it is NOT a transaction
+                                metadata: { reason: result.reasoning }
+                            });
+                            return;
+                        }
 
-                    batch.resolveCallbacks[index]({
-                        type: normalizedType,
-                        confidence: result.confidence,
-                        metadata: result.extracted
-                    });
-                } else {
-                    batch.rejectCallbacks[index](new Error('GPT did not return a result for this email'));
+                        // Type Normalization (Fixing hallucinations)
+                        let normalizedType = result.type;
+                        if (normalizedType === 'cc_debit') normalizedType = 'cc_spend';
+                        if (normalizedType === 'bank_transfer') normalizedType = 'bank_debit';
+
+                        batch.resolveCallbacks[index]({
+                            type: normalizedType,
+                            confidence: result.confidence,
+                            metadata: result.extracted
+                        });
+                    } else {
+                        logger.warn(`[GPT] No result found for email ${req.messageId} in batch`);
+                        batch.rejectCallbacks[index](new Error('GPT did not return a result for this email'));
+                    }
+                } catch (resError) {
+                    logger.error(`[GPT] Error processing result for email ${req.messageId}`, resError);
+                    batch.rejectCallbacks[index](resError);
                 }
             });
 
         } catch (error) {
             logger.error('GPT batch processing failed', error);
-            // Fail all
+            // Fail all with specific error
             batch.rejectCallbacks.forEach(reject => reject(error));
         }
     }

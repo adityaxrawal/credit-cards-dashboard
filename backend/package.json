@@ -10,6 +10,7 @@
     "start": "node dist/server.js",
     "migrate": "ts-node src/db/migrate.ts",
     "migrate:prod": "node dist/db/migrate.js",
+    "clear-db": "ts-node scripts/clear_db.ts",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",

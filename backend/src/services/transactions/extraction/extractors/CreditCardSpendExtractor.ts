@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
 import { InstrumentService } from '../../../cards/instruments/InstrumentService';
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
@@ -22,8 +23,13 @@ export class CreditCardSpendExtractor {
             if (card) instrumentId = card.id;
         }
 
-        const fingerprintData = `${email.id}-${date.toISOString()}-${amount}-${merchant}`;
-        const fingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');
+        const fingerprint = TransactionDeduplicator.generateFingerprint({
+            amount,
+            merchant,
+            date: date,
+            cardLastFour: cardLast4 || undefined,
+            direction: TransactionDirection.DEBIT
+        });
 
         return {
             type: TransactionType.CREDIT_CARD_SPEND,

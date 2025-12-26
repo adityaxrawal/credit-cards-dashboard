@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
 
 export class RefundExtractor {
@@ -17,9 +18,12 @@ export class RefundExtractor {
         let instrumentType = InstrumentType.CREDIT_CARD; // Default guess or unclassified?
         if (/account|bank/i.test(text)) instrumentType = InstrumentType.SAVINGS_ACCOUNT;
 
-        const fingerprint = crypto.createHash('sha256')
-            .update(`${email.id}-${date.toISOString()}-${amount}-refund`)
-            .digest('hex');
+        const fingerprint = TransactionDeduplicator.generateFingerprint({
+            amount,
+            merchant: 'Refund/Reversal',
+            date: date,
+            direction: TransactionDirection.CREDIT
+        });
 
         return {
             type: isChargeback ? TransactionType.CHARGEBACK : TransactionType.REFUND_REVERSAL,
