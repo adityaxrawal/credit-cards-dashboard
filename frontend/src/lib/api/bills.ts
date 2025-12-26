@@ -62,7 +62,7 @@ export const billsApi = {
    * Get upcoming bills
    */
   getUpcoming: async (): Promise<Bill[]> => {
-    return apiGet<{ data: Bill[] }>("/api/bills/upcoming").then((res) => res.data);
+    return apiGet<{ data: Bill[] }>("/api/bills/upcoming").then((res) => res.data || []);
   },
 
   /**

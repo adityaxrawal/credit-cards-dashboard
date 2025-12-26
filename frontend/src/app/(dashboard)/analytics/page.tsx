@@ -102,14 +102,20 @@ export default function AnalyticsPage() {
   if (overviewData) {
     const { currentMonth, previousMonth, delta } = overviewData;
     
+    // Safely access values with defaults
+    const currSpent = currentMonth?.totalSpent ?? 0;
+    const prevSpent = previousMonth?.totalSpent ?? 0;
+    const currCount = currentMonth?.transactionCount ?? 0;
+    const prevCount = previousMonth?.transactionCount ?? 0;
+
     // Total Spent
-    const spentChange = previousMonth.totalSpent > 0 
-      ? ((currentMonth.totalSpent - previousMonth.totalSpent) / previousMonth.totalSpent) * 100 
+    const spentChange = prevSpent > 0 
+      ? ((currSpent - prevSpent) / prevSpent) * 100 
       : 0;
     
     kpis.push({
       name: "Total Spent",
-      value: currentMonth.totalSpent,
+      value: currSpent,
       unit: "$",
       change: Math.abs(spentChange),
       changeType: spentChange > 0 ? "increase" : spentChange < 0 ? "decrease" : "stable",
@@ -118,13 +124,13 @@ export default function AnalyticsPage() {
     });
 
     // Transaction Count
-    const countChange = previousMonth.transactionCount > 0
-      ? ((currentMonth.transactionCount - previousMonth.transactionCount) / previousMonth.transactionCount) * 100
+    const countChange = prevCount > 0
+      ? ((currCount - prevCount) / prevCount) * 100
       : 0;
 
     kpis.push({
       name: "Transactions",
-      value: currentMonth.transactionCount,
+      value: currCount,
       change: Math.abs(countChange),
       changeType: countChange > 0 ? "increase" : countChange < 0 ? "decrease" : "stable",
       trend: "neutral",
@@ -132,8 +138,8 @@ export default function AnalyticsPage() {
     });
 
     // Avg Transaction
-    const currentAvg = currentMonth.transactionCount > 0 ? currentMonth.totalSpent / currentMonth.transactionCount : 0;
-    const prevAvg = previousMonth.transactionCount > 0 ? previousMonth.totalSpent / previousMonth.transactionCount : 0;
+    const currentAvg = currCount > 0 ? currSpent / currCount : 0;
+    const prevAvg = prevCount > 0 ? prevSpent / prevCount : 0;
     const avgChange = prevAvg > 0 ? ((currentAvg - prevAvg) / prevAvg) * 100 : 0;
 
     kpis.push({
@@ -149,7 +155,7 @@ export default function AnalyticsPage() {
     // Top Category
     let topCategory = "None";
     let topCategoryAmount = 0;
-    if (currentMonth.byCategory) {
+    if (currentMonth?.byCategory) {
       Object.entries(currentMonth.byCategory).forEach(([cat, amount]) => {
         if (amount > topCategoryAmount) {
           topCategoryAmount = amount;
@@ -167,10 +173,12 @@ export default function AnalyticsPage() {
   }
 
   // Process Chart Data
-  const chartData = trendsData?.map(item => ({
-    label: `${item.month}/${item.year}`,
-    value: item.totalSpent
-  })) || [];
+  const chartData = Array.isArray(trendsData) 
+    ? trendsData.map((item) => ({
+        label: `${item.month}/${item.year}`,
+        value: item.totalSpent
+      }))
+    : [];
 
   // Process Category Data for Pie Chart
   const pieData = categoryData?.categories 
@@ -178,7 +186,7 @@ export default function AnalyticsPage() {
     : [];
 
   const renderKPICard = (kpi: KPI, icon: React.ReactNode) => (
-    <div className="bg-card-bg p-6 rounded-xl border border-muted-text/10 shadow-sm">
+    <div key={kpi.name} className="bg-card-bg p-6 rounded-xl border border-muted-text/10 shadow-sm">
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-sm text-secondary-text mb-1">{kpi.name}</p>

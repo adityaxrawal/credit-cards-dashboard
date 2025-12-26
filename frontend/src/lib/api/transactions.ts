@@ -8,7 +8,7 @@ export interface Transaction {
   merchant: string; // Changed from merchant_name
   category: string; // Changed from merchant_category
   amount: number;
-  transaction_type: "debit" | "credit" | "refund";
+  transaction_type: "debit" | "credit" | "refund" | "bill_payment";
   bill_month: number; // Changed from billing_cycle
   bill_year: number;
   description?: string;
@@ -46,7 +46,7 @@ export interface TransactionFormData {
   merchant: string;
   category: string;
   amount: number;
-  transactionType: "debit" | "credit" | "refund";
+  transactionType: "debit" | "credit" | "refund" | "bill_payment";
   description?: string;
 }
 
@@ -54,7 +54,7 @@ export interface TransactionFilters {
   cardId?: string;
   from?: string; // Changed from startDate
   to?: string;   // Changed from endDate
-  transactionType?: "debit" | "credit" | "refund"; // Changed from type
+  transactionType?: "debit" | "credit" | "refund" | "bill_payment"; // Changed from type
   category?: string;
   merchant?: string; // New
   billMonth?: number;

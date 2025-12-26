@@ -5,13 +5,15 @@
 
 import rateLimit from 'express-rate-limit';
 
+import { env } from '../config/env';
+
 /**
  * Global API rate limiter
  * 100 requests per 15-minute window per IP
  */
 export const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // 100 requests per window
+    max: env.NODE_ENV === 'development' ? 5000 : 100, // Relaxed for dev
     standardHeaders: true, // Return rate limit info in headers
     legacyHeaders: false, // Disable X-RateLimit-* headers
     message: {
@@ -34,7 +36,7 @@ export const apiLimiter = rateLimit({
  */
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 20, // 20 requests per window
+    max: env.NODE_ENV === 'development' ? 1000 : 20, // Relaxed for dev
     standardHeaders: true,
     legacyHeaders: false,
     message: {
@@ -57,7 +59,7 @@ export const authLimiter = rateLimit({
  */
 export const expensiveLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 10, // 10 requests per window
+    max: env.NODE_ENV === 'development' ? 500 : 10, // Relaxed for dev
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => {

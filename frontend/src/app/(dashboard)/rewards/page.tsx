@@ -100,7 +100,7 @@ export default function RewardsPage() {
                 <div>
                   <p className="text-sm text-secondary-text">Total Points</p>
                   <p className="text-2xl font-bold text-blue-500 mt-1">
-                    {summary.summary.total_points_balance.toLocaleString()}
+                    {summary.summary.total_points_balance?.toLocaleString() ?? 0}
                   </p>
                 </div>
                 <div className="p-3 bg-blue-500/10 rounded-lg">
@@ -114,7 +114,7 @@ export default function RewardsPage() {
                 <div>
                   <p className="text-sm text-secondary-text">Points Earned</p>
                   <p className="text-2xl font-bold text-primary-green mt-1">
-                    {summary.summary.total_points_earned.toLocaleString()}
+                    {summary.summary.total_points_earned?.toLocaleString() ?? 0}
                   </p>
                 </div>
                 <div className="p-3 bg-primary-green/10 rounded-lg">
@@ -128,7 +128,7 @@ export default function RewardsPage() {
                 <div>
                   <p className="text-sm text-secondary-text">Redeemed</p>
                   <p className="text-2xl font-bold text-purple-500 mt-1">
-                    {summary.summary.total_points_redeemed.toLocaleString()}
+                    {summary.summary.total_points_redeemed?.toLocaleString() ?? 0}
                   </p>
                 </div>
                 <div className="p-3 bg-purple-500/10 rounded-lg">
@@ -142,7 +142,7 @@ export default function RewardsPage() {
                 <div>
                   <p className="text-sm text-secondary-text">Expiring Soon</p>
                   <p className="text-2xl font-bold text-warning mt-1">
-                    {summary.summary.total_points_expiring_soon.toLocaleString()}
+                    {summary.summary.total_points_expiring_soon?.toLocaleString() ?? 0}
                   </p>
                 </div>
                 <div className="p-3 bg-warning/10 rounded-lg">

@@ -3,16 +3,14 @@
 import React, { useState, useMemo } from "react";
 import {
   Plus,
-  Download,
   Filter as FilterIcon,
   X,
   Upload,
-  Mail,
-  ExternalLink,
-  Shield, 
-  Zap, 
+  Download,
   AlertTriangle,
   Brain,
+  Zap,
+  Search,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout";
@@ -35,6 +33,7 @@ import { cardApi } from "@/lib/api/cards";
 import { useToast } from "@/components/ui/feedback/Toast";
 import { BulkImportModal } from "@/components/features/transactions/BulkImportModal";
 import { TransactionDetailModal } from "@/components/features/transactions/TransactionDetailModal";
+import { TransactionActions } from "@/components/features/transactions/TransactionActions";
 import { GmailUtils } from "@/lib/utils/gmailUtils";
 
 interface TransactionModalData {
@@ -44,7 +43,7 @@ interface TransactionModalData {
   merchant: string;
   category: string;
   amount: number;
-  transactionType: "debit" | "credit" | "refund";
+  transactionType: "debit" | "credit" | "refund" | "bill_payment";
   description: string;
 }
 
@@ -56,7 +55,7 @@ export default function TransactionsPage() {
 
   // State
   const [searchValue, setSearchValue] = useState("");
-  const [activeTab, setActiveTab] = useState<"all" | "debit" | "credit">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "spends" | "income" | "bills" | "review">("all");
   const [showModal, setShowModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -100,8 +99,12 @@ export default function TransactionsPage() {
       limit: pageSize,
     };
 
-    if (activeTab === "debit") f.transactionType = "debit";
-    else if (activeTab === "credit") f.transactionType = "credit";
+    if (activeTab === "spends") f.transactionType = "debit";
+    else if (activeTab === "income") f.transactionType = "credit"; 
+    else if (activeTab === "bills") f.transactionType = "bill_payment";
+    else if (activeTab === "review") {
+        (f as any).needsReview = true;
+    }
 
     // Apply backend sorting if scope is 'all'
     if (sortScope === "all" && sortConfig) {
@@ -199,7 +202,8 @@ export default function TransactionsPage() {
       transactionType: formData.get("transactionType") as
         | "debit"
         | "credit"
-        | "refund",
+        | "refund"
+        | "bill_payment",
       description: formData.get("description") as string,
     };
 
@@ -251,7 +255,6 @@ export default function TransactionsPage() {
 
   // Sort transactions (Client-side if scope is 'page')
   const sortedTransactions = useMemo(() => {
-    // If sorting is handled by backend (scope 'all'), return as is
     if (sortScope === "all") return transactions;
     
     if (!sortConfig) return transactions;
@@ -260,13 +263,11 @@ export default function TransactionsPage() {
       let aValue: any = a[sortConfig.key as keyof Transaction];
       let bValue: any = b[sortConfig.key as keyof Transaction];
       
-      // Handle date sorting
       if (sortConfig.key === "transaction_date") {
         aValue = new Date(aValue).getTime();
         bValue = new Date(bValue).getTime();
       }
       
-      // Handle amount sorting
       if (sortConfig.key === "amount") {
         aValue = Math.abs(Number(aValue));
         bValue = Math.abs(Number(bValue));
@@ -299,44 +300,41 @@ export default function TransactionsPage() {
       key: "transaction_date",
       header: "Date",
       sortable: true,
-      render: (value: unknown) => formatDate(value as string, "short"),
-    },
-    {
-      key: "merchant",
-      header: "Merchant",
-      render: (value: unknown, row: unknown) => (
-        <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-primary-green/20 rounded-full flex items-center justify-center">
-            <span className="text-xs font-medium text-primary-green">
-              {(value as string)?.charAt(0)?.toUpperCase()}
-            </span>
-          </div>
-          <div>
-            <div className="font-medium">{value as string}</div>
-            <div className="text-xs text-secondary-text">
-              {(row as Transaction).description || ""}
-            </div>
-          </div>
-        </div>
+      render: (value: unknown) => (
+         <span className="text-secondary-text text-sm">
+            {formatDate(value as string, "short")}
+         </span>
       ),
     },
     {
-      key: "amount",
-      header: "Amount",
-      sortable: true,
+      key: "merchant",
+      header: "Details",
       render: (value: unknown, row: unknown) => {
-        const type = (row as Transaction).transaction_type;
-        const amount = Math.abs(value as number);
+        const tx = row as Transaction;
         return (
-          <span
-            className={cn(
-              "font-semibold",
-              type === "debit" ? "text-error" : "text-success"
-            )}
-          >
-            {type === "debit" ? "-" : "+"}
-            {formatCurrency(amount)}
-          </span>
+            <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-primary-green/10 rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-sm font-semibold text-primary-green">
+                {(value as string)?.charAt(0)?.toUpperCase()}
+                </span>
+            </div>
+            <div className="flex flex-col">
+                <span className="font-semibold text-primary-text">
+                   {value as string}
+                </span>
+                <div className="flex items-center gap-2 text-xs text-secondary-text">
+                   <span>{tx.category || "Uncategorized"}</span>
+                   {tx.description && (
+                     <>
+                       <span>•</span>
+                       <span className="max-w-[200px] truncate" title={tx.description}>
+                         {tx.description}
+                       </span>
+                     </>
+                   )}
+                </div>
+            </div>
+            </div>
         );
       },
     },
@@ -346,131 +344,105 @@ export default function TransactionsPage() {
       render: (_: unknown, row: unknown) => {
         const transaction = row as Transaction;
         const card = transaction.card;
-        let cardLabel = "Unknown";
-        
-        if (card) {
-          // Show bank name + last 4 digits if available
-          if (card.bank_name && card.last_four) {
-            cardLabel = `${card.bank_name} ${card.last_four}`;
-          } else if (card.card_name && card.card_name !== "Unknown") {
-            cardLabel = card.card_name;
-          } else if (card.bank_name) {
-            cardLabel = card.bank_name;
-          }
-        }
         
         return (
-          <Badge
-            label={cardLabel}
-            variant="default"
-            size="sm"
-          />
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-primary-text">
+               {card?.card_name || "Unknown Card"}
+            </span>
+            <span className="text-xs text-secondary-text">
+               {card?.bank_name || ""} {card?.last_four ? `••${card.last_four}` : ""}
+            </span>
+          </div>
         );
       },
     },
     {
-      key: "category",
-      header: "Category",
-      render: (value: unknown) => (
-        <Badge
-          label={(value as string) || "Uncategorized"}
-          variant="info"
-          size="sm"
-        />
-      ),
-
-    },
-    {
       key: "status",
-      header: "Status",
+      header: "Info",
       render: (_: unknown, row: unknown) => {
         const tx = row as Transaction;
         return (
-          <div className="flex flex-col gap-1 items-start">
+          <div className="flex items-center gap-2">
             {tx.needs_review && (
-              <Badge 
-                label="Review" 
-                variant="warning" 
-                size="sm"
-                icon={<AlertTriangle className="w-3 h-3" />}
-              />
+                <div title="Needs Review" className="text-warning">
+                   <AlertTriangle className="w-4 h-4" />
+                </div>
             )}
             {tx.detection_method === 'gpt' && (
-              <div className="flex items-center gap-1 text-xs text-primary-green pixel-font" title="Extracted by AI">
-                <Brain className="w-3 h-3" />
-                <span>AI</span>
-              </div>
+                <div title="AI Extracted" className="text-primary-green">
+                   <Brain className="w-4 h-4" />
+                </div>
             )}
             {tx.detection_method === 'regex' && (
-              <div className="flex items-center gap-1 text-xs text-secondary-text" title="Extracted by Pattern">
-                <Zap className="w-3 h-3" />
-                <span>Rule</span>
-              </div>
+                <div title="Extracted by Pattern" className="text-secondary-text">
+                   <Zap className="w-4 h-4" />
+                </div>
+            )}
+            {tx.gmail_message_id && (
+                <div title="From Email" className="text-blue-400">
+                    <span className="sr-only">Email</span>
+                   {/* We can put an icon here if needed, but mail is in actions */}
+                </div>
             )}
           </div>
         );
       },
     },
     {
-      key: "transaction_type",
-      header: "Type",
-      render: (value: unknown) => (
-        <Badge
-          label={((value as string) || "").toUpperCase()}
-          variant={(value as string) === "credit" ? "success" : "warning"}
-          size="sm"
-        />
-      ),
+       key: "amount",
+       header: "Amount",
+       sortable: true,
+       render: (value: unknown, row: unknown) => {
+         const type = (row as Transaction).transaction_type;
+         const amount = Math.abs(value as number);
+         
+         if (type === "bill_payment") {
+           return (
+             <div className="flex flex-col items-end">
+                <span className="font-bold text-primary-text">
+                  {formatCurrency(amount)}
+                </span>
+                <Badge label="Bill Payment" variant="info" size="sm" className="mt-1 origin-right scale-90" />
+             </div>
+           );
+         }
+ 
+         const isCredit = type === "credit" || type === "refund";
+         
+         return (
+             <div className="flex flex-col items-end">
+                <span
+                    className={cn(
+                    "font-bold",
+                    isCredit ? "text-success" : "text-error"
+                    )}
+                >
+                    {isCredit ? "+" : "-"} {formatCurrency(amount)}
+                </span>
+                <span className="text-xs text-secondary-text capitalize mt-0.5">
+                   {type}
+                </span>
+             </div>
+         );
+       },
     },
     {
       key: "actions",
-      header: "Actions",
+      header: "",
       render: (_: unknown, row: unknown) => (
-        <div className="flex gap-2 text-nowrap">
-          {(row as Transaction).gmail_message_id && (
-             <Button
-                variant="secondary"
-                size="sm"
-                title="View in Gmail"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  window.open(GmailUtils.getMailLink((row as Transaction).gmail_message_id!), "_blank");
+        <div className="flex justify-end">
+            <TransactionActions 
+                onViewDetails={() => {
+                    setSelectedTransaction(row as unknown as Transaction);
+                    setShowDetailModal(true);
                 }}
-             >
-                <Mail className="w-4 h-4" />
-             </Button>
-          )}
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedTransaction(row as unknown as Transaction);
-              setShowDetailModal(true);
-            }}
-          >
-            View Details
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleEdit(row as unknown as Transaction);
-            }}
-          >
-            Edit
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDelete((row as unknown as Transaction).id);
-            }}
-          >
-            Delete
-          </Button>
+                onEdit={() => handleEdit(row as unknown as Transaction)}
+                onDelete={() => handleDelete((row as unknown as Transaction).id)}
+                onViewGmail={(row as Transaction).gmail_message_id ? () => {
+                    window.open(GmailUtils.getMailLink((row as Transaction).gmail_message_id!), "_blank");
+                } : undefined}
+            />
         </div>
       ),
     },
@@ -478,58 +450,80 @@ export default function TransactionsPage() {
 
   const tabs = [
     { key: "all" as const, label: "All" },
-    { key: "debit" as const, label: "Expenses" },
-    { key: "credit" as const, label: "Income" },
+    { key: "spends" as const, label: "Spends" },
+    { key: "income" as const, label: "Income" },
+    { key: "bills" as const, label: "Bill Payments" },
+    { key: "review" as const, label: "Needs Review" },
   ];
 
   return (
     <AppLayout title="Transactions" showRightSidebar={false}>
       <div className="space-y-6">
-        {/* Header Actions */}
-        <div className="flex flex-col lg:flex-row gap-4 justify-between">
-          <div className="flex-1 max-w-md">
-            <Input
-              placeholder="Search transactions..."
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              className="w-full"
-            />
+        <div className="flex flex-col gap-4">
+          <div className="flex justify-between items-center">
+             <div className="flex items-center gap-4">
+                {/* Tabs */}
+                <div className="flex space-x-1 bg-card-bg p-1 rounded-lg border border-border">
+                  {tabs.map((tab) => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      className={cn(
+                        "px-4 py-2 rounded-md text-sm font-medium transition-all",
+                        activeTab === tab.key
+                          ? "bg-primary-green/10 text-primary-green shadow-sm"
+                          : "text-secondary-text hover:text-primary-text hover:bg-hover-bg"
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+             </div>
+
+             <div className="flex gap-2">
+                <Button onClick={handleAddNew}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Transaction
+                </Button>
+             </div>
           </div>
 
-          <div className="flex gap-2 flex-wrap items-center">
-            <div className="flex items-center gap-2 mr-2">
-              <span className="text-sm text-secondary-text">Sort Scope:</span>
-              <select
-                value={sortScope}
-                onChange={(e) => setSortScope(e.target.value as "page" | "all")}
-                className="px-2 py-1 text-sm border rounded-lg bg-card-bg"
-              >
-                <option value="page">Current Page</option>
-                <option value="all">All Data</option>
-              </select>
+          <div className="flex flex-col lg:flex-row gap-4 justify-between items-center">
+            <div className="flex-1 w-full lg:max-w-md relative">
+               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-secondary-text" />
+               <Input
+                  placeholder="Search transactions..."
+                  value={searchValue}
+                  onChange={(e) => setSearchValue(e.target.value)}
+                  className="w-full pl-10"
+               />
             </div>
-            <Button
-              variant="secondary"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <FilterIcon className="w-4 h-4 mr-2" />
-              Filters
-              {(selectedCard || dateRange.start || categoryFilter) && (
-                <Badge label="•" variant="warning" size="sm" className="ml-1" />
-              )}
-            </Button>
-            <Button variant="secondary" onClick={() => setShowBulkImport(true)}>
-              <Upload className="w-4 h-4 mr-2" />
-              Bulk Import
-            </Button>
-            <Button variant="secondary">
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-            <Button onClick={handleAddNew}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Transaction
-            </Button>
+            
+            <div className="flex gap-2 flex-wrap items-center">
+               <Button
+                  variant="secondary"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={cn(showFilters && "bg-hover-bg")}
+               >
+                  <FilterIcon className="w-4 h-4 mr-2" />
+                  Filter
+                  {(selectedCard || dateRange.start || categoryFilter) && (
+                    <div className="h-2 w-2 rounded-full bg-primary-green ml-2" />
+                  )}
+               </Button>
+               
+               <div className="flex items-center gap-2">
+                 <Button 
+                    variant="ghost" 
+                    onClick={() => setShowBulkImport(true)}
+                    className="text-primary-green hover:text-primary-green/80 flex items-center gap-2"
+                 >
+                    <Upload className="w-4 h-4" />
+                    <span className="text-sm font-medium">Import</span>
+                 </Button>
+               </div>
+            </div>
           </div>
         </div>
 
@@ -547,25 +541,32 @@ export default function TransactionsPage() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Card</label>
-                <select
-                  value={selectedCard}
-                  onChange={(e) => setSelectedCard(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg"
-                >
-                  <option value="">All Cards</option>
-                  {cards.map((card) => (
-                    <option key={card.id} value={card.id}>
-                      {card.card_name}
-                    </option>
-                  ))}
-                </select>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-secondary-text uppercase tracking-wider pl-1">Card</label>
+                <div className="relative">
+                    <select
+                        value={selectedCard}
+                        onChange={(e) => setSelectedCard(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-border bg-primary-bg text-primary-text appearance-none hover:border-primary-green/50 focus:border-primary-green focus:ring-1 focus:ring-primary-green transition-all outline-none"
+                        >
+                        <option value="">All Cards</option>
+                        {cards.map((card) => (
+                            <option key={card.id} value={card.id}>
+                            {card.card_name}
+                            </option>
+                        ))}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-secondary-text">
+                        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                    </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-secondary-text uppercase tracking-wider pl-1">
                   Start Date
                 </label>
                 <Input
@@ -574,11 +575,12 @@ export default function TransactionsPage() {
                   onChange={(e) =>
                     setDateRange({ ...dateRange, start: e.target.value })
                   }
+                  className="rounded-xl border-border bg-primary-bg h-[42px]"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-secondary-text uppercase tracking-wider pl-1">
                   End Date
                 </label>
                 <Input
@@ -587,17 +589,19 @@ export default function TransactionsPage() {
                   onChange={(e) =>
                     setDateRange({ ...dateRange, end: e.target.value })
                   }
+                  className="rounded-xl border-border bg-primary-bg h-[42px]"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-secondary-text uppercase tracking-wider pl-1">
                   Category
                 </label>
                 <Input
-                  placeholder="e.g., Shopping, Food"
+                  placeholder="e.g., Shopping"
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="rounded-xl border-border bg-primary-bg h-[42px]"
                 />
               </div>
             </div>
@@ -610,45 +614,6 @@ export default function TransactionsPage() {
             </div>
           </div>
         )}
-
-        {/* Stats Cards - Only show if aggregations are available */}
-        {aggregations && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-card-bg rounded-lg p-6">
-              <div className="text-sm text-secondary-text mb-1">
-                Total Transactions
-              </div>
-              <div className="text-2xl font-bold text-primary-text">
-                {aggregations.totalTransactions || 0}
-              </div>
-            </div>
-            <div className="bg-card-bg rounded-lg p-6">
-              <div className="text-sm text-secondary-text mb-1">Total Spent</div>
-              <div className="text-2xl font-bold text-error">
-                {formatCurrency(aggregations.totalSpent || 0)}
-              </div>
-            </div>
-            {/* We don't have income/net in aggregations yet, so hiding or using placeholders */}
-          </div>
-        )}
-
-        {/* Tabs */}
-        <div className="flex space-x-1 bg-hover-bg p-1 rounded-lg w-fit">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={cn(
-                "px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-2",
-                activeTab === tab.key
-                  ? "bg-card-bg text-primary-text shadow-sm"
-                  : "text-secondary-text hover:text-primary-text"
-              )}
-            >
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
 
         {/* Loading State */}
         {isLoading && (
@@ -818,6 +783,7 @@ export default function TransactionsPage() {
               <option value="debit">Debit (Expense)</option>
               <option value="credit">Credit (Income)</option>
               <option value="refund">Refund</option>
+              <option value="bill_payment">Bill Payment</option>
             </select>
           </div>
 

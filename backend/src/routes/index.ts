@@ -11,6 +11,7 @@ import rewardsRoutes from './rewards.routes';
 import extractionRoutes from './extraction.routes';
 import billsRoutes from './bills.routes';
 import monitoringRoutes from './monitoring.routes';
+import statementsRoutes from './statements.routes';
 
 
 const router = Router();
@@ -32,6 +33,7 @@ router.use('/gmail', gmailRoutes);
 router.use('/rewards', rewardsRoutes);
 router.use('/extraction', extractionRoutes);
 router.use('/bills', billsRoutes);
+router.use('/statements', statementsRoutes);
 
 
 export default router;

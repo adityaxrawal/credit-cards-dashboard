@@ -99,6 +99,7 @@ export function TransactionFilters({
               <option value="debit">Debit</option>
               <option value="credit">Credit</option>
               <option value="refund">Refund</option>
+              <option value="bill_payment">Bill Payment</option>
             </select>
           </div>
 
