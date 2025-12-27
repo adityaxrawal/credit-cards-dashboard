@@ -10,25 +10,32 @@ const PORT = env.PORT || 8000;
 
 const startServer = async () => {
   try {
+    console.log('[Startup] Initializing server...');
+
     // Test DB connection
+    console.log('[Startup] Testing Database connection...');
     await pool.query('SELECT NOW()');
-    console.log('✅ Database connected successfully');
+    console.log('✅ [Startup] Database connected successfully');
 
     // Register all classifiers and extractors
+    console.log('[Startup] Registering classifiers and extractors...');
     registerAll();
-    console.log('✅ Classifiers and Extractors registered');
+    console.log('✅ [Startup] Classifiers and Extractors registered');
 
     const server = createServer(app);
 
     // Initialize WebSocket
+    console.log('[Startup] Initializing WebSockets...');
     const io = initializeWebSocket(server);
     (global as any).ioServer = io;
+    console.log('✅ [Startup] WebSockets initialized');
 
     server.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`🚀 [Startup] Server running on port ${PORT}`);
+      console.log(`👉 [Startup] Environment: ${env.NODE_ENV}`);
     });
   } catch (error) {
-    console.error('❌ Server failed to start:', error);
+    console.error('❌ [Startup] Server failed to start:', error);
     process.exit(1);
   }
 };

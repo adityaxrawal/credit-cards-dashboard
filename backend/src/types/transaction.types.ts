@@ -77,10 +77,25 @@ export interface CleanEmail {
     date?: any; // For legacy extraction compatibility
 }
 
+export interface TransactionMetadata {
+    [key: string]: unknown; // Flexible for now, but safer than any
+    original_merchant?: string;
+    payment_mode?: string;
+    bank_ref_num?: string;
+    tax_amount?: number;
+    location?: string;
+    is_recurring?: boolean;
+    installments?: {
+        current: number;
+        total: number;
+    };
+    related_message_ids?: string[];
+}
+
 export interface ClassificationResult {
     type: TransactionType;
     confidence: number; // 0-1
-    metadata?: Record<string, any>;
+    metadata?: TransactionMetadata;
 }
 
 export interface ExtractedTransaction {
@@ -96,14 +111,16 @@ export interface ExtractedTransaction {
     category?: string;
     referenceNumber?: string;
     fingerprint: string;
-    metadata?: Record<string, any>;
+    metadata?: TransactionMetadata;
 }
 
 export interface PipelineResult {
-    status: 'success' | 'failed' | 'terminated' | 'duplicate' | 'needs_review';
+    status: 'success' | 'failed' | 'terminated' | 'duplicate' | 'needs_review' | 'queued_for_gpt';
     transactionId?: string;
     reason?: string;
     error?: string;
+    cleanEmail?: CleanEmail;
+    rawEmailId?: string;
 }
 
 export interface Transaction {
@@ -121,7 +138,7 @@ export interface Transaction {
     is_settled: boolean;
     email_message_id: string | null;
     is_manually_added: boolean;
-    metadata: any;
+    metadata: TransactionMetadata; // Was any
     created_at: Date;
     updated_at: Date;
     exact_timestamp?: Date;
@@ -141,6 +158,11 @@ export interface Transaction {
     review_reason?: string;
     counterparty_name?: string;
     counterparty_identifier?: string;
+}
+
+export interface PostProcessingStats {
+    billsCreated?: number;
+    instrumentsCreated?: number;
 }
 
 export interface TransactionFilters {

@@ -46,7 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+  const [authFailCount, setAuthFailCount] = useState(0);
+  const MAX_AUTH_FAILURES = 3;
   const router = useRouter();
 
   // Use a ref to track if auth check has run/is running, to survive strict mode re-mounts
@@ -91,6 +92,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * Check if user is authenticated by verifying httpOnly cookie
    */
   async function checkAuth() {
+    // Stop polling after repeated failures to prevent infinite loops
+    if (authFailCount >= MAX_AUTH_FAILURES) {
+      console.log("⛔ Auth check disabled after repeated failures");
+      setLoading(false);
+      return;
+    }
+
     try {
       console.log("📡 Making /api/auth/me request");
       // @ts-expect-error - The response type might be inconsistent (wrapped vs unwrapped)
@@ -103,9 +111,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (userData && userData.id && userData.email) {
         console.log("✅ Auth check successful:", userData.email);
         setUser(userData as User);
+        setAuthFailCount(0); // Reset on success
       } else {
         console.log("❌ Auth check failed: Invalid response structure", response);
         setUser(null);
+        setAuthFailCount(prev => prev + 1);
       }
     } catch (error: unknown) {
       // Check if request was cancelled (duplicate prevention)
@@ -116,11 +126,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const axiosError = error as { response?: { status?: number } };
+      setAuthFailCount(prev => prev + 1);
+      const axiosError = error as { response?: { status?: number; data?: { clearSession?: boolean } } };
       if (axiosError?.response?.status === 401) {
         // Not authenticated - this is expected for logged out users
         console.log("🔓 User not authenticated (401)");
         setUser(null);
+        // If server says to clear session, stop retrying
+        if (axiosError.response?.data?.clearSession) {
+          console.log("🔒 Session cleared by server, stopping retries");
+          setAuthFailCount(MAX_AUTH_FAILURES);
+        }
       } else {
         console.error("Auth check failed:", error);
         setUser(null);

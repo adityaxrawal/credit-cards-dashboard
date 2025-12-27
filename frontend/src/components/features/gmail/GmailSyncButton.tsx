@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { io, Socket } from "socket.io-client";
 import { Button } from "@/components/ui/primitives/Button";
 import { Input } from "@/components/ui/primitives/Input";
 import { Label } from "@/components/ui/primitives/label";
@@ -39,6 +40,7 @@ export function GmailSyncModal({
   // Initialize config when modal opens
   useEffect(() => {
     if (isOpen) {
+      console.log("[GmailSync] Modal opened");
       setConfigMode(true);
       setSyncing(false);
       setCompleted(false);
@@ -69,6 +71,30 @@ export function GmailSyncModal({
     }
   }, [isOpen]);
 
+  const handleCompletion = useCallback((_status: ScanStatus) => {
+    console.log("[GmailSync] Sync completed successfully");
+    setSyncing(false);
+    setCompleted(true);
+    setJobId(null);
+    setTimeoutWarning(false);
+
+    // Refresh UI
+    window.dispatchEvent(new CustomEvent("transactions-updated"));
+    window.dispatchEvent(new CustomEvent("refresh-dashboard"));
+
+    if (onSyncComplete) {
+      onSyncComplete();
+    }
+  }, [onSyncComplete]);
+
+  const handleFailure = useCallback((status: ScanStatus) => {
+    console.error(`[GmailSync] Sync failed: ${status.errorMessage}`);
+    setSyncing(false);
+    setFailed(true);
+    setJobId(null);
+    setErrorMessage(status.errorMessage || "An error occurred during scanning");
+  }, []);
+
   // Poll job status when jobId is set
   useEffect(() => {
     if (!jobId) return;
@@ -81,6 +107,7 @@ export function GmailSyncModal({
     const pollStatus = async () => {
       try {
         const status = await gmailApi.getScanStatus(jobId);
+        // console.log(`[GmailSync] Polled status: ${status.status} (${status.processed}/${status.total})`);
         setProgress(status);
 
         // Check for progress changes to reset timeout
@@ -123,8 +150,9 @@ export function GmailSyncModal({
     return () => {
       clearPolling();
     };
-  }, [jobId]);
+  }, [jobId, handleCompletion, handleFailure]);
 
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   const clearPolling = () => {
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
@@ -132,8 +160,81 @@ export function GmailSyncModal({
     }
   };
 
+  // WebSocket Connection
+  useEffect(() => {
+    if (!jobId) return;
+
+    let socket: Socket | null = null;
+
+    try {
+        socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000', {
+            transports: ['websocket'],
+        });
+
+        socket.on('connect', () => {
+            console.log('[GmailSync] Connected to WebSocket');
+            socket?.emit('subscribe', { jobId });
+        });
+
+        socket.on('processing_update', (event: any) => {
+            console.log('[GmailSync] Received update:', event);
+            if (event.payload) {
+                const status = event.payload;
+                setProgress(prev => ({
+                    ...prev,
+                    ...status,
+                    // Map WebSocket stats to UI expectation
+                    inserted: status.totalTransactions ?? prev?.inserted,
+                    total: status.totalEmails ?? prev?.total,
+                    // Keep previous errors/lists if not provided in update
+                    errorList: status.errorList || prev?.errorList || [], 
+                    jobId: jobId // Ensure jobId is preserved
+                }));
+
+                // Reset timeout on activity
+                lastStatusChangeRef.current = Date.now();
+                setTimeoutWarning(false);
+            }
+        });
+
+        socket.on('processing_complete', (event: any) => {
+             console.log('[GmailSync] Received completion:', event);
+             if (event.payload) {
+                 const status = event.payload;
+                 // Ensure final stats are reflected in UI
+                 setProgress(prev => ({
+                    ...prev,
+                    ...status,
+                    inserted: status.totalTransactions ?? prev?.inserted,
+                    total: status.totalEmails ?? prev?.total,
+                    jobId
+                 }));
+
+                 handleCompletion({
+                     ...event.payload,
+                     jobId,
+                     status: 'COMPLETED'
+                 });
+             }
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('[GmailSync] WebSocket disconnected');
+        });
+
+    } catch (err) {
+        console.error('[GmailSync] Socket initialization failed:', err);
+    }
+
+    return () => {
+        if (socket) {
+            socket.disconnect();
+        }
+    };
+  }, [jobId, handleCompletion]);
+
   const handleSync = async () => {
-    console.log("[GmailSync] Starting manual sync...");
+    console.log(`[GmailSync] Starting manual sync... Range: ${startDate || 'Default'} to ${endDate || 'Default'}`);
     setConfigMode(false);
     setSyncing(true);
     setProgress(null);
@@ -190,29 +291,7 @@ export function GmailSyncModal({
     }
   };
 
-  const handleCompletion = (status: ScanStatus) => {
-    console.log("[GmailSync] Sync completed successfully");
-    setSyncing(false);
-    setCompleted(true);
-    setJobId(null);
-    setTimeoutWarning(false);
 
-    // Refresh UI
-    window.dispatchEvent(new CustomEvent("transactions-updated"));
-    window.dispatchEvent(new CustomEvent("refresh-dashboard"));
-
-    if (onSyncComplete) {
-      onSyncComplete();
-    }
-  };
-
-  const handleFailure = (status: ScanStatus) => {
-    console.error(`[GmailSync] Sync failed: ${status.errorMessage}`);
-    setSyncing(false);
-    setFailed(true);
-    setJobId(null);
-    setErrorMessage(status.errorMessage || "An error occurred during scanning");
-  };
 
   const handleClose = () => {
     // FORCE close allowed if there's a timeout warning or not syncing
@@ -301,6 +380,16 @@ export function GmailSyncModal({
                       Found {progress?.inserted || 0} new transaction{progress?.inserted !== 1 ? "s" : ""} 
                       {progress?.total && ` out of ${progress.total} emails scanned`}
                     </p>
+                    {progress?.postProcessingStats && (
+                      <div className="mt-2 text-xs text-green-800 space-y-1">
+                         {progress.postProcessingStats.billsCreated ? (
+                            <p>• Generated {progress.postProcessingStats.billsCreated} new bills</p>
+                         ) : null}
+                         {progress.postProcessingStats.instrumentsCreated ? (
+                            <p>• Detected {progress.postProcessingStats.instrumentsCreated} new cards</p>
+                         ) : null}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -327,6 +416,53 @@ export function GmailSyncModal({
                 <div className="space-y-4">
                   {progress ? (
                     <>
+                      {progress.currentStep?.startsWith("POST_PROCESSING") ? (
+                        <div className="space-y-3 bg-hover-bg rounded-xl p-4 border border-border-color">
+                          <h3 className="text-sm font-semibold text-primary-text mb-2">Finalizing Sync...</h3>
+                          
+                          <div className="flex items-center gap-3">
+                            <CheckCircle className="text-green-600 w-5 h-5 flex-shrink-0" />
+                            <span className="text-secondary-text text-sm">Sync Emails & Transactions</span>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            {progress.currentStep === 'POST_PROCESSING_ANALYTICS' ? (
+                                <RefreshCw className="text-primary-green w-5 h-5 flex-shrink-0 animate-spin" />
+                            ) : (
+                                <CheckCircle className="text-green-600 w-5 h-5 flex-shrink-0" />
+                            )}
+                            <span className={`text-sm ${progress.currentStep === 'POST_PROCESSING_ANALYTICS' ? "text-primary-text font-medium" : "text-secondary-text"}`}>
+                                Computing Analytics
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                             {progress.currentStep === 'POST_PROCESSING_ANALYTICS' ? (
+                                <div className="w-5 h-5 rounded-full border-2 border-muted-text/20 flex-shrink-0" />
+                            ) : progress.currentStep === 'POST_PROCESSING_BILLS' ? (
+                                <RefreshCw className="text-primary-green w-5 h-5 flex-shrink-0 animate-spin" />
+                            ) : (
+                                <CheckCircle className="text-green-600 w-5 h-5 flex-shrink-0" />
+                            )}
+                            <span className={`text-sm ${progress.currentStep === 'POST_PROCESSING_BILLS' ? "text-primary-text font-medium" : "text-secondary-text"}`}>
+                                Generating Bills {progress.postProcessingStats?.billsCreated ? `(${progress.postProcessingStats.billsCreated} created)` : ''}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                             {['POST_PROCESSING_ANALYTICS', 'POST_PROCESSING_BILLS'].includes(progress.currentStep) ? (
+                                <div className="w-5 h-5 rounded-full border-2 border-muted-text/20 flex-shrink-0" />
+                            ) : progress.currentStep === 'POST_PROCESSING_CARDS' ? (
+                                <RefreshCw className="text-primary-green w-5 h-5 flex-shrink-0 animate-spin" />
+                            ) : (
+                                <CheckCircle className="text-green-600 w-5 h-5 flex-shrink-0" />
+                            )}
+                            <span className={`text-sm ${progress.currentStep === 'POST_PROCESSING_CARDS' ? "text-primary-text font-medium" : "text-secondary-text"}`}>
+                                Detecting New Cards {progress.postProcessingStats?.instrumentsCreated ? `(${progress.postProcessingStats.instrumentsCreated} found)` : ''}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm text-secondary-text">
                           <span>
@@ -354,6 +490,7 @@ export function GmailSyncModal({
                           )}
                         </div>
                       </div>
+                      )}
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-hover-bg rounded-lg p-3">
@@ -419,14 +556,14 @@ export function GmailSyncModal({
                   <div className="space-y-2 max-h-40 overflow-y-auto">
                     {progress.errorList.map((err: unknown, idx: number) => (
                       <div key={idx} className="flex items-center justify-between bg-hover-bg p-2 rounded text-xs">
-                        <span className="truncate flex-1 mr-2 text-red-500" title={(err as unknown as { error?: string }).error}>
-                          {(err as unknown as { error?: string }).error || "Unknown error"}
+                        <span className="truncate flex-1 mr-2 text-red-500" title={typeof err === 'string' ? err : (err as any).message || (err as any).error || JSON.stringify(err)}>
+                          {typeof err === 'string' ? err : (err as any).message || (err as any).error || "Unknown error"}
                         </span>
                         <Button 
                           size="sm" 
                           variant="ghost" 
                           className="h-6 text-[10px]"
-                          onClick={() => setMappingMessageId((err as unknown as { messageId: string }).messageId)}
+                          onClick={() => setMappingMessageId((err as any).messageId)}
                         >
                           Map Card
                         </Button>

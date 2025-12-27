@@ -3,6 +3,64 @@ import { env } from '../config/env';
 import logger from '../utils/infrastructure/logger';
 import { isConnectionError } from '../utils/validation/errorTypeGuards';
 
+// ============================================
+// Connection Semaphore for Pool-Aware Scheduling
+// ============================================
+
+/**
+ * Semaphore to prevent connection pool exhaustion.
+ * Limits concurrent queries to available pool slots.
+ */
+class ConnectionSemaphore {
+  private available: number;
+  private waiting: Array<() => void> = [];
+  private acquiredCount = 0;
+
+  constructor(private maxConcurrent: number) {
+    this.available = maxConcurrent;
+  }
+
+  async acquire(): Promise<void> {
+    if (this.available > 0) {
+      this.available--;
+      this.acquiredCount++;
+      return;
+    }
+    // Wait for a slot to become available
+    return new Promise(resolve => {
+      this.waiting.push(() => {
+        this.acquiredCount++;
+        resolve();
+      });
+    });
+  }
+
+  release(): void {
+    this.acquiredCount--;
+    if (this.waiting.length > 0) {
+      const next = this.waiting.shift()!;
+      next();
+    } else {
+      this.available++;
+    }
+  }
+
+  getStats() {
+    return {
+      available: this.available,
+      waiting: this.waiting.length,
+      acquired: this.acquiredCount,
+      maxConcurrent: this.maxConcurrent
+    };
+  }
+}
+
+// Supabase PgBouncer in session mode has strict limits (~15-20 connections)
+// We use a conservative limit to prevent exhaustion
+const POOL_MAX = 20;
+const SEMAPHORE_MAX = 10; // Very conservative to handle bursts
+export const connectionSemaphore = new ConnectionSemaphore(SEMAPHORE_MAX);
+
 const pool = new Pool({
   connectionString: env.DATABASE_URL,
   ssl: {
@@ -10,10 +68,10 @@ const pool = new Pool({
   },
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
-  idleTimeoutMillis: 60000, // Close idle clients after 60s
+  idleTimeoutMillis: 30000, // Close idle clients after 30s (reduced)
   connectionTimeoutMillis: 10000, // 10s connection timeout
-  max: 50, // Increased for batch processing (was 20)
-  min: 5, // Keep minimum connections ready
+  max: POOL_MAX, // Match Supabase limits
+  min: 2, // Reduce minimum connections
   allowExitOnIdle: false, // Keep pool alive even when idle
   statement_timeout: 30000, // Kill queries after 30s
   idle_in_transaction_session_timeout: 10000, // Kill idle transactions after 10s
@@ -40,7 +98,7 @@ setInterval(() => {
   const waiting = pool.waitingCount;
 
   if (total > 0) {
-    const utilization = ((total - idle) / 50) * 100; // max is 50
+    const utilization = ((total - idle) / POOL_MAX) * 100;
 
     // Alert if pool is > 80% utilized
     if (utilization > 80) {
@@ -110,11 +168,50 @@ export const query = async (text: string, params?: any[]) => {
   }
 };
 
+/**
+ * Safe query wrapper that respects connection pool limits.
+ * Uses semaphore to prevent pool exhaustion during high concurrency.
+ */
+export const safeQuery = async (text: string, params?: any[]) => {
+  await connectionSemaphore.acquire();
+  try {
+    return await query(text, params);
+  } finally {
+    connectionSemaphore.release();
+  }
+};
+
 export const getPoolStats = () => {
   return {
     totalCount: pool.totalCount,
     idleCount: pool.idleCount,
     waitingCount: pool.waitingCount,
+  };
+};
+
+/**
+ * Get comprehensive pool health metrics for monitoring.
+ */
+export const getPoolHealth = () => {
+  const poolStats = getPoolStats();
+  const semaphoreStats = connectionSemaphore.getStats();
+  const active = poolStats.totalCount - poolStats.idleCount;
+  const utilization = (active / POOL_MAX) * 100;
+
+  return {
+    pool: {
+      ...poolStats,
+      active,
+      max: POOL_MAX,
+      utilizationPercent: Math.round(utilization * 10) / 10
+    },
+    semaphore: semaphoreStats,
+    healthy: utilization < 80 && poolStats.waitingCount === 0,
+    warnings: [
+      utilization > 80 ? 'High pool utilization' : null,
+      poolStats.waitingCount > 0 ? 'Requests waiting for connections' : null,
+      semaphoreStats.waiting > 10 ? 'High semaphore queue' : null
+    ].filter(Boolean)
   };
 };
 

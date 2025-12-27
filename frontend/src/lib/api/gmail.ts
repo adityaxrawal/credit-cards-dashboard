@@ -23,6 +23,10 @@ export interface ScanStatus {
   errorMessage?: string;
   currentBatch?: number;
   totalBatches?: number;
+  postProcessingStats?: {
+    billsCreated?: number;
+    instrumentsCreated?: number;
+  };
 }
 
 export const gmailApi = {

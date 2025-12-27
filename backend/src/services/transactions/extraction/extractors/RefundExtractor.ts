@@ -16,7 +16,7 @@ export class RefundExtractor {
 
         // We don't know the instrument type easily unless we parse "credit card" or "account"
         let instrumentType = InstrumentType.CREDIT_CARD; // Default guess or unclassified?
-        if (/account|bank/i.test(text)) instrumentType = InstrumentType.SAVINGS_ACCOUNT;
+        if (/account|bank/i.test(text)) instrumentType = InstrumentType.BANK_ACCOUNT;
 
         const fingerprint = TransactionDeduplicator.generateFingerprint({
             amount,

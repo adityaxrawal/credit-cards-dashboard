@@ -198,7 +198,7 @@ export function TransactionDetailModal({
               {transaction.email_message_id && (
                 <DetailRow label="Source Email">
                   <a
-                    href={`https://mail.google.com/mail/u/0/#inbox/${transaction.email_message_id}`}
+                    href={`https://mail.google.com/mail/u/1/#inbox/${transaction.email_message_id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs text-primary-green hover:underline"

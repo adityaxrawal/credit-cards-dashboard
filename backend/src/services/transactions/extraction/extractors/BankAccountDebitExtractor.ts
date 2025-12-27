@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
-import { InstrumentService } from '../../../cards/instruments/InstrumentService';
+import { InstrumentAutoService } from '../../../cards/instruments/InstrumentAutoService';
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
 
 export class BankAccountDebitExtractor {
@@ -15,10 +15,11 @@ export class BankAccountDebitExtractor {
         const date = new Date(email.internalDate);
         const referenceNumber = this.extractReferenceNumber(combined);
 
+        // Get or create instrument
         let instrumentId: string | undefined = undefined;
         if (accountLast4) {
-            const account = await InstrumentService.getAccountByIdentifier(userId, '', accountLast4);
-            if (account) instrumentId = account.id;
+            const instrument = await InstrumentAutoService.findOrCreateAccount(userId, accountLast4, email);
+            instrumentId = instrument.id;
         }
 
         const fingerprint = TransactionDeduplicator.generateFingerprint({
@@ -35,7 +36,7 @@ export class BankAccountDebitExtractor {
             amount,
             currency: 'INR',
             merchant: recipient,
-            instrumentType: InstrumentType.SAVINGS_ACCOUNT,
+            instrumentType: InstrumentType.BANK_ACCOUNT,
             instrumentId,
             category: 'Transfer',
             referenceNumber: referenceNumber || undefined,

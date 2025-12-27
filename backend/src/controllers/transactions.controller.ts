@@ -23,6 +23,7 @@ export async function getTransactions(req: AuthRequest, res: Response, next: Nex
       category: req.query.category as string,
       transactionType: req.query.transactionType as string,
       merchant: req.query.merchant as string,
+      needsReview: req.query.needsReview === 'true' ? true : undefined,
       page: req.query.page ? parseInt(req.query.page as string) : 1,
       limit: req.query.limit ? parseInt(req.query.limit as string) : 50,
       sortBy: req.query.sortBy as string,

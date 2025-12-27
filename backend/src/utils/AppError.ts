@@ -12,3 +12,9 @@ export class AppError extends Error {
         Error.captureStackTrace(this, this.constructor);
     }
 }
+
+export class MissingExtractorError extends AppError {
+    constructor(message: string) {
+        super(message, 500);
+    }
+}

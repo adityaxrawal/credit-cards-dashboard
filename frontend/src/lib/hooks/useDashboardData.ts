@@ -9,6 +9,7 @@ import { transactionApi } from "@/lib/api/transactions";
 import { cardApi } from "@/lib/api/cards";
 import { budgetApi } from "@/lib/api/budget";
 import { rewardsApi } from "@/lib/api/rewards";
+import { billsApi, type Bill } from "@/lib/api/bills";
 
 export interface UpcomingBill {
     card_id: string;
@@ -76,46 +77,81 @@ export function useDashboardData() {
     });
     const totalRewards = rewardData?.summary?.total_points_balance || 0;
 
-    // Derived State
-    const { totalBalance, totalCards, upcomingBills } = useMemo(() => {
-        if (!cards.length) return { totalBalance: 0, totalCards: 0, upcomingBills: [] };
+    // 7. Upcoming Bills from bills API
+    const { data: billsData = [], isLoading: billsLoading } = useQuery({
+        queryKey: queryKeys.bills?.upcoming ?? ["bills", "upcoming"],
+        queryFn: () => billsApi.getUpcoming(),
+        enabled: !!user,
+    });
 
-        const balance = cards.reduce((sum, card) => sum + (card.current_balance || 0), 0);
+    // Derived State: totalBalance = Available Credit (credit_limit - current_balance)
+    const { totalBalance, totalCards, upcomingBills, totalUpcomingBillAmount } = useMemo(() => {
+        if (!cards.length) return { totalBalance: 0, totalCards: 0, upcomingBills: [], totalUpcomingBillAmount: 0 };
+
+        // Calculate available credit across all cards (credit_limit - current_balance)
+        const availableCredit = cards.reduce((sum, card) => {
+            const limit = card.credit_limit || 0;
+            const used = card.current_balance || 0;
+            return sum + (limit - used);
+        }, 0);
 
         const today = new Date();
         const bills: UpcomingBill[] = [];
 
-        cards.forEach(card => {
-            if (!card.nextDueDate || !card.current_balance) return;
+        // First, use actual bills from bills API if available
+        if (billsData.length > 0) {
+            billsData.forEach((bill: Bill) => {
+                const dueDate = new Date(bill.due_date);
+                const diffTime = dueDate.getTime() - today.getTime();
+                const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-            const dueDate = new Date(card.nextDueDate);
-            const diffTime = dueDate.getTime() - today.getTime();
-            const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-            // Only show bills due in next 30 days
-            if (daysUntil >= 0 && daysUntil <= 30 && card.current_balance > 0) {
                 bills.push({
-                    card_id: card.id,
-                    card_name: card.card_name,
-                    bank_name: card.bank_name,
-                    due_date: card.nextDueDate,
-                    outstanding: card.current_balance,
+                    card_id: bill.card_id,
+                    card_name: bill.card_name,
+                    bank_name: bill.bank_name,
+                    due_date: bill.due_date,
+                    outstanding: bill.bill_amount - (bill.payment_amount || 0),
                     days_until_due: daysUntil
                 });
-            }
-        });
+            });
+        } else {
+            // Fallback: derive from cards if no bills data
+            cards.forEach(card => {
+                if (!card.nextDueDate || !card.current_balance) return;
+
+                const dueDate = new Date(card.nextDueDate);
+                const diffTime = dueDate.getTime() - today.getTime();
+                const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                // Only show bills due in next 30 days
+                if (daysUntil >= 0 && daysUntil <= 30 && card.current_balance > 0) {
+                    bills.push({
+                        card_id: card.id,
+                        card_name: card.card_name,
+                        bank_name: card.bank_name,
+                        due_date: card.nextDueDate,
+                        outstanding: card.current_balance,
+                        days_until_due: daysUntil
+                    });
+                }
+            });
+        }
 
         bills.sort((a, b) => a.days_until_due - b.days_until_due);
 
+        // Calculate total upcoming bill amount
+        const billTotal = bills.reduce((sum, bill) => sum + bill.outstanding, 0);
+
         return {
-            totalBalance: balance,
+            totalBalance: availableCredit,
             totalCards: cards.length,
-            upcomingBills: bills
+            upcomingBills: bills,
+            totalUpcomingBillAmount: billTotal
         };
-    }, [cards]);
+    }, [cards, billsData]);
 
     // Combined Loading State
-    const loading = overviewLoading || transactionsLoading || cardsLoading || budgetLoading || trendLoading || rewardsLoading;
+    const loading = overviewLoading || transactionsLoading || cardsLoading || budgetLoading || trendLoading || rewardsLoading || billsLoading;
 
     // Manual Refresh Function (Invalidate all queries)
     const loadDashboardData = useCallback(async (force = false) => {
@@ -145,6 +181,7 @@ export function useDashboardData() {
         budgetStatus: budgetStatus || null,
         recentTransactions,
         upcomingBills,
+        totalUpcomingBillAmount,
         spendingTrend,
         totalBalance,
         totalCards,

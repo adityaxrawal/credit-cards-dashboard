@@ -24,8 +24,24 @@ const colors = {
 
 winston.addColors(colors);
 
+import { PIIRedactor } from '../security/PIIRedactor';
+
+const redactPII = winston.format((info) => {
+    // Redact the message
+    info.message = PIIRedactor.redact(info.message);
+
+    // Redact metadata properties
+    const { timestamp, level, message, ...meta } = info;
+    for (const key of Object.keys(meta)) {
+        info[key] = PIIRedactor.redact(meta[key]);
+    }
+
+    return info;
+});
+
 const format = winston.format.combine(
-    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
+    winston.format.timestamp({ format: 'YYYY-MM-DDTHH:mm:ss.SSSZ' }),
+    redactPII(), // Apply redaction
     // Add errors stack trace
     winston.format.errors({ stack: true }),
     // Splat for string interpolation
@@ -34,7 +50,8 @@ const format = winston.format.combine(
 );
 
 const devFormat = winston.format.combine(
-    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
+    winston.format.timestamp({ format: 'YYYY-MM-DDTHH:mm:ss.SSSZ' }),
+    redactPII(), // Apply redaction
     winston.format.colorize({ all: true }),
     winston.format.printf(
         (info) => {

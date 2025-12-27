@@ -77,7 +77,7 @@ export function RightSidebar({
               <div className="flex justify-between">
                 <span className="text-secondary-text">Current Balance</span>
                 <span className="text-primary-text font-semibold">
-                  ${selectedCard.current_balance.toLocaleString()}
+                  ${(selectedCard.current_balance ?? 0).toLocaleString()}
                 </span>
               </div>
               {selectedCard.credit_limit && (

@@ -6,6 +6,8 @@ import { apiClient } from "@/lib/api-client";
  */
 
 let refreshTimer: NodeJS.Timeout | null = null;
+let consecutiveFailures = 0;
+const MAX_RETRY_FAILURES = 3;
 
 /**
  * Start automatic token refresh
@@ -16,28 +18,48 @@ export function startTokenRefresh(
   onRefreshError?: (error: Error) => void
 ) {
   console.log("[TokenRefresh] Starting auto-refresh timer");
-  // Clear any existing timer
+  // Clear any existing timer and reset failure count
   stopTokenRefresh();
+  consecutiveFailures = 0;
 
   // Refresh every 55 minutes (access token expires in 60 minutes) - preventing premature refreshes
   const refreshInterval = 55 * 60 * 1000;
 
   refreshTimer = setInterval(async () => {
+    // Stop trying after max failures
+    if (consecutiveFailures >= MAX_RETRY_FAILURES) {
+      console.log("[TokenRefresh] Max failures reached, stopping");
+      stopTokenRefresh();
+      if (onRefreshError) {
+        onRefreshError(new Error("Max refresh attempts exceeded"));
+      }
+      return;
+    }
+
     try {
       // apiClient handles CSRF token automatically
       const response = await apiClient.post<{ success: boolean; data: unknown }>(
         "/api/auth/refresh"
       );
 
-      if (response.success && onRefreshSuccess) {
-        onRefreshSuccess();
+      if (response.success) {
+        consecutiveFailures = 0; // Reset on success
+        if (onRefreshSuccess) onRefreshSuccess();
       }
     } catch (error) {
-      console.error("Token refresh failed:", error);
-      stopTokenRefresh();
-      if (onRefreshError) {
-        onRefreshError(error as Error);
+      consecutiveFailures++;
+      console.error(`Token refresh failed (attempt ${consecutiveFailures}/${MAX_RETRY_FAILURES}):`, error);
+
+      // Check if this is a terminal error (user not found, invalid token)
+      const axiosError = error as { response?: { data?: { clearSession?: boolean } } };
+      if (axiosError?.response?.data?.clearSession) {
+        console.log("[TokenRefresh] Session cleared by server, stopping refreshes");
+        stopTokenRefresh();
+        if (onRefreshError) {
+          onRefreshError(error as Error);
+        }
       }
+      // For non-terminal errors, let it retry on the next interval
     }
   }, refreshInterval);
 

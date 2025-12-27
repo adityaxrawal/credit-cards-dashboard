@@ -40,9 +40,9 @@ export function DashboardRecentTransactions({ transactions }: DashboardRecentTra
               </div>
               <span className={cn(
                 "text-sm font-medium",
-                t.transaction_type === "debit" ? "text-primary-text" : "text-success"
+                t.transaction_type === "debit" ? "text-error" : "text-success"
               )}>
-                {t.transaction_type === "debit" ? "-" : "+"}{formatCurrency(t.amount)}
+                {t.transaction_type === "debit" ? "-" : "+"}{formatCurrency(Math.abs(t.amount))}
               </span>
             </div>
           ))

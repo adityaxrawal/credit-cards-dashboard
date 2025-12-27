@@ -317,11 +317,11 @@ function CardItem({
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div>
             <p className="text-secondary-text">Bill Date</p>
-            <p className="text-primary-text">{card.bill_date}th</p>
+            <p className="text-primary-text">{card.bill_date ?? '-'}th</p>
           </div>
           <div>
             <p className="text-secondary-text">Due Date</p>
-            <p className="text-primary-text">{card.due_date}th</p>
+            <p className="text-primary-text">{card.due_date ?? '-'}th</p>
           </div>
         </div>
 
@@ -399,9 +399,9 @@ function AddCardModal({
         cardName: card.card_name,
         bankName: card.bank_name,
         lastFour: card.card_number_last4,
-        billDate: card.bill_date,
-        dueDate: card.due_date,
-        creditLimit: card.credit_limit,
+        billDate: card.bill_date ?? 1,
+        dueDate: card.due_date ?? 5,
+        creditLimit: card.credit_limit ?? 0,
       });
     } else {
       setFormData({

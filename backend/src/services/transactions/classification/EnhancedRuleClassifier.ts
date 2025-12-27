@@ -210,6 +210,13 @@ export class EnhancedRuleClassifier {
             EMI_PAYMENT: 'cc_spend',
             CASHBACK_REWARD: 'cashback',
             STATEMENT: 'statement_txn',
+
+            // New Categories
+            INVESTMENT: 'investment',
+            TRAVEL: 'travel',
+            FOOD_DELIVERY: 'food',
+            RIDE_HAILING: 'transport',
+
             OTP_SECURITY: 'non_financial',
             PROMOTIONAL: 'non_financial',
             MARKETING: 'non_financial',

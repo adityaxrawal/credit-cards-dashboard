@@ -57,7 +57,7 @@ export class GmailFetcherService {
                     bodyHtml: parsed.bodyHtml,
                     snippet: parsed.snippet,
                     attachments: parsed.attachments
-                } as any); // Type cast if SimplifiedEmail doesn't match fully?
+                });
                 // I need to check SimplifiedEmail type in types/index.ts.
             } catch (e) {
                 console.warn(`[Fetcher] Failed to parse message ${raw.id}`, e);

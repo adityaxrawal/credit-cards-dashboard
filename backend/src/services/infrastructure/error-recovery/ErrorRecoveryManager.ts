@@ -1,4 +1,4 @@
-import pool from '../../../lib/db';
+import pool, { safeQuery } from '../../../lib/db';
 import logger from '../../../utils/infrastructure/logger';
 import { isPostgresError } from '../../../utils/validation/errorTypeGuards';
 import { ManualReviewService } from './ManualReviewService';
@@ -13,7 +13,7 @@ export type ErrorType =
     | 'CLASSIFICATION_FAILED'
     | 'UNKNOWN';
 
-export type RecoveryAction = 'RETRY' | 'MANUAL_REVIEW' | 'SKIP' | 'FALLBACK';
+export type RecoveryAction = 'RETRY' | 'MANUAL_REVIEW' | 'SKIP' | 'FALLBACK' | 'DLQ';
 
 interface EmailContext {
     userId: string;
@@ -56,6 +56,8 @@ export class ErrorRecoveryManager {
         // 4. Implement action
         if (result.action === 'RETRY' && result.nextRetryAt) {
             await RetryQueueService.queueForRetry(context, result.nextRetryAt);
+        } else if (result.action === 'DLQ') {
+            await RetryQueueService.moveToDLQ(context, result.reason);
         } else if (result.action === 'MANUAL_REVIEW') {
             await ManualReviewService.markForManualReview(context, result.reason);
         }
@@ -138,9 +140,9 @@ export class ErrorRecoveryManager {
                         nextRetryAt: new Date(Date.now() + delayMs)
                     };
                 }
-                // Max retries exceeded
+                // Max retries exceeded -> DLQ
                 return {
-                    action: 'MANUAL_REVIEW',
+                    action: 'DLQ',
                     reason: `Max retries (${this.MAX_RETRIES}) exceeded for ${errorType}`
                 };
 
@@ -174,7 +176,7 @@ export class ErrorRecoveryManager {
      */
     private static async logError(error: Error, context: EmailContext): Promise<void> {
         try {
-            await pool.query(
+            await safeQuery(
                 `INSERT INTO pipeline_error_logs (
           email_id, user_id, error_type, error_message, error_stack,
           pipeline_stage, context, retry_count, scan_job_id, created_at
@@ -217,24 +219,24 @@ export class ErrorRecoveryManager {
         unresolvedCount: number;
     }> {
         const [byTypeResult, byStageResult, totalResult, unresolvedResult] = await Promise.all([
-            pool.query(
+            safeQuery(
                 `SELECT error_type, COUNT(*) as count FROM pipeline_error_logs
          WHERE user_id = $1 AND created_at >= $2
          GROUP BY error_type ORDER BY count DESC`,
                 [userId, since]
             ),
-            pool.query(
+            safeQuery(
                 `SELECT pipeline_stage, COUNT(*) as count FROM pipeline_error_logs
          WHERE user_id = $1 AND created_at >= $2
          GROUP BY pipeline_stage ORDER BY count DESC`,
                 [userId, since]
             ),
-            pool.query(
+            safeQuery(
                 `SELECT COUNT(*) as total FROM pipeline_error_logs
          WHERE user_id = $1 AND created_at >= $2`,
                 [userId, since]
             ),
-            pool.query(
+            safeQuery(
                 `SELECT COUNT(*) as count FROM pipeline_error_logs
          WHERE user_id = $1 AND resolved = false`,
                 [userId]

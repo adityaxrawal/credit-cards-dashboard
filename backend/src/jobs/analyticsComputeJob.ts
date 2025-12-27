@@ -1,5 +1,5 @@
 import pool from '../lib/db';
-import * as analyticsService from '../services/analytics/AnalyticsService';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
 /**
  * Analytics Compute Job
@@ -7,35 +7,35 @@ import * as analyticsService from '../services/analytics/AnalyticsService';
  */
 export async function runAnalyticsComputeJob() {
   console.log('[AnalyticsComputeJob] Starting...');
-  
+
   try {
     // Get all active users
     const { rows: users } = await pool.query(
       'SELECT id FROM users WHERE is_active = true'
     );
-    
+
     console.log(`[AnalyticsComputeJob] Processing ${users.length} users`);
-    
+
     for (const user of users) {
       try {
         // Invalidate old cache
-        await analyticsService.invalidateCache(user.id);
-        
+        await AnalyticsService.invalidateCache(user.id);
+
         // Pre-compute overview
-        await analyticsService.getOverview(user.id);
-        
+        await AnalyticsService.getOverview(user.id);
+
         // Pre-compute category breakdown
-        await analyticsService.getCategoryBreakdown(user.id);
-        
+        await AnalyticsService.getCategoryBreakdown(user.id);
+
         // Pre-compute trends
-        await analyticsService.getTrends(user.id, 6);
-        
+        await AnalyticsService.getTrends(user.id, 6);
+
         console.log(`[AnalyticsComputeJob] Computed analytics for user ${user.id}`);
       } catch (error) {
         console.error(`[AnalyticsComputeJob] Error processing user ${user.id}:`, error);
       }
     }
-    
+
     console.log('[AnalyticsComputeJob] Completed');
   } catch (error) {
     console.error('[AnalyticsComputeJob] Job failed:', error);

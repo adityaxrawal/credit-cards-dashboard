@@ -1,4 +1,5 @@
 import { query, getPoolStats } from '../lib/db';
+import redis from '../lib/redis';
 import os from 'os';
 
 interface HealthStatus {
@@ -10,6 +11,10 @@ interface HealthStatus {
             status: 'up' | 'down';
             latency?: number;
         };
+        redis: {
+            status: 'up' | 'down';
+            latency?: number;
+        };
     };
 }
 
@@ -17,6 +22,8 @@ export const performHealthCheck = async (): Promise<HealthStatus> => {
     const start = Date.now();
     let dbStatus: 'up' | 'down' = 'up';
     let dbLatency: number | undefined;
+    let redisStatus: 'up' | 'down' = 'up';
+    let redisLatency: number | undefined;
 
     try {
         const dbStart = Date.now();
@@ -26,7 +33,17 @@ export const performHealthCheck = async (): Promise<HealthStatus> => {
         dbStatus = 'down';
     }
 
-    const status: 'healthy' | 'degraded' | 'unhealthy' = dbStatus === 'up' ? 'healthy' : 'degraded';
+    try {
+        const redisStart = Date.now();
+        await redis.ping();
+        redisLatency = Date.now() - redisStart;
+    } catch (error) {
+        redisStatus = 'down';
+    }
+
+    const status: 'healthy' | 'degraded' | 'unhealthy' =
+        (dbStatus === 'up' && redisStatus === 'up') ? 'healthy' :
+            (dbStatus === 'up' || redisStatus === 'up') ? 'degraded' : 'unhealthy';
 
     return {
         status,
@@ -36,6 +53,10 @@ export const performHealthCheck = async (): Promise<HealthStatus> => {
             database: {
                 status: dbStatus,
                 latency: dbLatency
+            },
+            redis: {
+                status: redisStatus,
+                latency: redisLatency
             }
         }
     };

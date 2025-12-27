@@ -130,13 +130,27 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
   try {
     decoded = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET);
   } catch (error) {
-    return res.status(401).json({ error: 'Invalid refresh token' });
+    // Clear invalid tokens from cookies
+    res.clearCookie('accessToken', { path: '/' });
+    res.clearCookie('refreshToken', { path: '/' });
+    return res.status(401).json({
+      error: 'INVALID_REFRESH_TOKEN',
+      message: 'Invalid refresh token',
+      clearSession: true
+    });
   }
 
   const user = await UserRepository.findById(decoded.userId);
 
   if (!user) {
-    return res.status(401).json({ error: 'User not found' });
+    // Clear cookies for non-existent user
+    res.clearCookie('accessToken', { path: '/' });
+    res.clearCookie('refreshToken', { path: '/' });
+    return res.status(401).json({
+      error: 'USER_NOT_FOUND',
+      message: 'User not found',
+      clearSession: true
+    });
   }
 
   const tokens = generateTokens(decoded.userId);

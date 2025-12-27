@@ -27,7 +27,7 @@ export class BankAccountUPIDebitDetector extends BaseClassifier {
 
         if (last4) {
             userInstrument = instruments.find(
-                i => i.instrument_type === InstrumentType.SAVINGS_ACCOUNT &&
+                i => i.instrument_type === InstrumentType.BANK_ACCOUNT &&
                     i.account_number_masked.endsWith(last4)
             );
         } else {

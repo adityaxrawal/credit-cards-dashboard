@@ -13,7 +13,7 @@ export class GmailLinkGenerator {
    * @param threadId The unique Gmail thread ID
    * @param accountIndex The index of the logged-in Gmail account (default 0)
    */
-  static generateThreadLink(threadId: string, accountIndex: number = 0): string {
+  static generateThreadLink(threadId: string, accountIndex: number = 1): string {
     return `https://mail.google.com/mail/u/${accountIndex}/#inbox/${threadId}`;
   }
 }

@@ -86,7 +86,7 @@ export class InstrumentService {
     ): Promise<Instrument | null> {
         const instruments = await this.getUserInstruments(userId);
         return instruments.find(i =>
-            (i.instrument_type === InstrumentType.BANK_ACCOUNT || i.instrument_type === InstrumentType.SAVINGS_ACCOUNT) &&
+            (i.instrument_type === InstrumentType.BANK_ACCOUNT) &&
             i.account_number_masked.endsWith(last4) &&
             (i.bank_name.toLowerCase().includes(bankName.toLowerCase()) || bankName.toLowerCase().includes(i.bank_name.toLowerCase()))
         ) || null;

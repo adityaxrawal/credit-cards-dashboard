@@ -1,6 +1,7 @@
 import * as transactionsQueries from '../../db/queries/transactions.queries';
 import * as cardsQueries from '../../db/queries/cards.queries';
 import dayjs from 'dayjs';
+import { TransactionMetadata } from '../../types/transaction.types';
 import { invalidateTransactionCache } from '../../utils/cache/cacheInvalidation';
 
 // import { ExtractionResult } from './extraction.service'; // Removed
@@ -99,7 +100,7 @@ export async function createManualTransaction(data: {
   transactionType: string;
   direction: 'credit' | 'debit';
   description?: string;
-  metadata?: any;
+  metadata?: TransactionMetadata;
 }) {
   console.log(`[TransactionService] Creating manual transaction for user ${data.userId}`, data);
   // Calculate bill month/year (simplified for manual)
@@ -174,7 +175,7 @@ export async function insertFromEmail(
     category: string;
     emailMessageId: string;
     direction: 'credit' | 'debit';
-    metadata?: any;
+    metadata?: TransactionMetadata;
     exactTimestamp?: Date;
     emailSubject?: string;
     gmailThreadId?: string;
@@ -249,7 +250,7 @@ export async function insertFromEmailBulk(
     category: string;
     emailMessageId: string;
     direction: 'credit' | 'debit';
-    metadata?: any;
+    metadata?: TransactionMetadata;
     exactTimestamp?: Date;
     emailSubject?: string;
     gmailThreadId?: string;

@@ -1,10 +1,11 @@
 import { decrypt } from '../utils/helpers/encryption';
-import pool from '../lib/db';
+import pool, { safeQuery } from '../lib/db';
 import * as gmailClient from '../lib/gmailClient';
 import { GmailFetcherService } from '../services/gmail/fetcher';
 import logger from '../utils/infrastructure/logger';
 import { WorkflowLogger } from '../utils/infrastructure/workflowLogger';
 import { universalPipeline } from '../services/transactions/pipeline/UniversalTransactionPipeline';
+import { GptQueueManager } from '../services/transactions/pipeline/GptQueueManager';
 import { SimplifiedEmail } from '../types/transaction.types'; // Use new types
 import dayjs from 'dayjs';
 
@@ -21,11 +22,13 @@ export async function runHistoricalScan(
   toDate?: Date
 ) {
   logger.info(`[HistoricalScanner] Starting FAST scan ${jobId} for user:`, userId);
+  console.log(`\n\n[JOB START] Historical Scan ${jobId} for user ${userId}`);
+  console.log(`[JOB CONF] Date Range: ${fromDate || '90 days ago'} -> ${toDate || 'Now'}`);
   WorkflowLogger.log('FETCH', `Starting historical scan (Fast Mode)`, { jobId, userId });
 
   try {
     // 1. Validate User & Token
-    const { rows: users } = await pool.query(
+    const { rows: users } = await safeQuery(
       'SELECT id, email, google_refresh_token FROM users WHERE id = $1',
       [userId]
     );
@@ -42,7 +45,7 @@ export async function runHistoricalScan(
     const query = `after:${from} before:${to} in:inbox`;
 
     // Initialize job status
-    await pool.query(
+    await safeQuery(
       `UPDATE gmail_sync_jobs 
        SET status = 'PROCESSING', 
            current_step = 'FETCHING', 
@@ -68,9 +71,13 @@ export async function runHistoricalScan(
     const jobErrors: string[] = [];
 
     // Config
-    const FETCH_BATCH_SIZE = 50;  // Reduced for stability
-    const HIGH_WATER_MARK = 200;  // Buffer more items before pausing
-    const LOW_WATER_MARK = 50;   // Resume sooner
+    const FETCH_BATCH_SIZE = 100;  // Increased for throughput
+    const HIGH_WATER_MARK = 500;  // Run ahead aggressively
+    const LOW_WATER_MARK = 100;   // Resume sooner
+
+    // --- GPT QUEUE ---
+    const gptQueueManager = new GptQueueManager();
+    gptQueueManager.start();
 
     // --- PRODUCER LOOP (FETCH) ---
     const fetchLoop = async () => {
@@ -81,10 +88,12 @@ export async function runHistoricalScan(
         do {
           // Backpressure check
           if (processingQueue.length > HIGH_WATER_MARK) {
+            console.log(`[FETCH] Backpressure active. Queue size: ${processingQueue.length}. Pausing...`);
             WorkflowLogger.log('FETCH', `Backpressure: Queue size ${processingQueue.length}. Pausing fetch...`, { jobId });
             while (processingQueue.length > LOW_WATER_MARK) {
               await new Promise(r => setTimeout(r, 200));
             }
+            console.log(`[FETCH] Resuming fetch. Queue drained to ${processingQueue.length}.`);
             WorkflowLogger.log('FETCH', `Resuming fetch...`, { jobId });
           }
 
@@ -132,6 +141,7 @@ export async function runHistoricalScan(
         // Circuit Breaker
         if (consecutiveErrors > MAX_CONSECUTIVE_ERRORS) {
           logger.error(`[PROCESS] Circuit breaker tripped! Over ${MAX_CONSECUTIVE_ERRORS} consecutive errors. Aborting job.`);
+          console.error(`[JOB FAIL] Circuit breaker tripped! Aborting job ${jobId}`);
           isFetching = false; // Stop producer
           processingQueue.length = 0; // Clear queue
           break;
@@ -144,11 +154,11 @@ export async function runHistoricalScan(
         }
 
         // Take a chunk off the queue
-        const batchSize = 10;
+        // With semaphore=10, process 5 emails at a time (each may make 2 DB calls)
+        const batchSize = 5;
         const batch = processingQueue.splice(0, batchSize);
         const batchStartTime = Date.now();
-
-        console.log(`\n[PHASE: PROCESS] Processing batch of ${batch.length} emails. Queue rem: ${processingQueue.length}`);
+        console.log(`\n[PROCESS] Batch Start. Size: ${batch.length}. Queue Rem: ${processingQueue.length}`);
 
         // Process this batch in parallel
         await Promise.all(batch.map(async (email) => {
@@ -177,14 +187,30 @@ export async function runHistoricalScan(
         return gmailClient.getAttachment(refreshToken, msgId, attId);
       };
 
-      // Delegate to Universal Pipeline
-      const result = await universalPipeline.processEmail(userId, cleanEmail, jobId, fetchAttachment);
+      // Delegate to Universal Pipeline with skipGpt option
+      // We pass skipGpt: true to offload low-confidence items to the background workers
+      const result = await universalPipeline.processEmailInternal(userId, cleanEmail, jobId, fetchAttachment, { skipGpt: true });
 
       // Update Stats based on result
       if (result.status === 'success') stats.success++;
       else if (result.status === 'terminated') stats.terminated++;
       else if (result.status === 'duplicate') stats.duplicate++;
       else if (result.status === 'needs_review') stats.needs_review++;
+      else if (result.status === 'queued_for_gpt') {
+        // Enqueue to GPT Manager
+        gptQueueManager.enqueue({
+          userId,
+          cleanEmail: result.cleanEmail!, // Assert existing because status is queued_for_gpt
+          rawEmail: cleanEmail,
+          jobId,
+          rawEmailId: result.rawEmailId || '',
+          onComplete: () => {
+            // We can update a separate counter if needed, or rely on job stats polling
+          }
+        });
+        // We count this as "queued" for now, not success or failure yet.
+        // Effectively "pending"
+      }
       else if (result.status === 'failed') {
         stats.failed++;
         // Capture error
@@ -211,7 +237,7 @@ export async function runHistoricalScan(
       // Persist partial errors if any
       const errorsJson = jobErrors.length > 0 ? JSON.stringify(jobErrors) : '[]';
 
-      await pool.query(
+      await safeQuery(
         `UPDATE gmail_sync_jobs 
              SET total_messages = $1, 
                  emails_fetched = $1,
@@ -242,43 +268,137 @@ export async function runHistoricalScan(
     const fetchRate = Math.round(totalFetched / duration);
     const processRate = Math.round((stats.success + stats.failed + stats.terminated + stats.needs_review) / duration);
 
+    // Wait for GPT Queue to drain
+    logger.info(`[HistoricalScanner] Fetch/Rule pipeline done. Waiting for GPT Queue to drain...`);
+    await gptQueueManager.drain();
+    gptQueueManager.stop();
+
+    // Merge GPT stats
+    stats.success += gptQueueManager.stats.success;
+    stats.failed += gptQueueManager.stats.failed;
+    stats.terminated += gptQueueManager.stats.nonFinancial;
+    // stats.queued is purely internal
+
     // Log completion metrics at INFO level representing new pipeline stats
     logger.info(`[HistoricalScanner] Scan ${jobId} completed`, {
       duration: `${duration.toFixed(1)}s`,
       totalFetched,
       fetchRate: `${fetchRate}/sec`,
       processRate: `${processRate}/sec`,
-      stats
+      stats,
+      gptStats: gptQueueManager.stats
     });
     WorkflowLogger.log('COMPLETED', `Scan finished in ${duration}s. Rate: ${fetchRate}/sec`, { jobId, stats });
 
 
-    // --- CLEANUP ---
-    // Universal pipeline doesn't have an external queue to flush unless GPTClassifier batching is hanging?
-    // GPTClassifier handles flushing on timeout or size. By end of loop, pending batch might exist.
-    // Ideally we should call a flush on GPTClassifier if needed, but it self-manages mostly.
-    // If strict, we could add a shutdown method to GPTClassifier.
-    // For now, allow processLoop to finish which implies all promises resolved.
+    // --- POST-PROCESSING ---
+    // Initialize stats
+    const postProcessingStats: { billsCreated: number; instrumentsCreated: number } = {
+      billsCreated: 0,
+      instrumentsCreated: 0
+    };
 
-    await pool.query(
+    // Update status to indicate post-processing start
+    await safeQuery(
+      `UPDATE gmail_sync_jobs SET current_step = 'POST_PROCESSING_ANALYTICS', last_update_at = NOW() WHERE id = $1`,
+      [jobId]
+    );
+    console.log(`[POST-PROC] Step: ANALYTICS for job ${jobId}`);
+    // Broadcast status update
+    const { broadcastProcessingUpdate, broadcastJobComplete } = await import('../services/alerts/WebSocketService');
+    broadcastProcessingUpdate(jobId, {
+      status: 'PROCESSING',
+      currentStep: 'POST_PROCESSING_ANALYTICS',
+      totalProcessed: totalFetched,
+      totalEmails: totalFetched,
+      totalTransactions: stats.success,
+      postProcessingStats
+    });
+
+    // After sync, invalidate caches so fresh data is fetched
+    try {
+      const { AnalyticsService } = await import('../services/analytics/AnalyticsService');
+      await AnalyticsService.invalidateCache(userId);
+      logger.info(`[HistoricalScanner] Analytics cache invalidated for user ${userId}`);
+    } catch (cacheErr) {
+      logger.warn(`[HistoricalScanner] Failed to invalidate analytics cache:`, cacheErr);
+    }
+
+    // Generate bills
+    await safeQuery(
+      `UPDATE gmail_sync_jobs SET current_step = 'POST_PROCESSING_BILLS', last_update_at = NOW() WHERE id = $1`,
+      [jobId]
+    );
+    console.log(`[POST-PROC] Step: BILLS for job ${jobId}`);
+
+    // Broadcast before starting bills (optional, but good to show step change)
+    broadcastProcessingUpdate(jobId, {
+      status: 'PROCESSING',
+      currentStep: 'POST_PROCESSING_BILLS',
+      totalProcessed: totalFetched,
+      totalEmails: totalFetched,
+      totalTransactions: stats.success,
+      postProcessingStats
+    });
+
+    try {
+      const { PostProcessingService } = await import('../services/processing/PostProcessingService');
+      const billsCreated = await PostProcessingService.generateBillsFromTransactions(userId);
+      postProcessingStats.billsCreated = billsCreated;
+
+      // Broadcast update with bills count
+      broadcastProcessingUpdate(jobId, {
+        status: 'PROCESSING',
+        currentStep: 'POST_PROCESSING_BILLS',
+        totalProcessed: totalFetched,
+        totalEmails: totalFetched,
+        totalTransactions: stats.success,
+        postProcessingStats
+      });
+
+      // Detect Cards
+      await safeQuery(
+        `UPDATE gmail_sync_jobs SET current_step = 'POST_PROCESSING_CARDS', last_update_at = NOW() WHERE id = $1`,
+        [jobId]
+      );
+      console.log(`[POST-PROC] Step: CARDS for job ${jobId}`);
+      broadcastProcessingUpdate(jobId, {
+        status: 'PROCESSING',
+        currentStep: 'POST_PROCESSING_CARDS',
+        totalProcessed: totalFetched,
+        totalEmails: totalFetched,
+        totalTransactions: stats.success,
+        postProcessingStats
+      });
+
+      const instrumentsCreated = await PostProcessingService.createInstrumentSuggestions(userId);
+      postProcessingStats.instrumentsCreated = instrumentsCreated;
+
+      logger.info(`[HistoricalScanner] Post-processing completed for user ${userId}`);
+    } catch (postErr) {
+      logger.warn(`[HistoricalScanner] Post-processing failed:`, postErr);
+    }
+
+    await safeQuery(
       `UPDATE gmail_sync_jobs SET status = 'COMPLETED', current_step = 'COMPLETED', progress = 100, emails_processed = total_messages, last_update_at = NOW(), completed_at = NOW() WHERE id = $1`,
       [jobId]
     );
+    console.log(`✅ [JOB DONE] Job ${jobId} completed successfully.`);
 
     // Emit Final WebSocket Update
-    const { broadcastJobComplete } = await import('../services/alerts/WebSocketService');
     broadcastJobComplete(jobId, {
       totalEmails: totalFetched,
       totalTransactions: stats.success,
       processed: totalFetched,
-      status: 'COMPLETED'
+      status: 'COMPLETED',
+      postProcessingStats
     });
 
     return { total: totalFetched };
 
   } catch (error) {
     WorkflowLogger.error('FAILED', `Scan failed`, error, { jobId });
-    await pool.query(
+    await safeQuery(
       `UPDATE gmail_sync_jobs SET status = 'FAILED', errors = $1, completed_at = NOW() WHERE id = $2`,
       [JSON.stringify([{ error: error instanceof Error ? error.message : 'Unknown' }]), jobId]
     );
@@ -286,7 +406,7 @@ export async function runHistoricalScan(
   } finally {
     // SAFETY NET: Ensure job is never left hanging
     try {
-      const { rows } = await pool.query('SELECT status FROM gmail_sync_jobs WHERE id = $1', [jobId]);
+      const { rows } = await safeQuery('SELECT status FROM gmail_sync_jobs WHERE id = $1', [jobId]);
       if (rows.length > 0) {
         const status = rows[0].status;
         const activeStatuses = ['PENDING', 'PROCESSING', 'FETCHING', 'GPT_PROCESSING'];
@@ -295,7 +415,7 @@ export async function runHistoricalScan(
           logger.warn(`[HistoricalScanner] Safety Net: Job ${jobId} ended in ${status} state. Forcing COMPLETED.`);
           // If we are here, it means no error was thrown (caught above), but we are still not COMPLETED/FAILED.
           // This usually implies a logic bug or race condition where the explicit 'COMPLETED' update was missed.
-          await pool.query(
+          await safeQuery(
             `UPDATE gmail_sync_jobs 
               SET status = 'COMPLETED', 
                   current_step = 'COMPLETED', 

@@ -1,4 +1,4 @@
-import pool from '../../../lib/db';
+import pool, { safeQuery } from '../../../lib/db';
 import logger from '../../../utils/infrastructure/logger';
 
 interface EmailContext {
@@ -26,7 +26,7 @@ export class ManualReviewService {
         }
     ): Promise<void> {
         try {
-            await pool.query(
+            await safeQuery(
                 `INSERT INTO manual_review_queue (
           email_id, user_id, email_subject, email_snippet, email_sender,
           suggested_type, suggested_merchant, suggested_amount, 
@@ -66,13 +66,13 @@ export class ManualReviewService {
         limit: number = 50,
         offset: number = 0
     ): Promise<{ items: any[]; total: number }> {
-        const countResult = await pool.query(
+        const countResult = await safeQuery(
             `SELECT COUNT(*) as total FROM manual_review_queue 
        WHERE user_id = $1 AND status = 'pending'`,
             [userId]
         );
 
-        const itemsResult = await pool.query(
+        const itemsResult = await safeQuery(
             `SELECT * FROM manual_review_queue 
        WHERE user_id = $1 AND status = 'pending'
        ORDER BY created_at DESC
@@ -95,7 +95,7 @@ export class ManualReviewService {
         finalClassification: any,
         notes?: string
     ): Promise<void> {
-        await pool.query(
+        await safeQuery(
             `UPDATE manual_review_queue SET
         status = 'approved',
         final_classification = $1,
@@ -116,7 +116,7 @@ export class ManualReviewService {
         userId: string,
         notes?: string
     ): Promise<void> {
-        await pool.query(
+        await safeQuery(
             `UPDATE manual_review_queue SET
         status = 'rejected',
         review_notes = $1,

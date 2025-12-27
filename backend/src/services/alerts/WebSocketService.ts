@@ -14,6 +14,12 @@ interface ScanJob {
         queue2: number;
         queue3: number;
     };
+    status?: string;
+    currentStep?: string;
+    postProcessingStats?: {
+        billsCreated?: number;
+        instrumentsCreated?: number;
+    };
 }
 
 const activeJobs = new Map<string, ScanJob>();
@@ -25,13 +31,15 @@ export function initializeWebSocket(httpServer: Server) {
 
     io.on('connection', (socket) => {
         logger.info(`Client connected: ${socket.id}`);
+        console.log(`[WS] Client connected: ${socket.id}`);
 
-        socket.on('subscribe', (data) => {
+        socket.on('subscribe', async (data) => {
             const { jobId, userId } = data;
 
             if (jobId) {
                 socket.join(`job-${jobId}`);
                 logger.info(`Client ${socket.id} subscribed to job ${jobId}`);
+                console.log(`[WS] Client ${socket.id} joined job-${jobId}`);
 
                 // Send current status immediately
                 const job = activeJobs.get(jobId);
@@ -44,14 +52,31 @@ export function initializeWebSocket(httpServer: Server) {
                             totalTransactions: job.totalTransactions,
                             totalErrors: job.totalErrors,
                             queueStatus: job.queueStatus,
+                            status: job.status,
+                            currentStep: job.currentStep,
+                            postProcessingStats: job.postProcessingStats,
                         },
                     });
                 }
             }
 
             if (userId) {
-                socket.join(`user-${userId}`);
-                logger.info(`Client ${socket.id} subscribed to user ${userId}`);
+                // Validate user exists before accepting subscription
+                try {
+                    const { safeQuery } = await import('../../lib/db');
+                    const result = await safeQuery('SELECT id FROM users WHERE id = $1', [userId]);
+                    if (result.rows.length === 0) {
+                        console.log(`[WS] Rejected subscription: user ${userId} not found`);
+                        socket.emit('error', { code: 'USER_NOT_FOUND', message: 'Invalid user' });
+                        return;
+                    }
+                    socket.join(`user-${userId}`);
+                    logger.info(`Client ${socket.id} subscribed to user ${userId}`);
+                } catch (err) {
+                    logger.error('[WS] User validation failed:', err);
+                    socket.emit('error', { code: 'VALIDATION_ERROR', message: 'Subscription failed' });
+                    return;
+                }
             }
         });
 
@@ -110,10 +135,14 @@ export function broadcastProcessingUpdate(
             totalTransactions: job.totalTransactions,
             totalErrors: job.totalErrors,
             queueStatus: job.queueStatus,
+            status: job.status,
+            currentStep: job.currentStep,
+            postProcessingStats: job.postProcessingStats,
         },
     });
 
     logger.debug(`Broadcast update for job ${jobId}`, job);
+    console.log(`[WS-BROADCAST] Job ${jobId} -> Step: ${job.currentStep || 'Unknown'} | Processed: ${job.totalProcessed}/${job.totalEmails}`);
 }
 
 /**

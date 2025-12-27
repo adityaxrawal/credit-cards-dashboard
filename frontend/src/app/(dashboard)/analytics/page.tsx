@@ -2,25 +2,8 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  Area,
-  AreaChart,
-} from "recharts";
 import { AppLayout } from "@/components/layout";
-import { Button, Badge } from "@/components/ui";
+import { Button } from "@/components/ui";
 import {
   Select,
   SelectContent,
@@ -41,19 +24,11 @@ import {
   PieChart as PieChartIcon,
   Download,
 } from "lucide-react";
-import { formatCurrency, cn } from "@/lib/utils";
-import { analyticsApi, DashboardOverview, SpendingTrendItem, TopMerchant } from "@/lib/api/analytics";
-
-const COLORS = [
-  "#0088FE",
-  "#00C49F",
-  "#FFBB28",
-  "#FF8042",
-  "#8884D8",
-  "#82CA9D",
-  "#FFC658",
-  "#FF6B9D",
-];
+import { formatCurrency } from "@/lib/utils";
+import { analyticsApi, TopMerchant } from "@/lib/api/analytics";
+import { SpendingTrendChart } from "@/components/features/analytics/SpendingTrendChart";
+import { CategoryPieChart } from "@/components/features/analytics/CategoryPieChart";
+import { queryKeys } from "@/lib/react-query/keys";
 
 interface KPI {
   name: string;
@@ -64,8 +39,6 @@ interface KPI {
   trend?: "positive" | "negative" | "neutral";
   description: string;
 }
-
-import { queryKeys } from "@/lib/react-query/keys";
 
 export default function AnalyticsPage() {
   const [trendRange, setTrendRange] = useState<"6m" | "12m">("6m");
@@ -100,7 +73,7 @@ export default function AnalyticsPage() {
   // Process KPI Data
   const kpis: KPI[] = [];
   if (overviewData) {
-    const { currentMonth, previousMonth, delta } = overviewData;
+    const { currentMonth, previousMonth } = overviewData;
     
     // Safely access values with defaults
     const currSpent = currentMonth?.totalSpent ?? 0;
@@ -116,7 +89,7 @@ export default function AnalyticsPage() {
     kpis.push({
       name: "Total Spent",
       value: currSpent,
-      unit: "$",
+      unit: "currency",
       change: Math.abs(spentChange),
       changeType: spentChange > 0 ? "increase" : spentChange < 0 ? "decrease" : "stable",
       trend: spentChange > 0 ? "negative" : "positive", // Spending increase is usually negative
@@ -145,7 +118,7 @@ export default function AnalyticsPage() {
     kpis.push({
       name: "Avg Transaction",
       value: currentAvg,
-      unit: "$",
+      unit: "currency",
       change: Math.abs(avgChange),
       changeType: avgChange > 0 ? "increase" : avgChange < 0 ? "decrease" : "stable",
       trend: "neutral",
@@ -167,7 +140,7 @@ export default function AnalyticsPage() {
     kpis.push({
       name: "Top Category",
       value: topCategoryAmount, // Display amount, but name is the category
-      unit: "$",
+      unit: "currency",
       description: topCategory // Hack to show category name
     });
   }
@@ -191,9 +164,9 @@ export default function AnalyticsPage() {
         <div className="flex-1">
           <p className="text-sm text-secondary-text mb-1">{kpi.name}</p>
           <h3 className="text-3xl font-bold text-primary-text">
-            {kpi.unit === "$" ? "$" : ""}
-            {kpi.value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-            {kpi.unit && kpi.unit !== "$" ? kpi.unit : ""}
+            {kpi.unit === "currency" 
+              ? formatCurrency(kpi.value) 
+              : kpi.value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
           </h3>
           {kpi.name === "Top Category" ? (
              <p className="text-sm font-medium text-primary-green mt-2">{kpi.description}</p>
@@ -303,73 +276,13 @@ export default function AnalyticsPage() {
                 </Select>
               </div>
             </div>
-            {trendsLoading ? (
-              <div className="h-64 flex items-center justify-center">
-                <p className="text-secondary-text">Loading trends...</p>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.1}/>
-                      <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#F3F4F6' }}
-                    formatter={(value: number) => formatCurrency(value)}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="value"
-                    stroke="#10B981"
-                    fillOpacity={1}
-                    fill="url(#colorValue)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
+            <SpendingTrendChart data={chartData} isLoading={trendsLoading} />
           </div>
 
           {/* Category Breakdown */}
           <div className="bg-card-bg p-6 rounded-xl border border-muted-text/10 shadow-sm">
             <h3 className="text-lg font-semibold text-primary-text mb-4">Spending by Category (Current Month)</h3>
-            {categoryLoading ? (
-              <div className="h-64 flex items-center justify-center">
-                <p className="text-secondary-text">Loading categories...</p>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {pieData.map((_: any, index: number) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={COLORS[index % COLORS.length]}
-                          stroke="rgba(0,0,0,0)"
-                        />
-                      ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#F3F4F6' }}
-                    formatter={(value: number) => formatCurrency(value)}
-                  />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
+            <CategoryPieChart data={pieData} isLoading={categoryLoading} />
           </div>
         </div>
 
@@ -433,7 +346,7 @@ export default function AnalyticsPage() {
                 ))}
                  {(!merchantData?.merchants || merchantData.merchants.length === 0) && (
                     <p className="text-center text-secondary-text py-4">No merchant data available</p>
-                )}
+                 )}
               </div>
             </TabsContent>
           </Tabs>

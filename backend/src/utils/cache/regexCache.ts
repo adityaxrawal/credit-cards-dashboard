@@ -91,7 +91,7 @@ export class BankParserPatterns {
   // Card digits patterns
   // Updated to exclude Account/AC numbers using negative lookbehind
   static readonly CARD_XX_DIGITS = RegexCache.get('(?<!account\\s+)(?<!ac\\s+)(?<!a\\/c\\s+)(?<!order\\s+)(?<!ref\\s+)(?<!mobile\\s+)(?<!phone\\s+)\\b(?:XX|xx|xX|Xx)[\\s*]*(\\d{4})', 'i');
-  static readonly CARD_ENDING = RegexCache.get('(?<!account\\s+)(?<!ac\\s+)(?<!a\\/c\\s+)(?<!order\\s+)(?<!ref\\s+)(?<!mobile\\s+)(?<!phone\\s+)(?:ending|ending in|ends with|last 4 digits?)\\s*(?:in)?\\s*(\\d{4})', 'i');
+  static readonly CARD_ENDING = RegexCache.get('(?<!account\\s+)(?<!ac\\s+)(?<!a\\/c\\s+)(?<!order\\s+)(?<!ref\\s+)(?<!mobile\\s+)(?<!phone\\s+)(?:ending|ending in|ends with|last 4 digits|card no|card number)\\s*(?:in)?[:\\-\\s]*(\\d{4})', 'i');
   static readonly CARD_NUMBER = RegexCache.get('(?<!account\\s+)(?<!ac\\s+)(?<!a\\/c\\s+)(?<!order\\s+)(?<!ref\\s+)(?<!mobile\\s+)(?<!phone\\s+)(?:card(?:\\s+(?:no\\.|number))?)[\\s:]*(?:XX|xx|xX|Xx)?[\\s*]*(\\d{4})', 'i');
   static readonly CARD_MASKED = RegexCache.get('(?<!account\\s+)(?<!ac\\s+)(?<!a\\/c\\s+)(?<!order\\s+)(?<!ref\\s+)(?<!mobile\\s+)(?<!phone\\s+)(?:\\*{4}|\\*{6}|\\*{8}|\\*{12})(\\d{4})', 'i');
 

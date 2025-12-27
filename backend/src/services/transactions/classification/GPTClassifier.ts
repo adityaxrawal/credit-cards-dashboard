@@ -11,7 +11,10 @@ const openai = new OpenAI({
 });
 
 // Concurrency Limiter for GPT Calls
-const limit = pLimit(5);
+const CONCURRENCY = parseInt(process.env.GPT_CONCURRENCY || '10', 10);
+const limit = pLimit(CONCURRENCY);
+
+const MAX_BATCH_TOKENS = 12000; // ~48k chars. Leaves room for system prompt and output.
 
 interface GPTBatch {
     batchId: string;
@@ -19,13 +22,18 @@ interface GPTBatch {
     createdAt: Date;
     resolveCallbacks: Array<(value: ClassificationResult) => void>;
     rejectCallbacks: Array<(reason?: any) => void>;
+    estimatedTokens: number;
 }
 
 export class GPTClassifier {
     private static pendingBatch: GPTBatch | null = null;
-    private static batchSize = env.BATCH_SIZE;
-    private static batchTimeoutMs = 2000; // Reduced timeout for faster processing of small batches
+    private static batchSize = env.BATCH_SIZE || 20; // Increase default batch size
+    private static batchTimeoutMs = 2000;
     private static timeoutHandle: NodeJS.Timeout | null = null;
+
+    private static estimateTokens(text: string): number {
+        return Math.ceil(text.length / 4);
+    }
 
     static async classify(
         userId: string,
@@ -33,18 +41,37 @@ export class GPTClassifier {
         instruments: Instrument[]
     ): Promise<ClassificationResult> {
 
+        // Calculate tokens for this email
+        // Body truncated to 15000 chars in prompt, but we should count full input here or approx
+        const bodyTokens = this.estimateTokens(cleanEmail.cleanedBody.substring(0, 15000));
+        const overhead = 100; // Headers + JSON overhead
+        const emailTokens = bodyTokens + overhead;
+
         return new Promise((resolve, reject) => {
-            // Initialize batch if needed
+            // Check if current batch exists
+            if (this.pendingBatch) {
+                // Check if adding this email would exceed limits
+                const willExceedTokens = (this.pendingBatch.estimatedTokens + emailTokens) > MAX_BATCH_TOKENS;
+                const willExceedCount = this.pendingBatch.emails.length >= this.batchSize;
+
+                if (willExceedTokens || willExceedCount) {
+                    // Flush current batch FIRST
+                    this.triggerFlush(userId, instruments);
+                }
+            }
+
+            // Initialize batch if needed (either new or after flush)
             if (!this.pendingBatch) {
                 this.pendingBatch = {
                     batchId: `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     emails: [],
                     createdAt: new Date(),
                     resolveCallbacks: [],
-                    rejectCallbacks: []
+                    rejectCallbacks: [],
+                    estimatedTokens: 0
                 };
 
-                // Set timeout to process even if not full
+                // Set timeout
                 this.timeoutHandle = setTimeout(() => {
                     this.triggerFlush(userId, instruments);
                 }, this.batchTimeoutMs);
@@ -54,9 +81,10 @@ export class GPTClassifier {
             this.pendingBatch.emails.push({ messageId: cleanEmail.id, email: cleanEmail });
             this.pendingBatch.resolveCallbacks.push(resolve);
             this.pendingBatch.rejectCallbacks.push(reject);
+            this.pendingBatch.estimatedTokens += emailTokens;
 
-            // If full, process immediately
-            if (this.pendingBatch.emails.length >= this.batchSize) {
+            // Check IMMEDIATE flush condition (e.g. single massive email or just hit limit exactly)
+            if (this.pendingBatch.estimatedTokens >= MAX_BATCH_TOKENS || this.pendingBatch.emails.length >= this.batchSize) {
                 if (this.timeoutHandle) clearTimeout(this.timeoutHandle);
                 this.triggerFlush(userId, instruments);
             }
@@ -66,8 +94,13 @@ export class GPTClassifier {
     private static triggerFlush(userId: string, instruments: Instrument[]) {
         if (!this.pendingBatch) return;
         const batchToProcess = this.pendingBatch;
-        this.pendingBatch = null; // Reset immediately
-        this.timeoutHandle = null;
+
+        // Reset immediately
+        this.pendingBatch = null;
+        if (this.timeoutHandle) {
+            clearTimeout(this.timeoutHandle);
+            this.timeoutHandle = null;
+        }
 
         // Execute with concurrency limit
         limit(() => this.processBatch(userId, instruments, batchToProcess)).catch(err => {
@@ -82,47 +115,31 @@ export class GPTClassifier {
             logger.info(`Processing GPT batch of ${batch.emails.length} emails (Concurrency: Active ${limit.activeCount}/5)`);
 
             // 1. Prepare Prompt
+            // Increased context window to 15000 chars
             const emailTexts = batch.emails
-                .map((e, i) => `Email ${i + 1} (ID: ${e.messageId}):\nSubject: ${e.email.subject}\nFrom: ${e.email.from}\nBody: ${e.email.cleanedBody.substring(0, 1500)}`) // Truncate body
+                .map((e, i) => `Email ${i + 1} (ID: ${e.messageId}):\nSubject: ${e.email.subject}\nFrom: ${e.email.from}\nBody: ${e.email.cleanedBody.substring(0, 15000)}`)
                 .join('\n---\n');
 
             const systemPrompt = `You are a precision financial auditor. Your task is to extract ONE transaction event from the email text.
 
 CRITICAL INSTRUCTION:
-Return a result for EVERY message ID provided. Do not skip any. If you cannot classify an email, return "type": "unclassified".
+Return a result for EVERY message ID provided. Do not skip any.
 
 OBJECTIVE:
-Identify ALL valid financial transactions. It is better to classify something as "unclassified" than to miss a valid transaction.
+Identify ALL valid financial transactions. 
 A transaction is any event where money is spent, received, or moved.
-Keywords to look for: "spent", "debited", "charged", "paid", "sent", "received", "credited", "refunded", "withdrawal", "purchase".
+Keywords: "spent", "debited", "charged", "paid", "sent", "received", "credited", "refunded", "withdrawal", "purchase".
 
-CRITICAL RULES:
+RULES:
 1. IGNORE "Available Balance", "Credit Limit", or "Outstanding Due". These are NOT the transaction amount.
-2. IGNORE OTPs, Login Alerts, or Marketing. Return "is_transaction": false.
+2. IGNORE OTPs, Login Alerts, or Marketing. Mark "is_transaction": false.
 3. If the email contains multiple transactions (e.g. a statement), extract the most recent one only.
-4. Merchant Name: Extract the CLEAN merchant name (e.g., "Uber" instead of "Uber India Tech Pvt Ltd").
-5. Amount: Must be a number. Ignore commas.
+4. Merchant Name: Extract the CLEAN merchant name (e.g. "Uber" instead of "Uber India Tech Pvt Ltd"). REMOVE location/city if possible.
+5. Amount: Extract pure number.
 
 REASONING GUIDELINES:
-- If "is_transaction" is false, you MUST explain WHY.
-- If "is_transaction" is true, explain what specific text confirmed the transaction.
-- If unsure, mark as "unclassified" and explain the ambiguity.
-
-OUTPUT FORMAT (JSON):
-For each email, return an object in the "results" array:
-{
-  "messageId": "string",
-  "is_transaction": boolean,
-  "reasoning": "string", // rigorous Chain of Thought
-  "type": "string", // One of: cc_spend, cc_payment, cc_upi, bank_debit, bank_credit, bank_upi_debit, bank_upi_credit, refund, unclassified
-  "confidence": number, // 0-1
-  "extracted": {
-    "merchant": "string",
-    "amount": number,
-    "currency": "INR", // or USD
-    "date": "YYYY-MM-DD"
-  }
-}
+- Explain WHY you classified it as a transaction or not.
+- If "is_transaction" is true, cite the specific text.
 `;
 
             const userPrompt = `Classify these ${batch.emails.length} emails:\n\n${emailTexts}`;
@@ -130,15 +147,60 @@ For each email, return an object in the "results" array:
             console.log(`[GPT] Sending batch request (Size: ${batch.emails.length})`);
             const startStr = Date.now();
 
-            // 2. Call OpenAI
+            // Schema Definition for Structured Output
+            const extractionSchema = {
+                name: "transaction_extraction",
+                strict: true,
+                schema: {
+                    type: "object",
+                    properties: {
+                        results: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    messageId: { type: "string" },
+                                    is_transaction: { type: "boolean" },
+                                    reasoning: { type: "string" },
+                                    type: {
+                                        type: "string",
+                                        enum: ["cc_spend", "cc_payment", "cc_upi", "bank_debit", "bank_credit", "bank_upi_debit", "bank_upi_credit", "refund", "unclassified", "non_financial"]
+                                    },
+                                    confidence: { type: "number" },
+                                    extracted: {
+                                        type: "object",
+                                        properties: {
+                                            merchant: { type: ["string", "null"] },
+                                            amount: { type: ["number", "null"] },
+                                            currency: { type: ["string", "null"] },
+                                            date: { type: ["string", "null"] }
+                                        },
+                                        required: ["merchant", "amount", "currency", "date"],
+                                        additionalProperties: false
+                                    }
+                                },
+                                required: ["messageId", "is_transaction", "reasoning", "type", "confidence", "extracted"],
+                                additionalProperties: false
+                            }
+                        }
+                    },
+                    required: ["results"],
+                    additionalProperties: false
+                }
+            };
+
+            // 2. Call OpenAI with Structured Outputs
             const response = await openai.chat.completions.create({
-                model: 'gpt-4o-mini', // Cost effective
+                model: 'gpt-4o-mini',
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userPrompt },
                 ],
                 temperature: 0.1,
-                response_format: { type: 'json_object' },
+                response_format: {
+                    type: 'json_schema',
+                    json_schema: extractionSchema
+                },
             });
 
             const content = response.choices[0].message.content;
@@ -146,33 +208,13 @@ For each email, return an object in the "results" array:
 
             let parsed: any;
             try {
-                // Strip markdown code blocks if present
-                const cleanContent = content.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-                parsed = JSON.parse(cleanContent);
+                parsed = JSON.parse(content);
             } catch (jsonError) {
                 logger.error('[GPT] JSON Parse Error:', { content });
                 throw new Error('Malformed JSON response from GPT');
             }
 
-            let results = parsed.results as Array<{ messageId: string; is_transaction: boolean; type: any; confidence: number; extracted: any; reasoning?: string }>;
-
-            // Handle case where GPT returns a single object instead of an array (common in small batches)
-            if (!results && parsed.messageId && typeof parsed.is_transaction === 'boolean') {
-                logger.warn('[GPT] GPT returned single object instead of array. Adapting...', { messageId: parsed.messageId });
-                results = [parsed]; // Treat as single result array
-            }
-
-            // Handle case where GPT returns array directly without { results: ... } wrapper
-            if (!results && Array.isArray(parsed)) {
-                logger.warn('[GPT] GPT returned array directly. Adapting...');
-                results = parsed;
-            }
-
-            // Validate results array
-            if (!Array.isArray(results)) {
-                logger.error('[GPT] Invalid results format (expected array or {results: array}):', { parsed });
-                throw new Error('GPT response missing results array');
-            }
+            const results = parsed.results as Array<{ messageId: string; is_transaction: boolean; type: any; confidence: number; extracted: any; reasoning?: string }>;
 
             console.log(`[GPT] Batch processed in ${Date.now() - startStr}ms`);
 
@@ -205,7 +247,7 @@ For each email, return an object in the "results" array:
                         if (result.is_transaction === false) {
                             batch.resolveCallbacks[index]({
                                 type: 'non_financial' as any,
-                                confidence: result.confidence || 0.9, // High confidence that it is NOT a transaction
+                                confidence: result.confidence || 0.9,
                                 metadata: { reason: result.reasoning }
                             });
                             return;

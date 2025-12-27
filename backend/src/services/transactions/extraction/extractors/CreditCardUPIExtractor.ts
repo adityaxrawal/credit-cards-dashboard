@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
-import { InstrumentService } from '../../../cards/instruments/InstrumentService';
+import { InstrumentAutoService } from '../../../cards/instruments/InstrumentAutoService';
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
 
 export class CreditCardUPIExtractor {
@@ -16,10 +16,11 @@ export class CreditCardUPIExtractor {
         const date = new Date(email.internalDate);
         const referenceNumber = this.extractReferenceNumber(combined);
 
+        // Get or create instrument
         let instrumentId: string | undefined = undefined;
         if (cardLast4) {
-            const card = await InstrumentService.getCardByIdentifier(userId, '', cardLast4);
-            if (card) instrumentId = card.id;
+            const instrument = await InstrumentAutoService.findOrCreateCard(userId, 'credit_card', cardLast4, email);
+            instrumentId = instrument.id;
         }
 
         const fingerprint = TransactionDeduplicator.generateFingerprint({

@@ -232,6 +232,61 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
     },
 
     // ============================================
+    // SPECIFIC CATEGORY PATTERNS (12 - Override Generics)
+    // ============================================
+
+    INVESTMENT: {
+        priority: 12,
+        isTransaction: true,
+        transactionType: 'investment',
+        direction: 'debit',
+        keywords: [
+            { pattern: /sip\s+(?:instalment|installment|deducted|auto-pay)/i, weight: 1.0 },
+            { pattern: /mutual\s+fund.*(?:purchase|unit|allotted)/i, weight: 0.95 },
+            { pattern: /(?:groww|zerodha|upstox|kuvera|coin|smallcase).*(?:order|payment)/i, weight: 0.95 },
+            { pattern: /folio\s+no|unit\s+price|nav:/i, weight: 0.9 },
+            { pattern: /investment\s+(?:of|amount).*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.9 },
+        ]
+    },
+
+    TRAVEL: {
+        priority: 12,
+        isTransaction: true,
+        transactionType: 'travel',
+        direction: 'debit',
+        keywords: [
+            { pattern: /(?:booking|pnr).*(?:confirmed|id)/i, weight: 0.95 },
+            { pattern: /(?:flight|train|bus|hotel)\s+(?:booking|reservation)/i, weight: 0.95 },
+            { pattern: /(?:irctc|makemytrip|goibibo|easemytrip|cleartrip|cabs|indigo|vistara|air\s+india).*(?:booking|payment)/i, weight: 0.95 },
+            { pattern: /ticket.*(?:booked|confirmed).*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.9 },
+        ]
+    },
+
+    FOOD_DELIVERY: {
+        priority: 12,
+        isTransaction: true,
+        transactionType: 'food',
+        direction: 'debit',
+        keywords: [
+            { pattern: /(?:swiggy|zomato|eatsure).*(?:order|payment)/i, weight: 1.0 },
+            { pattern: /order\s+(?:delivered|placed).*(?:restaurant|food)/i, weight: 0.85 },
+            { pattern: /(?:blinkit|instamart|zepto).*(?:order|delivered)/i, weight: 0.9 },
+        ]
+    },
+
+    RIDE_HAILING: {
+        priority: 12,
+        isTransaction: true,
+        transactionType: 'transport',
+        direction: 'debit',
+        keywords: [
+            { pattern: /(?:uber|ola|rapido|blusmart).*(?:ride|trip|payment)/i, weight: 1.0 },
+            { pattern: /ride\s+(?:completed|receipt).*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.9 },
+            { pattern: /trip\s+(?:fare|receipt).*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.9 },
+        ]
+    },
+
+    // ============================================
     // LOW PRIORITY / REJECTION PATTERNS (1-4)
     // ============================================
 

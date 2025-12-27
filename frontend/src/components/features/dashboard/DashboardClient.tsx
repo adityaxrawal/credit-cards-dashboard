@@ -24,6 +24,7 @@ export default function DashboardPage() {
     budgetStatus,
     recentTransactions,
     upcomingBills,
+    totalUpcomingBillAmount,
     spendingTrend,
     totalBalance,
     totalCards,
@@ -110,6 +111,7 @@ export default function DashboardPage() {
           currentMonthSpent={overview?.currentMonth?.totalSpent || 0}
           budgetStatus={budgetStatus}
           upcomingBillsCount={upcomingBills.length}
+          totalUpcomingBillAmount={totalUpcomingBillAmount}
           upcomingBills={upcomingBills}
           totalRewards={totalRewards}
         />

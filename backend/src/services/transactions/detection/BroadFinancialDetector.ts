@@ -42,6 +42,11 @@ export class BroadFinancialDetector {
             /survey|feedback|review|rate\s+our|tell\s+us/i,
             /delivery\s+(?:update|status|notification)(?!.*(?:charged|debited|paid))/i,
             /bluchips|indigo\s+reward/i,
+
+            // Statement/Bill Generation (Noise if no amount mentioned)
+            /(?:statement|bill)\s+(?:is\s+)?(?:ready|generated|available)\s+(?:to\s+view|for)/i,
+            /view\s+(?:your\s+)?(?:statement|bill|invoice)(?!.*(?:paid|charged))/i,
+            /download\s+(?:your\s+)?(?:statement|bill)/i,
         ];
 
         for (const pattern of rejectionPatterns) {

@@ -104,4 +104,18 @@ export const cardApi = {
   deleteCard: async (cardId: string): Promise<void> => {
     await apiDelete<void>(`/api/cards/${cardId}`);
   },
+
+  /**
+   * Get incomplete/auto-detected cards that need user input
+   */
+  getIncompleteCards: async (): Promise<{
+    id: string;
+    name: string;
+    last4: string;
+    type: string;
+    bank_name: string;
+    transaction_count: number;
+  }[]> => {
+    return apiGet<any[]>("/api/instruments/incomplete").then((res) => res);
+  },
 };

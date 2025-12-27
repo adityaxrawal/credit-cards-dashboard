@@ -1,4 +1,4 @@
-import pool from '../../../lib/db';
+import pool, { safeQuery } from '../../../lib/db';
 import logger from '../../../utils/infrastructure/logger';
 
 export class TerminatorService {
@@ -15,11 +15,15 @@ export class TerminatorService {
         rawEmailId: string
     ): Promise<void> {
         try {
-            await pool.query(
+            await safeQuery(
                 `INSERT INTO email_processing_log 
          (user_id, email_message_id, reason, stage, status_category, 
           processing_status, scan_job_id, raw_email_id, processed_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+         ON CONFLICT (email_message_id) DO UPDATE SET 
+            scan_job_id = EXCLUDED.scan_job_id,
+            reason = EXCLUDED.reason,
+            processed_at = NOW()`,
                 [userId, emailId, reason, stage, statusCategory, 'terminated', jobId, rawEmailId]
             );
 
@@ -27,7 +31,7 @@ export class TerminatorService {
             // Guide says "processed_at" usually implies success, but for queue management
             // we might want to mark it so it doesn't get picked up again unless reprocessing.
             // But typically "Terminated" means done for this cycle.
-            await pool.query(
+            await safeQuery(
                 `UPDATE gmail_scanned_emails SET processed = true, processed_at = NOW() WHERE id = $1`,
                 [rawEmailId]
             );
@@ -47,7 +51,7 @@ export class TerminatorService {
         categories: Array<{ status_category: string; count: number; examples: string[] }>;
         totalTerminated: number;
     }> {
-        const result = await pool.query(
+        const result = await safeQuery(
             `SELECT 
         status_category,
         COUNT(*) as count,

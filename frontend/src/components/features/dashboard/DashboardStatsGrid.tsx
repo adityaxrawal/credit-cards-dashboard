@@ -7,6 +7,7 @@ interface DashboardStatsGridProps {
   currentMonthSpent: number;
   budgetStatus: { ratio: number } | null;
   upcomingBillsCount: number;
+  totalUpcomingBillAmount: number;
   upcomingBills: { days_until_due: number }[];
   totalRewards: number;
 }
@@ -17,6 +18,7 @@ export function DashboardStatsGrid({
   currentMonthSpent,
   budgetStatus,
   upcomingBillsCount,
+  totalUpcomingBillAmount,
   upcomingBills,
   totalRewards,
 }: DashboardStatsGridProps) {
@@ -74,7 +76,7 @@ export function DashboardStatsGrid({
           <div>
             <p className="text-sm text-secondary-text font-medium">Upcoming Bills</p>
             <h3 className="text-2xl font-bold text-primary-text mt-2">
-              {upcomingBillsCount}
+              {formatCurrency(totalUpcomingBillAmount)}
             </h3>
           </div>
           <div className="p-2 bg-error/10 rounded-lg">
@@ -83,7 +85,7 @@ export function DashboardStatsGrid({
         </div>
         <p className="text-xs text-secondary-text mt-4">
           {upcomingBillsCount > 0 
-            ? `Next due in ${Math.min(...upcomingBills.map(b => b.days_until_due))} days`
+            ? `${upcomingBillsCount} bill${upcomingBillsCount > 1 ? 's' : ''} due, next in ${Math.min(...upcomingBills.map(b => b.days_until_due))} days`
             : "No bills due soon"}
         </p>
       </div>

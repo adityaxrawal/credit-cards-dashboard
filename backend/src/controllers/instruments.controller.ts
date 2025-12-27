@@ -7,6 +7,7 @@ import { DebitCardService } from '../services/cards/instruments/DebitCardService
 import { UPIHandleService } from '../services/cards/instruments/UPIHandleService';
 import { InstrumentHierarchyService } from '../services/cards/instruments/InstrumentHierarchyService';
 import { InstrumentRegistry } from '../services/cards/instruments/InstrumentRegistry';
+import { PostProcessingService } from '../services/processing/PostProcessingService';
 import logger from '../utils/infrastructure/logger';
 
 export class InstrumentsController {
@@ -213,5 +214,18 @@ export class InstrumentsController {
     // Delete instrument
     async deleteInstrument(req: Request, res: Response) {
         res.status(501).json({ error: 'Not implemented' });
+    }
+
+    // GET /api/instruments/incomplete
+    // Get instruments that need user input (auto-detected from transactions)
+    async getIncompleteInstruments(req: Request, res: Response) {
+        try {
+            const userId = req.user.id;
+            const incomplete = await PostProcessingService.getIncompleteInstruments(userId);
+            res.json(incomplete);
+        } catch (error) {
+            logger.error('Failed to get incomplete instruments', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
     }
 }

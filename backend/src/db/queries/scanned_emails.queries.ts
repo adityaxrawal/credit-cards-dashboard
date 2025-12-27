@@ -30,12 +30,12 @@ export async function getLastScannedDate(userId: string): Promise<Date | null> {
      WHERE user_id = $1`,
     [userId]
   );
-  
+
   if (rows[0]?.last_date) {
     // Convert Unix timestamp (milliseconds) to Date
     return new Date(parseInt(rows[0].last_date));
   }
-  
+
   return null;
 }
 
@@ -82,13 +82,13 @@ export async function insertScannedEmailsBulk(dataList: ScannedEmailData[]): Pro
 
     // We can't easily do a single huge INSERT with arrays in node-postgres without unnest or generating a huge query string.
     // Generating a query string is efficient enough for batches of 50-100.
-    
+
     const values: any[] = [];
     const placeholders: string[] = [];
     let paramIndex = 1;
 
     for (const data of dataList) {
-      placeholders.push(`($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, $${paramIndex+4}, $${paramIndex+5}, $${paramIndex+6}, $${paramIndex+7}, $${paramIndex+8}, $${paramIndex+9})`);
+      placeholders.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9})`);
       values.push(
         data.userId,
         data.messageId,
@@ -164,7 +164,7 @@ export async function updateScannedEmailsProcessedBulk(
 
     // Build a CASE statement for efficient bulk updates
     const messageIds = updates.map(u => u.messageId);
-    const transactionIdCase = updates.map((u, idx) => 
+    const transactionIdCase = updates.map((u, idx) =>
       `WHEN message_id = $${idx + 2} THEN ${u.transactionId ? `'${u.transactionId}'` : 'NULL'}`
     ).join(' ');
 
@@ -201,7 +201,7 @@ export async function getScannedEmailStats(userId: string): Promise<ScanStats> {
      WHERE user_id = $1`,
     [userId]
   );
-  
+
   const row = rows[0];
   return {
     totalScanned: parseInt(row.total_scanned || '0'),

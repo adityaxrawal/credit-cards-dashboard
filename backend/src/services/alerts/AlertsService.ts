@@ -13,7 +13,7 @@ export async function createAlert(
     title: string;
     message: string;
     priority?: string;
-    metadata?: any;
+    metadata?: Record<string, unknown>;
   }
 ) {
   const alert = await alertsQueries.createAlert(userId, type, data);

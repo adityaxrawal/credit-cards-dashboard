@@ -533,8 +533,8 @@ function EditCardModal({ isOpen, onClose, card, onSubmit, isSubmitting }: EditCa
     cardName: card.card_name,
     bankName: card.bank_name,
     creditLimit: (card.credit_limit || 0).toString(),
-    billDate: card.bill_date.toString(),
-    dueDate: card.due_date.toString(),
+    billDate: (card.bill_date ?? '').toString(),
+    dueDate: (card.due_date ?? '').toString(),
   });
 
   const handleSubmit = (e: React.FormEvent) => {

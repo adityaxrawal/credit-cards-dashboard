@@ -22,7 +22,7 @@ export class BankAccountUPICreditDetector extends BaseClassifier {
         if (last4) {
             const instruments = await InstrumentService.getUserInstruments(userId);
             userAccount = instruments.find(
-                i => i.instrument_type === InstrumentType.SAVINGS_ACCOUNT &&
+                i => i.instrument_type === InstrumentType.BANK_ACCOUNT &&
                     i.account_number_masked.endsWith(last4)
             );
         }

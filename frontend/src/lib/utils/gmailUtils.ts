@@ -17,6 +17,6 @@ export const GmailUtils = {
      * Generate link to search for specific subject
      */
     getSearchLink(query: string): string {
-        return `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}`;
+        return `https://mail.google.com/mail/u/1/#search/${encodeURIComponent(query)}`;
     }
 };

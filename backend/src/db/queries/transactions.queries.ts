@@ -1,6 +1,6 @@
 import pool from '../../lib/db';
 
-import { Transaction, TransactionFilters } from '../../types/transaction.types';
+import { Transaction, TransactionFilters, TransactionMetadata } from '../../types/transaction.types';
 
 /**
  * Get pending review transactions
@@ -195,7 +195,7 @@ export async function createTransaction(data: {
   emailMessageId?: string;
   txnFingerprint?: string;
   isManuallyAdded?: boolean;
-  metadata?: any;
+  metadata?: TransactionMetadata;
   exactTimestamp?: Date;
   emailSubject?: string;
   emailSender?: string;
@@ -309,7 +309,7 @@ export async function createTransactionsBulk(dataList: Array<{
   emailSender?: string;
   txnFingerprint?: string;
   isManuallyAdded?: boolean;
-  metadata?: any;
+  metadata?: TransactionMetadata;
   exactTimestamp?: Date;
   gmailThreadId?: string;
   gmailAccountIndex?: number;
