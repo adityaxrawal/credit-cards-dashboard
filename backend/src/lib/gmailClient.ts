@@ -157,7 +157,8 @@ const globalRateLimiter = new TokenBucket(100, 100);
  */
 function getRateLimiter(userId: string): TokenBucket {
   if (!userRateLimiters.has(userId)) {
-    userRateLimiters.set(userId, new TokenBucket(20, 20));
+    // Increased to 80 req/sec for faster fetching (Gmail allows ~250)
+    userRateLimiters.set(userId, new TokenBucket(80, 80));
   }
   return userRateLimiters.get(userId)!;
 }

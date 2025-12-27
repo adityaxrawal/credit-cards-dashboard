@@ -154,8 +154,8 @@ export async function runHistoricalScan(
         }
 
         // Take a chunk off the queue
-        // With semaphore=10, process 5 emails at a time (each may make 2 DB calls)
-        const batchSize = 5;
+        // With semaphore=30, process 15 emails at a time for maximum throughput
+        const batchSize = 15;
         const batch = processingQueue.splice(0, batchSize);
         const batchStartTime = Date.now();
         console.log(`\n[PROCESS] Batch Start. Size: ${batch.length}. Queue Rem: ${processingQueue.length}`);
@@ -175,8 +175,11 @@ export async function runHistoricalScan(
         const batchDuration = Date.now() - batchStartTime;
         console.log(`[PHASE: PROCESS] Processed ${batch.length} emails in ${batchDuration}ms (${Math.round(batch.length / (batchDuration / 1000))} emails/sec)`);
 
-        // Update DB periodically (approx every batch)
-        await updateJobStats(jobId, totalFetched, stats);
+        // Update DB every 4 batches to reduce churn (was every batch)
+        const processed = stats.success + stats.failed + stats.terminated + stats.duplicate + stats.needs_review;
+        if (processed % 32 === 0 || processingQueue.length === 0) {
+          await updateJobStats(jobId, totalFetched, stats);
+        }
       }
       logger.info(`[PROCESS] Consumer loop finished. Queue empty and fetch complete.`);
     };

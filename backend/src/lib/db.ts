@@ -55,10 +55,10 @@ class ConnectionSemaphore {
   }
 }
 
-// Supabase PgBouncer in session mode has strict limits (~15-20 connections)
-// We use a conservative limit to prevent exhaustion
-const POOL_MAX = 20;
-const SEMAPHORE_MAX = 10; // Very conservative to handle bursts
+// Supabase Pool Size: 48 connections (per user screenshot)
+// Using 40 to leave headroom for other queries (API, etc.)
+const POOL_MAX = 40;
+const SEMAPHORE_MAX = 30; // High throughput with 48 connection limit
 export const connectionSemaphore = new ConnectionSemaphore(SEMAPHORE_MAX);
 
 const pool = new Pool({
@@ -67,14 +67,14 @@ const pool = new Pool({
     rejectUnauthorized: false
   },
   keepAlive: true,
-  keepAliveInitialDelayMillis: 10000,
-  idleTimeoutMillis: 30000, // Close idle clients after 30s (reduced)
-  connectionTimeoutMillis: 10000, // 10s connection timeout
-  max: POOL_MAX, // Match Supabase limits
-  min: 2, // Reduce minimum connections
-  allowExitOnIdle: false, // Keep pool alive even when idle
-  statement_timeout: 30000, // Kill queries after 30s
-  idle_in_transaction_session_timeout: 10000, // Kill idle transactions after 10s
+  keepAliveInitialDelayMillis: 5000,
+  idleTimeoutMillis: 20000, // Close idle clients faster
+  connectionTimeoutMillis: 5000, // Faster connection timeout
+  max: POOL_MAX,
+  min: 5, // Keep more connections warm
+  allowExitOnIdle: false,
+  statement_timeout: 15000, // Kill slow queries faster
+  idle_in_transaction_session_timeout: 5000, // Kill idle transactions faster
 });
 
 // Log pool status periodically in development

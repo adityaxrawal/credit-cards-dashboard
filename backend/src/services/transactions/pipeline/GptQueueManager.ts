@@ -21,7 +21,7 @@ export class GptQueueManager {
 
     // Config
     private SUB_QUEUE_COUNT = 3;
-    private CONCURRENCY_PER_QUEUE = 2; // As requested: "capacity 2" per sub-queue
+    private CONCURRENCY_PER_QUEUE = 4; // 12 total workers with 48 connection pool
 
     // State for stats
     public stats = {

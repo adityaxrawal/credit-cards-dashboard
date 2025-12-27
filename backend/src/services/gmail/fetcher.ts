@@ -34,8 +34,8 @@ export class GmailFetcherService {
 
         // Using batch size of 200 for API calls to maximize throughput
         const messageIds = messageStubs.map(m => m.id);
-        // Reduced concurrency to 10 for stability
-        const rawMessages = await gmailClient.batchGetMessages(refreshToken, messageIds, userId, 10, true);
+        // High concurrency for 48-connection pool
+        const rawMessages = await gmailClient.batchGetMessages(refreshToken, messageIds, userId, 30, true);
         console.log(`[GmailFetcher] Downloaded ${rawMessages.length} raw messages`);
 
         const validEmails: SimplifiedEmail[] = [];
