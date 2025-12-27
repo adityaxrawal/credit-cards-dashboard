@@ -18,15 +18,25 @@ function generateETag(body: any): string {
  * 2. Short-circuits BEFORE service calls when ETag matches
  * 3. Falls back to Redis cache for full response
  * @param durationSeconds Duration in seconds to cache the response
+ * @param scope 'user' (default) or 'public'. 'user' requires req.user to be present.
  */
-export const cache = (durationSeconds: number) => {
+export const cache = (durationSeconds: number, scope: 'user' | 'public' = 'user') => {
   return async (req: Request, res: Response, next: NextFunction) => {
     // Skip if Redis is not initialized or if it's not a GET request
     if (!redis || req.method !== 'GET') {
       return next();
     }
 
-    const key = `cache:${req.originalUrl || req.url}:${(req as any).user?.id || 'public'}`;
+    const userId = (req as any).user?.id;
+
+    // SAFETY CHECK: If scope is 'user' but no user is found, DO NOT CACHE.
+    // This prevents "public" caching of private data if middleware order is wrong.
+    if (scope === 'user' && !userId) {
+      // console.warn('[Cache] User scope requested but no user found. Skipping cache to prevent leak.');
+      return next();
+    }
+
+    const key = `cache:${req.originalUrl || req.url}:${scope === 'public' ? 'public' : userId}`;
     const etagKey = `etag:${key}`;
 
     try {

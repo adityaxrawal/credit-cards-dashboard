@@ -331,7 +331,8 @@ export class UniversalTransactionPipeline {
 
         } catch (error) {
             logger.error(`[Pipeline] Fatal error processing email ${rawEmail.messageId}:`, {
-                error: error instanceof Error ? error.stack : error,
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
                 userId,
                 jobId
             });
@@ -370,7 +371,7 @@ export class UniversalTransactionPipeline {
                 logger.error('[Pipeline] Error recovery failed:', recoveryError);
             }
 
-            return { status: 'failed', reason: 'pipeline_error', error: String(error) };
+            return { status: 'failed', reason: 'pipeline_error', error: error instanceof Error ? error.message : String(error) };
         }
     }
 

@@ -4,8 +4,13 @@ import pool from '../lib/db';
 import { env } from '../config/env';
 import { JwtPayload, AuthErrorCode, AuthRequest } from '../types/auth.types';
 
+import NodeCache from 'node-cache';
+
+// Cache for 60 seconds (TTL), check for expired keys every 120s
+const userCache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
+
 export const authenticate: RequestHandler = async (req, res, next) => {
-  console.log('[Auth Middleware] Processing request:', req.path);
+  // console.log('[Auth Middleware] Processing request:', req.path); // Reduced logging
   try {
     // Only accept Authorization header (no cookie fallback for security)
     const authHeader = req.headers.authorization;
@@ -24,8 +29,6 @@ export const authenticate: RequestHandler = async (req, res, next) => {
       });
     }
 
-    console.log('[Auth Middleware] Token found, verifying...');
-
     // Strict JWT validation with algorithm specification and no clock tolerance
     let decoded: JwtPayload;
     try {
@@ -33,9 +36,7 @@ export const authenticate: RequestHandler = async (req, res, next) => {
         algorithms: ['HS256'],  // Prevent algorithm confusion attacks
         clockTolerance: 0       // Strict expiry enforcement
       }) as JwtPayload;
-      console.log('[Auth Middleware] Token verified successfully for userId:', decoded.userId);
     } catch (error: any) {
-      console.log('[Auth Middleware] Token verification failed:', error.message);
       if (error.name === 'TokenExpiredError') {
         return res.status(401).json({
           error: AuthErrorCode.TOKEN_EXPIRED,
@@ -62,6 +63,14 @@ export const authenticate: RequestHandler = async (req, res, next) => {
       });
     }
 
+    // Check Cache First
+    const cachedUser = userCache.get(decoded.userId);
+    if (cachedUser) {
+      // console.log('[Auth Middleware] User found in cache:', decoded.userId);
+      (req as AuthRequest).user = cachedUser as import('../types/auth.types').User;
+      return next();
+    }
+
     // Verify user exists in DB - Fetch only needed fields
     const result = await pool.query(
       'SELECT id, email, created_at, google_refresh_token FROM users WHERE id = $1',
@@ -74,7 +83,9 @@ export const authenticate: RequestHandler = async (req, res, next) => {
         message: 'User associated with token not found'
       });
     }
-    console.log('[Auth Middleware] User found:', result.rows[0].id);
+
+    // Store in Cache
+    userCache.set(decoded.userId, result.rows[0]);
 
     (req as AuthRequest).user = result.rows[0];
     next();

@@ -50,6 +50,9 @@ const envSchema = z.object({
 
   // Security
   ENCRYPTION_KEY: z.string().min(32).default('00000000000000000000000000000000'), // Default for dev, override in prod
+
+  // Observability
+  SENTRY_DSN: z.string().optional(),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

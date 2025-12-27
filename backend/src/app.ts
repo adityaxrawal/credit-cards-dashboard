@@ -12,8 +12,31 @@ import routes from './routes';
 import { env } from './config/env';
 
 import { csrfProtection, csrfErrorHandler } from './middleware/csrf.middleware';
+import { CleanupService } from './services/infrastructure/CleanupService';
+
+import * as Sentry from '@sentry/node';
+
+// Initialize background services
+CleanupService.startCleanupCron();
+
+// Initialize Sentry
+if (env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: env.SENTRY_DSN,
+    environment: env.NODE_ENV,
+    tracesSampleRate: 1.0,
+  });
+}
 
 const app = express();
+
+// Sentry Request Handler (must be first)
+if (env.SENTRY_DSN) {
+  app.use((Sentry as any).Handlers.requestHandler());
+}
+
+// Serve static files (including .well-known)
+app.use(express.static('public'));
 
 // Security Middleware
 app.use(helmet());
@@ -106,6 +129,9 @@ app.use('/api', routes);
 // Error Handling
 // Error Handling
 app.use(csrfErrorHandler);
+if (env.SENTRY_DSN) {
+  app.use((Sentry as any).Handlers.errorHandler());
+}
 app.use(errorHandler);
 
 export default app;

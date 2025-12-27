@@ -20,8 +20,11 @@ export class BroadFinancialDetector {
             /marketing|promotional|discount\s+(?:offer|code)|coupon|deal|sale(?!s\s(?:commission|report))/i,
             /(?:limited|exclusive|special)\s+offer/i,
             /apply\s+(?:for|now)\s+.*(?:credit|debit)\s+card/i,
-            /pre[- ]?approved.*(?:loan|card|credit)/i,
-            /complimentary\s+(?:card|offer)/i,
+            /pre[- ]?approved.*(?:loan|card|credit|limit)/i,
+            /complimentary\s+(?:card|offer|membership|subscription)/i,
+            /invest(?:ment|ing)?\s+(?:in|now|plan|fund|opportunity)/i,
+            /mutual\s+fund|sip|portfolio|growth\s+plan|insurance\s+(?:plan|policy)/i,
+            /voucher|gift\s+card|reward\s+unlocked/i,
 
             // Security/OTP
             /otp|verification\s+code|confirm\s+your\s+(?:identity|email)|secure\s+your\s+account/i,
@@ -60,9 +63,9 @@ export class BroadFinancialDetector {
             // Transfer types
             /upi|neft|rtgs|imps|swift|withdrawal|transfer/i,
 
-            // Financial terms
-            /amount|balance|available\s+(?:balance|limit)|due\s+date|outstanding/i,
-            /interest|reward\s+points?|cashback/i,
+            // Financial terms with context (avoid generic usage)
+            /(?:total|invoice|bill)\s+(?:amount|value)|balance\s+available|outstanding\s+(?:due|amount)|payment\s+due/i,
+            /interest\s+(?:credited|charged)|cashback\s+(?:received|earned)|reward\s+points/i,
 
             // Instruments
             /credit\s+card|debit\s+card|bank\s+account|savings\s+a\/c|current\s+a\/c/i,

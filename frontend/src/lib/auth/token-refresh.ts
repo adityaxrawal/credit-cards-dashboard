@@ -19,8 +19,8 @@ export function startTokenRefresh(
   // Clear any existing timer
   stopTokenRefresh();
 
-  // Refresh every 14 minutes (access token expires in 15 minutes)
-  const refreshInterval = 14 * 60 * 1000;
+  // Refresh every 55 minutes (access token expires in 60 minutes) - preventing premature refreshes
+  const refreshInterval = 55 * 60 * 1000;
 
   refreshTimer = setInterval(async () => {
     try {

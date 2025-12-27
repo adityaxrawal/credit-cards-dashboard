@@ -27,6 +27,7 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
   res.status(statusCode).json({
     success: false,
     error: message,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 };

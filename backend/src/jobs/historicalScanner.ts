@@ -64,6 +64,8 @@ export async function runHistoricalScan(
 
     // Stats
     const stats = { success: 0, failed: 0, needs_review: 0, terminated: 0, duplicate: 0 };
+    // Error Collection
+    const jobErrors: string[] = [];
 
     // Config
     const FETCH_BATCH_SIZE = 50;  // Reduced for stability
@@ -123,7 +125,18 @@ export async function runHistoricalScan(
       logger.info(`[PROCESS] Starting consumer loop for job ${jobId}`);
       console.log(`\nStarting Parallel Process Loop (Concurrency: 10)`);
 
+      let consecutiveErrors = 0;
+      const MAX_CONSECUTIVE_ERRORS = 50;
+
       while (isFetching || processingQueue.length > 0) {
+        // Circuit Breaker
+        if (consecutiveErrors > MAX_CONSECUTIVE_ERRORS) {
+          logger.error(`[PROCESS] Circuit breaker tripped! Over ${MAX_CONSECUTIVE_ERRORS} consecutive errors. Aborting job.`);
+          isFetching = false; // Stop producer
+          processingQueue.length = 0; // Clear queue
+          break;
+        }
+
         if (processingQueue.length === 0) {
           // Wait briefly for producer
           await new Promise(r => setTimeout(r, 50));
@@ -141,9 +154,11 @@ export async function runHistoricalScan(
         await Promise.all(batch.map(async (email) => {
           try {
             await processSingleEmail(email);
+            consecutiveErrors = 0; // Reset on success
           } catch (e) {
             console.error(`Error processing email ${email.messageId}`, e);
             stats.failed++;
+            consecutiveErrors++;
           }
         }));
 
@@ -170,7 +185,16 @@ export async function runHistoricalScan(
       else if (result.status === 'terminated') stats.terminated++;
       else if (result.status === 'duplicate') stats.duplicate++;
       else if (result.status === 'needs_review') stats.needs_review++;
-      else if (result.status === 'failed') stats.failed++;
+      else if (result.status === 'failed') {
+        stats.failed++;
+        // Capture error
+        if (result.error && jobErrors.length < 20) {
+          const errMsg = `[${cleanEmail.messageId}] ${result.error}`;
+          if (!jobErrors.includes(errMsg)) {
+            jobErrors.push(errMsg);
+          }
+        }
+      }
     };
 
     const updateJobStats = async (jid: string, total: number, curStats: any) => {
@@ -184,6 +208,9 @@ export async function runHistoricalScan(
       const processed = curStats.success + curStats.failed + curStats.terminated + curStats.duplicate + curStats.needs_review;
       const progress = total > 0 ? Math.floor((processed / total) * 100) : 0;
 
+      // Persist partial errors if any
+      const errorsJson = jobErrors.length > 0 ? JSON.stringify(jobErrors) : '[]';
+
       await pool.query(
         `UPDATE gmail_sync_jobs 
              SET total_messages = $1, 
@@ -194,9 +221,10 @@ export async function runHistoricalScan(
                  rule_based_failure = $5, -- Map failed here
                  queued_for_gpt = $6, -- Map needs_review here for visibility? Or just use metadata
                  terminated_count = $7, 
+                 errors = $8::jsonb,
                  last_update_at = NOW()
-             WHERE id = $8`,
-        [total, processed, progress, curStats.success, curStats.failed, curStats.needs_review, curStats.terminated, jid]
+             WHERE id = $9`,
+        [total, processed, progress, curStats.success, curStats.failed, curStats.needs_review, curStats.terminated, errorsJson, jid]
       );
     };
 
