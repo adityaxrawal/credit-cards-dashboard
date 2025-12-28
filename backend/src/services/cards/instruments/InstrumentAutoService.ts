@@ -35,6 +35,7 @@ const BANK_EMAIL_DOMAINS: Record<string, string> = {
     'lvb.com': 'Lakshmi Vilas Bank',
     'hsbc.co.in': 'HSBC India',
     'dbs.com': 'DBS Bank',
+    'jupiter.money': 'Jupiter',
 };
 
 /**
@@ -291,6 +292,53 @@ export class InstrumentAutoService {
         InstrumentRegistry.clearCache(userId);
 
         logger.info(`[InstrumentAutoService] Created new UPI handle: ${newInstrument.id} (${normalizedHandle}, bank: ${bank?.name || 'Unknown'})`);
+        return newInstrument;
+    }
+
+    /**
+     * Find or create a generic credit card (for when last4 is missing)
+     */
+    static async findOrCreateGenericCard(
+        userId: string,
+        bankName: string,
+        email: CleanEmail
+    ): Promise<Instrument> {
+        // Get bank
+        const bank = await BankService.getOrCreateBank(bankName);
+
+        // Try to find ANY existing credit card for this user and bank
+        const existingInstruments = await InstrumentRegistry.getUserInstruments(userId);
+        const existingCard = existingInstruments.find(
+            i => i.type === 'credit_card' && i.bankId === bank.id && i.status === 'active'
+        );
+
+        if (existingCard) {
+            logger.debug(`[InstrumentAutoService] Found existing generic/active card for ${bankName}: ${existingCard.id}`);
+            return existingCard;
+        }
+
+        // Create new generic instrument
+        const newInstrument = await InstrumentRepository.create({
+            userId,
+            type: 'credit_card',
+            bankId: bank.id,
+            name: `${bank.name} Credit Card`,
+            identifier: `XXXXXXXXXXXX`,
+            last4: 'XXXX',
+            status: 'active',
+            isPrimary: false,
+            metadata: {
+                autoCreated: true,
+                isGeneric: true,
+                createdFromEmail: email.id,
+                createdAt: new Date().toISOString()
+            }
+        });
+
+        // Clear cache
+        InstrumentRegistry.clearCache(userId);
+
+        logger.info(`[InstrumentAutoService] Created new generic card: ${newInstrument.id} (Bank: ${bankName})`);
         return newInstrument;
     }
 

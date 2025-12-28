@@ -221,7 +221,7 @@ VALUES($1, $2, $3, $4, $5, NOW())
             try {
                 const enhancedResult = this.deps.enhancedClassifier.classify(cleanEmail);
                 if (enhancedResult) {
-                    if (enhancedResult.confidence >= 0.85 && enhancedResult.type !== 'non_financial') {
+                    if (enhancedResult.confidence >= 0.85 && enhancedResult.type !== 'non_financial' && enhancedResult.type !== 'unclassified') {
                         // High confidence rule match
                         classificationResult = enhancedResult;
                         classificationMethod = 'enhanced_rule';

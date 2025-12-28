@@ -21,6 +21,14 @@ export class BankAccountUPIDebitExtractor {
         if (accountLast4) {
             const instrument = await InstrumentAutoService.findOrCreateAccount(userId, accountLast4, email);
             instrumentId = instrument.id;
+        } else {
+            // Try to find payer VPA (Global search)
+            const payerVPA = this.extractPayerVPA(combined);
+            if (payerVPA) {
+                // Reuse findOrCreateUPI for the payer handle as an instrument
+                const instrument = await InstrumentAutoService.findOrCreateUPI(userId, payerVPA, email);
+                instrumentId = instrument.id;
+            }
         }
 
         // Also auto-create UPI handle instrument for counterparty if found
@@ -28,14 +36,20 @@ export class BankAccountUPIDebitExtractor {
             await InstrumentAutoService.findOrCreateUPI(userId, recipientUPI, email);
         }
 
-        let merchant = this.extractMerchant(combined);
-        // Try to derive merchant from VPA if regex failed or returned generic
-        if ((!merchant || merchant === 'UPI Merchant') && recipientUPI) {
-            const fromVpa = UPIParser.getMerchantFromVPA(recipientUPI);
-            if (fromVpa) {
-                merchant = fromVpa;
-            } else {
-                merchant = recipientUPI; // Fallback to VPA itself
+        // Jupiter / Specific Merchant Extraction
+        let merchant = this.extractJupiterMerchant(combined);
+
+        // Fallback to generic if not found
+        if (!merchant) {
+            merchant = this.extractMerchant(combined);
+            // Try to derive merchant from VPA if regex failed or returned generic
+            if ((!merchant || merchant === 'UPI Merchant') && recipientUPI) {
+                const fromVpa = UPIParser.getMerchantFromVPA(recipientUPI);
+                if (fromVpa) {
+                    merchant = fromVpa;
+                } else {
+                    merchant = recipientUPI; // Fallback to VPA itself
+                }
             }
         }
         merchant = merchant || 'UPI Merchant';
@@ -108,6 +122,25 @@ export class BankAccountUPIDebitExtractor {
         for (const pattern of patterns) {
             const match = text.match(pattern);
             if (match && match[1]) return match[1];
+        }
+        return null;
+    }
+
+    private static extractJupiterMerchant(text: string): string | null {
+        // "Paid to JISHAN"
+        const match = text.match(/Paid\s+to\s+([^\n]+)/i);
+        if (match && match[1]) {
+            return match[1].trim();
+        }
+        return null;
+    }
+
+    private static extractPayerVPA(text: string): string | null {
+        // Global pattern: "From [Name] [VPA]"
+        // Looks for "From" followed by optional name words and then a VPA-like string (S+@S+)
+        const match = text.match(/From\s+(?:.*[\r\n\s]+)?(\S+@\S+)/i);
+        if (match && match[1]) {
+            return match[1].trim();
         }
         return null;
     }

@@ -38,8 +38,11 @@ export class BroadFinancialDetector {
         // 2. TRANSACTION VERBS (Strong Signal) (+20 points)
         const verbs = /spent|purchase[d]?|bought|charged|debited|payment|paid|deducted|credited|received|deposited|refund|withdrawal|transfer|sent/i;
         if (verbs.test(lowerText)) {
-            score += 20;
-            reasons.push('Transaction Verb');
+            // IGNORE "receiving this email" context
+            if (!/receiving\s+this\s+email|received\s+this\s+email/i.test(lowerText)) {
+                score += 20;
+                reasons.push('Transaction Verb');
+            }
         }
 
         // 3. FINANCIAL ACCOUNT/INSTRUMENT (+20 points)
@@ -80,7 +83,7 @@ export class BroadFinancialDetector {
 
         // --- NEGATIVE EVIDENCE RULES (Strong Filter) ---
         // Words that strongly suggest this is NOT a transaction
-        const negativeSignals = /offer\s+valid|voucher|pre[- ]?approved|upgrade\s+program|newsletter|digest|market\s+highlights|upcoming\s+bill|generated\s+on|check\s+eligibility|book\s+now|register(?!\s+for\s+banking)|apply\s+now/i;
+        const negativeSignals = /offer\s+valid|voucher|pre[- ]?approved|upgrade\s+program|newsletter|digest|market\s+highlights|upcoming\s+bill|generated\s+on|check\s+eligibility|book\s+now|register(?!\s+for\s+banking)|apply\s+now|webinar|certification|course|syllabus|training\s+session|masterclass|unsubscribe/i;
 
         // --- STRONG TRANSACTION CONFIRMATION ---
         // Words that confirm money MOVED (to override negative signals)

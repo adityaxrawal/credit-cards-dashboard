@@ -55,6 +55,8 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
             { pattern: /(?:bill|payment|amount)\s+(?:due|overdue|outstanding)/i, weight: 1.0 },
             { pattern: /total\s+(?:amount)?\s+due.*[₹Rs.INR]*/i, weight: 0.95 },
             { pattern: /(?:bill|statement|e-?statement).{0,30}\s+(?:generated|available|ready)/i, weight: 1.0 },
+            { pattern: /(?:bill|payment)\s+for\s+.{0,50}\s+due\s+on/i, weight: 1.0 },
+            { pattern: /pay\s+(?:bill|dues|outstanding)\s+now/i, weight: 0.95 },
             { pattern: /pay\s+by\s+(?:date|time)/i, weight: 0.9 },
         ],
         excludePatterns: [
@@ -82,7 +84,7 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
         direction: 'debit',
         keywords: [
             // Strict: "Transaction of Rs 500" - Must have currency or be very clear
-            { pattern: /your\s+(?:payment|transaction)\s+(?:of|for)?\s*[₹Rs.INR]+[\s.]*[\d,]+(?:\.\d{2})?/i, weight: 1.0 },
+            { pattern: /(?:your\s+)?(?:payment|transaction)\s+(?:of|for)?\s*[₹Rs.INR]+[\s.]*[\d,]+(?:\.\d{2})?/i, weight: 1.0 },
             // Strict: Lookahead to ensure it's not a request
             { pattern: /(?:payment|txn|transaction)\s+(?:was\s+)?(?:successful|approved|processed)(?!.*otp)/i, weight: 0.95 },
             { pattern: /amount\s+[₹Rs.INR]*\s*[\d,]+\.?\d*\s+(?:debited|charged|deducted)/i, weight: 0.95 },
@@ -103,7 +105,7 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
         transactionType: 'bank_debit',
         direction: 'debit',
         keywords: [
-            { pattern: /[₹Rs.INR]*\s*[\d,]+\.?\d*\s+(?:debited|withdrawn|deducted|charged)\s+(?:from|via)/i, weight: 1.0 },
+            { pattern: /[₹Rs.INR]*\s*[\d,]+\.?\d*\s+(?:debited|withdrawn|deducted|charged)\s+(?:from|via|to)/i, weight: 1.0 },
             { pattern: /debit\s+(?:alert|notification).*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.95 },
             { pattern: /card\s+[*x#]?\d{0,4}\s+(?:debited|charged|used)/i, weight: 0.9 },
             { pattern: /atm\s+(?:withdrawal|cash).*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.9 },
@@ -215,7 +217,8 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
         direction: 'debit',
         keywords: [
             { pattern: /subscription\s+(?:charge|renewal|payment|fee)/i, weight: 0.95 },
-            { pattern: /recurring\s+(?:charge|payment|debit)/i, weight: 0.9 },
+            { pattern: /recurring\s+(?:charge|payment|debit|e-mandate)/i, weight: 0.9 },
+            { pattern: /e-mandate\s+(?:registered|debit).*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.95 },
             { pattern: /(?:monthly|annual|yearly)\s+(?:charge|fee|subscription|membership)/i, weight: 0.85 },
             { pattern: /auto-?(?:debit|pay|renewal)/i, weight: 0.8 },
         ],
@@ -352,7 +355,7 @@ export const BANK_PATTERNS: Record<string, {
     hdfc: { domains: ['hdfc', 'hdfcbank', 'alerts@hdfcbank.net'], displayName: 'HDFC Bank' },
     icici: { domains: ['icici', 'icicibank'], displayName: 'ICICI Bank' },
     axis: { domains: ['axis', 'axisbank', 'alerts@axis.bank.in'], displayName: 'Axis Bank' },
-    sbi: { domains: ['sbi', 'statebank', 'onlinesbi'], displayName: 'State Bank of India' },
+    sbi: { domains: ['sbi', 'statebank', 'onlinesbi', 'sbicard'], displayName: 'State Bank of India' },
     indusind: { domains: ['indusind', 'indusindbank'], displayName: 'IndusInd Bank' },
     kotak: { domains: ['kotak', 'kotakbank', 'kotak811'], displayName: 'Kotak Mahindra Bank' },
     yes: { domains: ['yesbank'], displayName: 'Yes Bank' },

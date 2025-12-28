@@ -22,6 +22,13 @@ export class CreditCardSpendExtractor {
         if (cardLast4) {
             const instrument = await InstrumentAutoService.findOrCreateCard(userId, 'credit_card', cardLast4, email);
             instrumentId = instrument.id;
+        } else {
+            // Fallback: Try to find bank and use generic card
+            const bank = await InstrumentAutoService.detectBankFromEmail(email);
+            if (bank) {
+                const instrument = await InstrumentAutoService.findOrCreateGenericCard(userId, bank.name, email);
+                instrumentId = instrument.id;
+            }
         }
 
         const fingerprint = TransactionDeduplicator.generateFingerprint({

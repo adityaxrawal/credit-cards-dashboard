@@ -75,8 +75,8 @@ export function TransactionDetailModal({
             <span className="font-medium">{transaction.merchant}</span>
           </DetailRow>
 
-          {/* Card */}
-          <DetailRow label="Card" icon={<CreditCard className="w-4 h-4" />}>
+          {/* Payment Source */}
+          <DetailRow label="Payment Source" icon={<CreditCard className="w-4 h-4" />}>
             <div className="flex items-center gap-2">
               <span>
                 {transaction.card?.card_name && transaction.card.card_name !== "Unknown"
