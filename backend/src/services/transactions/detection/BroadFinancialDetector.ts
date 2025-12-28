@@ -1,5 +1,6 @@
 import { EnhancedRuleClassifier } from '../classification/EnhancedRuleClassifier';
 import { CurrencyNormalizer } from '../../../utils/text/CurrencyNormalizer';
+import { isFinancialAuthority, isMerchantSender } from '../../../data/transaction-patterns';
 
 export interface DetectionResult {
     isFinancial: boolean;
@@ -15,17 +16,45 @@ export class BroadFinancialDetector {
      * NEW: Uses Scoring System (0-100)
      * Passing Score: >= 50
      */
-    static isFinancialEmail(text: string): boolean {
-        return this.detect(text).isFinancial;
+    static isFinancialEmail(text: string, sender?: string): boolean {
+        return this.detect(text, sender).isFinancial;
     }
 
     /**
      * Comprehensive Detection with Scoring
      */
-    static detect(text: string): DetectionResult {
+    static detect(text: string, sender?: string): DetectionResult {
         const lowerText = text.toLowerCase();
         let score = 0;
         const reasons: string[] = [];
+
+        // 0. SENDER CHECK (The "Financial Authority" Gate)
+        if (sender) {
+            // A. REJECT MERCHANTS (Duplicate Prevention)
+            const merchantCheck = isMerchantSender(sender);
+            if (merchantCheck.isMerchant) {
+                return {
+                    isFinancial: false,
+                    score: 0,
+                    reasons: [`Merchant Rejection: ${merchantCheck.merchantName}`]
+                };
+            }
+
+            // B. BOOST FINANCIAL AUTHORITIES
+            const authCheck = isFinancialAuthority(sender);
+            if (authCheck.isKnown) {
+                // Massive boost: We trust banks.
+                // But we still scour content to ensure it's not a Loan Offer or OTP.
+                score += 40;
+                reasons.push(`Verified Authority: ${authCheck.bankName}`);
+            } else {
+                // C. UNKNOWN SENDER PENALTY
+                // If it's not a known bank/wallet, we treat it with suspicion.
+                // It needs VERY strong signals (Verb + Amount + RefID) to pass.
+                score -= 20;
+                reasons.push('Unknown Sender Penalty');
+            }
+        }
 
         // 1. AMOUNT PRESENCE (Critical Signal) (+30 points)
         // Check for specific currency symbols or clear amount patterns

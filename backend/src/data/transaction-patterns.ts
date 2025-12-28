@@ -700,71 +700,170 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
 };
 
 // ============================================
-// BANK PATTERNS FOR SENDER VALIDATION
+// FINANCIAL AUTHORITIES (Banks, Wallets, Cards)
+// The ONLY trusted sources for transactions.
 // ============================================
 
-export const BANK_PATTERNS: Record<string, {
+export const FINANCIAL_AUTHORITIES: Record<string, {
     domains: string[];
     displayName: string;
+    type: 'bank' | 'wallet' | 'card' | 'fintech' | 'invest' | 'crypto' | 'payment_gateway';
 }> = {
-    hdfc: { domains: ['hdfc', 'hdfcbank', 'alerts@hdfcbank.net'], displayName: 'HDFC Bank' },
-    icici: { domains: ['icici', 'icicibank'], displayName: 'ICICI Bank' },
-    axis: { domains: ['axis', 'axisbank', 'alerts@axis.bank.in'], displayName: 'Axis Bank' },
-    sbi: { domains: ['sbi', 'statebank', 'onlinesbi', 'sbicard'], displayName: 'State Bank of India' },
-    indusind: { domains: ['indusind', 'indusindbank'], displayName: 'IndusInd Bank' },
-    kotak: { domains: ['kotak', 'kotakbank', 'kotak811'], displayName: 'Kotak Mahindra Bank' },
-    yes: { domains: ['yesbank'], displayName: 'Yes Bank' },
-    bob: { domains: ['bankofbaroda', 'bob'], displayName: 'Bank of Baroda' },
-    pnb: { domains: ['pnb', 'pnbindia'], displayName: 'Punjab National Bank' },
-    canara: { domains: ['canarabank'], displayName: 'Canara Bank' },
-    union: { domains: ['unionbank', 'unionbankofindia'], displayName: 'Union Bank of India' },
-    idbi: { domains: ['idbi', 'idbibank'], displayName: 'IDBI Bank' },
-    hsbc: { domains: ['hsbc'], displayName: 'HSBC' },
-    citi: { domains: ['citi', 'citibank'], displayName: 'Citibank' },
-    amex: { domains: ['americanexpress', 'amex'], displayName: 'American Express' },
-    rbl: { domains: ['rblbank'], displayName: 'RBL Bank' },
-    federal: { domains: ['federalbank'], displayName: 'Federal Bank' },
-    idfc: { domains: ['idfcfirst', 'idfc'], displayName: 'IDFC First Bank' },
-    au: { domains: ['aubank'], displayName: 'AU Small Finance Bank' },
-    csb: { domains: ['csbbank', 'csb'], displayName: 'CSB Bank' },
-    bandhan: { domains: ['bandhanbank'], displayName: 'Bandhan Bank' },
-    south_indian: { domains: ['southindianbank', 'sib'], displayName: 'South Indian Bank' },
+    // Major Banks
+    hdfc: { domains: ['hdfc', 'hdfcbank', 'alerts@hdfcbank.net'], displayName: 'HDFC Bank', type: 'bank' },
+    icici: { domains: ['icici', 'icicibank'], displayName: 'ICICI Bank', type: 'bank' },
+    axis: { domains: ['axis', 'axisbank', 'alerts@axis.bank.in'], displayName: 'Axis Bank', type: 'bank' },
+    sbi: { domains: ['sbi', 'statebank', 'onlinesbi', 'sbicard'], displayName: 'State Bank of India', type: 'bank' },
+    indusind: { domains: ['indusind', 'indusindbank'], displayName: 'IndusInd Bank', type: 'bank' },
+    kotak: { domains: ['kotak', 'kotakbank', 'kotak811'], displayName: 'Kotak Mahindra Bank', type: 'bank' },
+    yes: { domains: ['yesbank'], displayName: 'Yes Bank', type: 'bank' },
+    bob: { domains: ['bankofbaroda', 'bob'], displayName: 'Bank of Baroda', type: 'bank' },
+    pnb: { domains: ['pnb', 'pnbindia'], displayName: 'Punjab National Bank', type: 'bank' },
+    canara: { domains: ['canarabank'], displayName: 'Canara Bank', type: 'bank' },
+    union: { domains: ['unionbank', 'unionbankofindia'], displayName: 'Union Bank of India', type: 'bank' },
+    idbi: { domains: ['idbi', 'idbibank'], displayName: 'IDBI Bank', type: 'bank' },
+    hsbc: { domains: ['hsbc'], displayName: 'HSBC', type: 'bank' },
+    citi: { domains: ['citi', 'citibank'], displayName: 'Citibank', type: 'bank' },
+    amex: { domains: ['americanexpress', 'amex'], displayName: 'American Express', type: 'card' },
+    rbl: { domains: ['rblbank'], displayName: 'RBL Bank', type: 'bank' },
+    federal: { domains: ['federalbank'], displayName: 'Federal Bank', type: 'bank' },
+    idfc: { domains: ['idfcfirst', 'idfc'], displayName: 'IDFC First Bank', type: 'bank' },
+    au: { domains: ['aubank'], displayName: 'AU Small Finance Bank', type: 'bank' },
+    csb: { domains: ['csbbank', 'csb'], displayName: 'CSB Bank', type: 'bank' },
+    bandhan: { domains: ['bandhanbank'], displayName: 'Bandhan Bank', type: 'bank' },
+    south_indian: { domains: ['southindianbank', 'sib'], displayName: 'South Indian Bank', type: 'bank' },
+    dhanalaxmi: { domains: ['dhanbank'], displayName: 'Dhanalaxmi Bank', type: 'bank' },
+    karur_vysya: { domains: ['kvb'], displayName: 'Karur Vysya Bank', type: 'bank' },
+    standard_chartered: { domains: ['sc.com', 'standardchartered'], displayName: 'Standard Chartered', type: 'bank' },
 
     // Digital banks / Fintech
-    jupiter: { domains: ['jupiter', 'jupiter.money'], displayName: 'Jupiter' },
-    fi: { domains: ['fi.money', 'epifi'], displayName: 'Fi Money' },
-    niyo: { domains: ['niyo', 'goniyo'], displayName: 'Niyo' },
-    slice: { domains: ['slice'], displayName: 'Slice' },
-    cred: { domains: ['cred'], displayName: 'CRED' },
+    jupiter: { domains: ['jupiter', 'jupiter.money'], displayName: 'Jupiter', type: 'fintech' },
+    fi: { domains: ['fi.money', 'epifi'], displayName: 'Fi Money', type: 'fintech' },
+    niyo: { domains: ['niyo', 'goniyo'], displayName: 'Niyo', type: 'fintech' },
+    slice: { domains: ['slice', 'quadrillion.finance'], displayName: 'Slice', type: 'fintech' },
+    cred: { domains: ['cred', 'cred.club'], displayName: 'CRED', type: 'fintech' },
+    fold: { domains: ['fold'], displayName: 'Fold Money', type: 'fintech' },
+    postpe: { domains: ['postpe.app', 'bharatpe'], displayName: 'PostPe', type: 'fintech' },
+    navi: { domains: ['navi.com', 'navi-lending'], displayName: 'Navi', type: 'fintech' },
 
-    // UPI/Wallets
-    gpay: { domains: ['google', 'googleplay'], displayName: 'Google Pay' },
-    phonepe: { domains: ['phonepe'], displayName: 'PhonePe' },
-    paytm: { domains: ['paytm'], displayName: 'Paytm' },
-    amazonpay: { domains: ['amazon'], displayName: 'Amazon Pay' },
+    // Investment / Trading
+    zerodha: { domains: ['zerodha.com', 'zerodha.net'], displayName: 'Zerodha', type: 'invest' },
+    dhan: { domains: ['dhan.co'], displayName: 'Dhan', type: 'invest' },
+    groww: { domains: ['groww.in'], displayName: 'Groww', type: 'invest' },
+    upstox: { domains: ['upstox.com', 'rksv'], displayName: 'Upstox', type: 'invest' },
+    angelone: { domains: ['angelone', 'angelbroking'], displayName: 'Angel One', type: 'invest' },
+    indmoney: { domains: ['indmoney'], displayName: 'INDmoney', type: 'invest' },
+    smallcase: { domains: ['smallcase'], displayName: 'smallcase', type: 'invest' },
+    kuvera: { domains: ['kuvera.in'], displayName: 'Kuvera', type: 'invest' },
+
+    // Crypto
+    coinbase: { domains: ['coinbase.com'], displayName: 'Coinbase', type: 'crypto' },
+    binance: { domains: ['binance.com'], displayName: 'Binance', type: 'crypto' },
+    bitmex: { domains: ['bitmex.com'], displayName: 'BitMEX', type: 'crypto' },
+    onramp: { domains: ['onramp.money'], displayName: 'Onramp', type: 'crypto' },
+    wazirx: { domains: ['wazirx.com'], displayName: 'WazirX', type: 'crypto' },
+    coindcx: { domains: ['coindcx'], displayName: 'CoinDCX', type: 'crypto' },
+
+    // Depositories & Registrars (Stock/MF Alerts)
+    cdsl: { domains: ['cdslindia.co.in', 'cdslindia'], displayName: 'CDSL', type: 'invest' },
+    nsdl: { domains: ['nsdl.co.in', 'nsdl.com'], displayName: 'NSDL', type: 'invest' },
+    cams: { domains: ['camsonline.com', 'mycams'], displayName: 'CAMS', type: 'invest' },
+    kfintech: { domains: ['kfintech.com'], displayName: 'KFintech', type: 'invest' },
+    linkintime: { domains: ['linkintime.co.in'], displayName: 'Link Intime', type: 'invest' },
+
+    // UPI/Wallets/Gateways
+    gpay: { domains: ['google', 'googleplay'], displayName: 'Google Pay', type: 'wallet' },
+    phonepe: { domains: ['phonepe'], displayName: 'PhonePe', type: 'wallet' },
+    paytm: { domains: ['paytm'], displayName: 'Paytm', type: 'wallet' },
+    amazonpay: { domains: ['amazon'], displayName: 'Amazon Pay', type: 'wallet' },
+    stripe: { domains: ['stripe.com'], displayName: 'Stripe', type: 'payment_gateway' },
+    razorpay: { domains: ['razorpay.com'], displayName: 'Razorpay', type: 'payment_gateway' },
 
     // Credit Cards
-    bajaj: { domains: ['bajaj', 'bajajfinserv'], displayName: 'Bajaj Finserv' },
-    onecard: { domains: ['onecard', 'getonecard'], displayName: 'OneCard' },
-    uni: { domains: ['uni'], displayName: 'Uni Cards' },
+    bajaj: { domains: ['bajaj', 'bajajfinserv'], displayName: 'Bajaj Finserv', type: 'card' },
+    onecard: { domains: ['onecard', 'getonecard'], displayName: 'OneCard', type: 'card' },
+    uni: { domains: ['uni.cards', 'uni.orb'], displayName: 'Uni Cards', type: 'card' },
+};
+
+// Alias for backward compatibility if needed, though we should migrate
+export const BANK_PATTERNS = FINANCIAL_AUTHORITIES;
+
+// ============================================
+// MERCHANTS (Explicitly Ignored to prevent duplicates)
+// ============================================
+export const MERCHANT_DOMAINS: Record<string, {
+    domains: string[];
+    displayName: string;
+    category: string;
+}> = {
+    // Travel / Ride
+    uber: { domains: ['uber.com'], displayName: 'Uber', category: 'transport' },
+    ola: { domains: ['olacabs.com'], displayName: 'Ola', category: 'transport' },
+    rapido: { domains: ['rapido.bike'], displayName: 'Rapido', category: 'transport' },
+    blusmart: { domains: ['blusmart'], displayName: 'BluSmart', category: 'transport' },
+
+    // Food
+    swiggy: { domains: ['swiggy.in', 'swiggy.com'], displayName: 'Swiggy', category: 'food' },
+    zomato: { domains: ['zomato.com'], displayName: 'Zomato', category: 'food' },
+    blinkit: { domains: ['blinkit.com', 'grofers.com'], displayName: 'Blinkit', category: 'grocery' },
+    zepto: { domains: ['zepto', 'zeptonow'], displayName: 'Zepto', category: 'grocery' },
+    instamart: { domains: ['instamart'], displayName: 'Swiggy Instamart', category: 'grocery' },
+
+    // Shopping
+    amazon: { domains: ['amazon.in', 'amazon.com'], displayName: 'Amazon', category: 'shopping' },
+    flipkart: { domains: ['flipkart.com'], displayName: 'Flipkart', category: 'shopping' },
+    myntra: { domains: ['myntra.com'], displayName: 'Myntra', category: 'shopping' },
+    ajio: { domains: ['ajio.com'], displayName: 'Ajio', category: 'shopping' },
+
+    // Entertainment
+    netflix: { domains: ['netflix.com', 'netflix'], displayName: 'Netflix', category: 'subscription' },
+    spotify: { domains: ['spotify.com', 'spotify'], displayName: 'Spotify', category: 'subscription' },
+    youtube: { domains: ['youtube.com'], displayName: 'YouTube', category: 'subscription' },
+    bookmyshow: { domains: ['bookmyshow.com', 'bigtree'], displayName: 'BookMyShow', category: 'entertainment' },
 };
 
 /**
- * Check if a sender email is from a known bank
+ * Check if a sender email is from a known Financial Authority
  */
-export function isKnownBankSender(senderEmail?: string): {
+export function isFinancialAuthority(senderEmail?: string): {
     isKnown: boolean;
     bankName?: string;
+    type?: string;
 } {
     if (!senderEmail) return { isKnown: false };
 
     const emailLower = senderEmail.toLowerCase();
 
-    for (const [key, bank] of Object.entries(BANK_PATTERNS)) {
-        if (bank.domains.some(domain => emailLower.includes(domain))) {
-            return { isKnown: true, bankName: bank.displayName };
+    for (const [key, authority] of Object.entries(FINANCIAL_AUTHORITIES)) {
+        if (authority.domains.some(domain => emailLower.includes(domain))) {
+            return { isKnown: true, bankName: authority.displayName, type: authority.type };
         }
     }
 
     return { isKnown: false };
+}
+
+/**
+ * Check if a sender is a known Merchant (to be ignored)
+ */
+export function isMerchantSender(senderEmail?: string): {
+    isMerchant: boolean;
+    merchantName?: string;
+} {
+    if (!senderEmail) return { isMerchant: false };
+
+    const emailLower = senderEmail.toLowerCase();
+
+    for (const [key, merchant] of Object.entries(MERCHANT_DOMAINS)) {
+        if (merchant.domains.some(domain => emailLower.includes(domain))) {
+            return { isMerchant: true, merchantName: merchant.displayName };
+        }
+    }
+
+    return { isMerchant: false };
+}
+
+// Backward compatibility wrapper
+export function isKnownBankSender(senderEmail?: string) {
+    return isFinancialAuthority(senderEmail);
 }
