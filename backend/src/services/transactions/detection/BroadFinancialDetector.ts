@@ -63,20 +63,49 @@ export class BroadFinancialDetector {
             reasons.push('Balance/Statement Context');
         }
 
+        // --- RECEIPT / ACKNOWLEDGMENT PENALTY ---
+        // "We have received your payment" is usually a merchant/insurer receipt, not a bank debit.
+        // We want to track the BANK debit, not the merchant receipt.
+        const acknowledgment = /received\s+your\s+payment|payment\s+received|acknowledgement/i;
+        if (acknowledgment.test(lowerText)) {
+            // But be careful: "Payment received" on a Credit Card statement IS a transaction (repayment).
+            // So we check if "credit card" or "account" is mentioned nearby? 
+            // BroadDetector is heuristic. Let's penalize, and rely on "Instrument Keyword" to boost it back up if it's a bank.
+            score -= 25;
+            reasons.push('Acknowledgment Penalty');
+        }
+
         // 6. BANK SENDER / BRANDING (We verify sender in Classifier, but text might have it)
         // Hard to detect generically without list, skip for now or rely on pattern matching
 
+        // --- NEGATIVE EVIDENCE RULES (Strong Filter) ---
+        // Words that strongly suggest this is NOT a transaction
+        const negativeSignals = /offer\s+valid|voucher|pre[- ]?approved|upgrade\s+program|newsletter|digest|market\s+highlights|upcoming\s+bill|generated\s+on|check\s+eligibility|book\s+now|register(?!\s+for\s+banking)|apply\s+now/i;
+
+        // --- STRONG TRANSACTION CONFIRMATION ---
+        // Words that confirm money MOVED (to override negative signals)
+        const strongConfirmation = /debited|credited|payment\s+successful|txn\s+id|ref\s+no|transaction\s+id|authorization\s+code/i;
+
+        const hasNegative = negativeSignals.test(lowerText);
+        const hasConfirmation = strongConfirmation.test(lowerText);
+
+        if (hasNegative && !hasConfirmation) {
+            score -= 50;
+            reasons.push('Negative Signal Detected');
+        }
+
         // --- PROMOTIONAL PENALTIES ---
         // If it looks like marketing, we deduct heavily unless strong financial signals exist
-        const marketing = /marketing|promotional|discount\s+(?:offer|code)|coupon|limited\s+offer|apply\s+now|pre[- ]?approved/i;
+        const marketing = /marketing|promotional|discount\s+(?:offer|code)|coupon|limited\s+offer|enjoy\s+benefits|exclusive\s+privilege/i;
         if (marketing.test(lowerText)) {
-            // Apply penalty ONLY if we don't have an explicit amount
-            if (amountCandidates.length === 0) {
+            if (!hasConfirmation) {
+                // If no EXPLICIT transaction confirmation, penalize heavily even if amount exists
+                // (e.g. "Get ₹500 voucher" is NOT a transaction)
                 score -= 40;
                 reasons.push('Marketing Penalty');
             } else {
-                // If amount exists (e.g. "You spent 500. Get discount..."), we enforce simpler penalty
-                score -= 10;
+                // Real transaction but maybe with a coupon mentioned
+                score -= 5;
                 reasons.push('Minor Marketing Noise');
             }
         }

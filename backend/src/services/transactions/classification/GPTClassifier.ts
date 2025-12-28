@@ -139,18 +139,26 @@ CRITICAL INSTRUCTION:
 Return a result for EVERY message ID provided. Do not skip any.
 
 OBJECTIVE:
-Identify ALL valid financial transactions. 
+Identify ALL valid financial transactions where money has successfully moved.
 A transaction is any event where money is spent, received, or moved.
 Keywords: "spent", "debited", "charged", "paid", "sent", "received", "credited", "refunded", "withdrawal", "purchase", "invested", "redeemed".
 
-RULES:
+CLASSIFICATION RULES:
+1. **Valid Transaction**: Confirmed debit/credit. "Your acct XX123 is debited for INR 500".
+2. **Bill Generated (Pending)**: "Your bill of INR 500 is generated", "Due date...", "Statement for...". Money hasn't moved yet. Classify as "bill_due".
+3. **Marketing/Offer**: "Get INR 500 cashback", "Loan offer", "Use voucher", "Upgrade now". Classify as "marketing_brand_promo".
+4. **Non-Financial**: Newsletters, daily digests, market updates, login alerts.
+5. **Merchant Receipts**: "We have received your payment" (from Insurance, Netlfix, etc.). IGNORE these. Only extract if it is a BANK alert saying "Debited for...".
+
+SPECIFIC GUIDELINES:
 1. IGNORE "Available Balance", "Credit Limit", or "Outstanding Due" ALONE. Only extract if there is also a SPEND/CREDIT event.
 2. IGNORE OTPs (One Time Password) or Login Alerts. Mark "is_transaction": false.
-3. If the email contains multiple transactions (e.g. a statement summary), extract the MOST RECENT or LARGEST one.
-4. Merchant Name: Extract the CLEAN merchant name (e.g. "Uber" instead of "Uber India Tech Pvt Ltd"). REMOVE location/city if possible.
-5. Amount: Extract pure number. IGNORE commas if necessary but preserve decimals.
-6. Currency: Standardize to INR, USD, etc.
-7. Date: Extract date if available.
+3. IGNORE Merchant/Service Provider Acknowledgments. We only want the source-of-truth transaction from the Bank/Card.
+4. If the email contains multiple transactions (e.g. a statement summary), extract the MOST RECENT or LARGEST one.
+5. Merchant Name: Extract the CLEAN merchant name (e.g. "Uber" instead of "Uber India Tech Pvt Ltd"). REMOVE location/city if possible.
+6. Amount: Extract pure number. IGNORE commas if necessary but preserve decimals.
+7. Currency: Standardize to INR, USD, etc.
+8. Date: Extract date if available.
 
 GUARDRAILS:
 - Do NOT mark "is_transaction": false if there is a clear amount and words like "debited" or "credited".
@@ -179,7 +187,7 @@ GUARDRAILS:
                                     reasoning: { type: "string" },
                                     type: {
                                         type: "string",
-                                        enum: ["cc_spend", "cc_payment", "cc_upi", "bank_debit", "bank_credit", "bank_upi_debit", "bank_upi_credit", "refund", "investment", "travel", "food", "transport", "unclassified", "non_financial"]
+                                        enum: ["cc_spend", "cc_payment", "cc_upi", "bank_debit", "bank_credit", "bank_upi_debit", "bank_upi_credit", "refund", "investment", "travel", "food", "transport", "bill_due", "marketing_brand_promo", "unclassified", "non_financial"]
                                     },
                                     confidence: { type: "number" },
                                     extracted: {
@@ -258,6 +266,13 @@ GUARDRAILS:
                     const result = results.find(r => r.messageId === req.messageId) || results[index];
 
                     if (result) {
+                        // === HANDLE SPECIAL TYPES ===
+                        // If GPT identifies it as "bill_due" or "marketing", we treat it as non_financial for now
+                        if (result.type === 'bill_due' || result.type === 'marketing_brand_promo') {
+                            result.is_transaction = false;
+                            result.type = 'non_financial';
+                        }
+
                         // === GUARDRAILS === 
                         // Guard against false "Non-Financial" negatives
                         if (result.is_transaction === false || result.type === 'non_financial') {
@@ -266,17 +281,23 @@ GUARDRAILS:
 
                             // If Rule-based detector is VERY confident (>70) that it IS financial, 
                             // we override GPT's negative decision to force manual review.
+                            // BUT: If the reasoning contains "bill" or "marketing", we trust GPT even if BroadDetector liked it.
                             if (detection.isFinancial && detection.score >= 70) {
-                                logger.info(`[GPT] Guardrail Triggered: GPT said non-financial, but BroadDetector score is ${detection.score}. Marking for review.`);
-                                batch.resolveCallbacks[index]({
-                                    type: 'unclassified' as any,
-                                    confidence: 0.5, // Low confidence to trigger review
-                                    metadata: {
-                                        reason: `GPT said non-financial but BroadDetector detected: ${detection.reasons.join(', ')}`,
-                                        original_gpt_reason: result.reasoning
-                                    }
-                                });
-                                return;
+                                const reasoningLower = (result.reasoning || '').toLowerCase();
+                                if (reasoningLower.includes('bill') || reasoningLower.includes('startement') || reasoningLower.includes('promo') || reasoningLower.includes('offer')) {
+                                    // Trust GPT that it's just a bill/promo
+                                } else {
+                                    logger.info(`[GPT] Guardrail Triggered: GPT said non-financial, but BroadDetector score is ${detection.score}. Marking for review.`);
+                                    batch.resolveCallbacks[index]({
+                                        type: 'unclassified' as any,
+                                        confidence: 0.5, // Low confidence to trigger review
+                                        metadata: {
+                                            reason: `GPT said non-financial but BroadDetector detected: ${detection.reasons.join(', ')}`,
+                                            original_gpt_reason: result.reasoning
+                                        }
+                                    });
+                                    return;
+                                }
                             }
 
                             batch.resolveCallbacks[index]({
