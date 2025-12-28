@@ -1,6 +1,7 @@
 import pool, { safeQuery } from '../../../lib/db';
 import logger from '../../../utils/infrastructure/logger';
-import { SimplifiedEmail, CleanEmail, PipelineResult, TransactionType } from '../../../types/transaction.types';
+import { SimplifiedEmail, CleanEmail, PipelineResult, TransactionType, TransactionDirection, InstrumentType } from '../../../types/transaction.types';
+import { InstrumentAutoService } from '../../cards/instruments/InstrumentAutoService';
 
 import { SanitizerService } from '../../gmail/sanitize/sanitizer';
 import { BroadFinancialDetector } from '../detection/BroadFinancialDetector';
@@ -16,6 +17,8 @@ import * as transactionsQueries from '../../../db/queries/transactions.queries';
 import * as scannedEmailsQueries from '../../../db/queries/scanned_emails.queries';
 import { StatementParserFactory } from '../../statements/StatementParserFactory';
 import { StatementReconciler } from '../../statements/StatementReconciler';
+import { MerchantEnricher } from '../enrichment/MerchantEnricher';
+import { BankPDFPasswordResolver } from '../../statements/password/BankPDFPasswordResolver';
 
 export interface IPipelineDependencies {
     sanitizer: typeof SanitizerService;
@@ -88,29 +91,44 @@ export class UniversalTransactionPipeline {
             // ========================================
             // STAGE 2.5: ATTACHMENT PROCESSING (Statements)
             // ========================================
+            let statementProcessedSuccessfully = false;
             if (cleanEmail.hasAttachments && cleanEmail.attachments) {
                 const s2_5Start = Date.now();
                 logger.info(`[Pipeline] Stage 2.5: Checking ${cleanEmail.attachments.length} attachments for statements`);
 
-                // Fetch user instruments to generate potential passwords
+                // Fetch user instruments & profile to generate passwords
                 const instruments = await this.deps.instrumentService.getUserInstruments(userId);
 
-                // Priority 1: "ADIT" + Last 4 digits
-                const dynamicPasswords = instruments
-                    .filter(i => i.account_number_masked && i.account_number_masked.length >= 4)
-                    .map(i => `ADIT${i.account_number_masked.slice(-4)}`);
+                // MOCK PROFILE DATA (In real app, fetch from UserProfileService)
+                // For now, we infer from what we have or user ID?
+                // We'll rely on the resolver's default + instrument based logic
+                const passwordContext = {
+                    userName: 'ADITYA', // TODO: Fetch from DB
+                    userDob: new Date('2000-01-01'), // TODO: Fetch from DB
+                    instruments: instruments
+                };
 
-                // Priority 2: Static fallback passwords (edit this array to add more)
-                const STATIC_PASSWORDS: string[] = [
-                    // Add your custom passwords here, e.g.:
-                    // 'PASSWORD123',
-                    "ADIT2000",
-                    "ADIT2305"
-                ];
+                const candidatePasswords: string[] = [];
 
-                const candidatePasswords = [...dynamicPasswords, ...STATIC_PASSWORDS];
+                // 1. Generate from context
+                // We just map instruments to context format simply
+                for (const inst of instruments) {
+                    // Check account_number_masked (last 4)
+                    const last4 = inst.account_number_masked?.slice(-4);
+                    if (last4) {
+                        candidatePasswords.push(`ADIT${last4}`); // Keep the specific pattern user liked
+                    }
+                }
 
-                // Add unique passwords only
+                // 2. Use Resolver
+                // (We need to import BankPDFPasswordResolver)
+                const resolved = BankPDFPasswordResolver.generateCandidates({
+                    userName: 'ADITYA',
+                    accountLast4: instruments[0]?.account_number_masked?.slice(-4)
+                });
+
+                candidatePasswords.push(...resolved);
+
                 const uniquePasswords = [...new Set(candidatePasswords)];
                 if (uniquePasswords.length > 0) {
                     logger.info(`[Pipeline] Generated ${uniquePasswords.length} candidate passwords for protected statements`);
@@ -119,14 +137,18 @@ export class UniversalTransactionPipeline {
                 for (const att of cleanEmail.attachments) {
                     if (att.mimeType === 'application/pdf' || att.filename.toLowerCase().endsWith('.pdf')) {
                         try {
-                            const parser = await this.deps.statementParserFactory.getParser(att.data, uniquePasswords);
-                            if (parser) {
-                                logger.info(`[Pipeline] Detected statement for ${att.filename} using ${parser.constructor.name}`);
-                                const statement = await parser.parse(att.data);
-                                logger.info(`[Pipeline] Extracted ${statement.transactions.length} transactions from statement`);
+                            const statement = await this.deps.statementParserFactory.process(att.data, uniquePasswords);
+                            if (statement) {
+                                logger.info(`[Pipeline] Successfully processed statement for ${att.filename}: ${statement.transactions.length} txns (${statement.bankName})`);
 
                                 const stats = await this.deps.statementReconciler.reconcile(statement, userId);
                                 logger.info(`[Pipeline] Reconciliation Stats: matched=${stats.matched}, inserted=${stats.newInserted}`);
+
+                                // Mark that we successfully processed a statement
+                                if (stats.matched > 0 || stats.newInserted > 0) {
+                                    statementProcessedSuccessfully = true;
+                                    logger.info(`[Pipeline] Statement processed successfully, will bypass broad detection`);
+                                }
                             }
                         } catch (err) {
                             logger.warn(`[Pipeline] Failed to process attachment ${att.filename}`, err);
@@ -138,11 +160,16 @@ export class UniversalTransactionPipeline {
 
             // ========================================
             // STAGE 3: BROAD DETECTION (Financial?)
+            // Skip if we successfully processed a statement in Stage 2.5
             // ========================================
             const s3Start = Date.now();
-            const text = cleanEmail.subject + ' ' + cleanEmail.cleanedBody;
-            const isBroadFinancial = this.deps.broadDetector.isFinancialEmail(text);
-            logger.info(`[Pipeline] Stage 3 (Broad Detection) took ${Date.now() - s3Start}ms. Result: ${isBroadFinancial ? 'PASS' : 'FAIL'}`);
+            let isBroadFinancial = statementProcessedSuccessfully; // Auto-pass if statement was processed
+
+            if (!statementProcessedSuccessfully) {
+                const text = cleanEmail.subject + ' ' + cleanEmail.cleanedBody;
+                isBroadFinancial = this.deps.broadDetector.isFinancialEmail(text);
+            }
+            logger.info(`[Pipeline] Stage 3 (Broad Detection) took ${Date.now() - s3Start}ms. Result: ${isBroadFinancial ? 'PASS' : 'FAIL'}${statementProcessedSuccessfully ? ' (Statement bypass)' : ''}`);
 
             if (!isBroadFinancial) {
                 await this.deps.terminator.terminate(
@@ -412,20 +439,90 @@ export class UniversalTransactionPipeline {
             logger.info(`[Pipeline] Stage 5: Starting extraction with ${classificationResult.type} extractor`);
             const Extractor = this.deps.extractorFactory.getExtractor(classificationResult.type as TransactionType);
             extracted = await Extractor.extract(userId, cleanEmail);
+
+            // === ENRICHMENT ===
+            try {
+                // Enrich Merchant Name & Category
+                const enriched = MerchantEnricher.enrich(extracted.merchant || '');
+
+                // If we found a good match (confidence > 0.8), update the data
+                // Or if the original was "Unknown Merchant" and we got something better
+                if (enriched.confidence >= 0.8) {
+                    logger.info(`[Pipeline] Enriched merchant: "${extracted.merchant}" -> "${enriched.canonicalName}" [${enriched.category}]`);
+                    extracted.merchant = enriched.canonicalName;
+
+                    // Update category if the current one is generic/missing and we have a specific one
+                    if ((!extracted.category || extracted.category === 'Others' || extracted.category === 'Unclassified') &&
+                        enriched.category !== 'Uncategorized') {
+                        extracted.category = enriched.category;
+                    }
+                }
+            } catch (enrichError) {
+                logger.warn(`[Pipeline] Enrichment failed`, enrichError);
+            }
+
             logger.info(`[Pipeline] Stage 5 (Extract) took ${Date.now() - s5Start}ms. Data: ${extracted.amount} ${extracted.currency} @ ${extracted.merchant}`);
         } catch (error) {
-            logger.error(`[Pipeline] Extraction failed for ${cleanEmail.id} (${classificationResult.type}):`, error);
-            await this.deps.terminator.terminate(
-                userId,
-                cleanEmail.id,
-                `Extraction failed: ${error instanceof Error ? error.message : String(error)}`,
-                'stage_5_extraction',
-                'EXTRACTION_FAILED',
-                jobId,
-                rawEmailId
-            );
-            logger.warn(`<<< [PIPELINE END] ${messageId} - Extraction Failed`);
-            return { status: 'failed', reason: 'extraction_error', error: String(error) };
+            logger.warn(`[Pipeline] Extraction failed via rules (${error instanceof Error ? error.message : String(error)}). Attempting GPT Fallback.`);
+
+            // Fallback: Use GPT if not already used or if rule based failed
+            try {
+                // If we haven't tried GPT yet, or if we want to re-try for extraction specifically using GPT
+                let gptResult = classificationMethod === 'gpt' ? classificationResult : null;
+
+                if (!gptResult) {
+                    gptResult = await this.classifyWithGPT(userId, cleanEmail);
+                }
+
+                if (gptResult && gptResult.metadata && gptResult.metadata.amount) {
+                    logger.info(`[Pipeline] GPT Fallback Extraction Successful. Using GPT data.`);
+                    // Manually construct ExtractedTransaction from GPT data
+                    const metadata = gptResult.metadata;
+
+                    // Attempt to find instrument
+                    // We default to 'credit_card' or try to guess from metadata if possible? 
+                    // GPT metadata doesn't usually have card last 4 unless we change prompt.
+                    // But let's check text for card ending using regex as helper.
+                    const cardMatch = cleanEmail.cleanedBody.match(/(?:ending|no)\.?\s*[*x#]*(\d{4})/i);
+                    const cardLast4 = cardMatch ? cardMatch[1] : undefined;
+
+                    let instrumentId: string | undefined = undefined;
+                    if (cardLast4) {
+                        const instrument = await InstrumentAutoService.findOrCreateCard(userId, 'credit_card', cardLast4, cleanEmail);
+                        instrumentId = instrument.id;
+                    }
+
+                    extracted = {
+                        type: gptResult.type || TransactionType.CREDIT_CARD_SPEND,
+                        direction: TransactionDirection.DEBIT, // Default
+                        amount: Number(metadata.amount),
+                        currency: (metadata.currency as string) || 'INR',
+                        merchant: (metadata.merchant as string) || 'Unknown',
+                        instrumentType: InstrumentType.CREDIT_CARD, // Fallback default
+                        instrumentId,
+                        category: 'Others',
+                        fingerprint: 'gpt_' + cleanEmail.id, // Simple fingerprint
+                        metadata: {
+                            classification: 'gpt_fallback',
+                            original_error: String(error)
+                        }
+                    };
+                } else {
+                    throw new Error('GPT Fallback failed to extract amount');
+                }
+            } catch (gptError) {
+                logger.error(`[Pipeline] GPT Fallback entirely failed:`, gptError);
+                await this.deps.terminator.terminate(
+                    userId,
+                    cleanEmail.id,
+                    `Extraction failed: ${error instanceof Error ? error.message : String(error)}`,
+                    'stage_5_extraction',
+                    'EXTRACTION_FAILED',
+                    jobId,
+                    rawEmailId
+                );
+                return { status: 'failed', reason: 'extraction_error', error: String(error) };
+            }
         }
 
         // ========================================

@@ -2,6 +2,7 @@ import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
 import { InstrumentAutoService } from '../../../cards/instruments/InstrumentAutoService';
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
+import { UniversalAmountExtractor } from '../UniversalAmountExtractor';
 
 export class CreditCardPaymentExtractor {
     static async extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {
@@ -50,16 +51,7 @@ export class CreditCardPaymentExtractor {
     }
 
     private static extractAmount(text: string): number {
-        // Look for "Payment Received" amount patterns
-        const matchReceived = text.match(/(?:payment|credit)\s+(?:received|of)?\s+(?:rs\.?|inr|₹)?\s*([\d,]+(?:\.\d{2})?)/i);
-        if (matchReceived) return parseFloat(matchReceived[1].replace(/,/g, ''));
-
-        const match = text.match(BankParserPatterns.AMOUNT_INTL);
-        if (match) {
-            return parseFloat(match[1].replace(/,/g, ''));
-        }
-
-        throw new Error('Amount not found');
+        return UniversalAmountExtractor.extract(text);
     }
 
     private static extractMerchant(text: string): string {

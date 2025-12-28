@@ -11,6 +11,7 @@ export enum TransactionType {
     REFUND_REVERSAL = 'refund',
     CHARGEBACK = 'chargeback',
     STATEMENT_TRANSACTION = 'statement_txn',
+    INVESTMENT = 'investment',
     UNCLASSIFIED = 'unclassified',
 }
 

@@ -3,6 +3,7 @@ import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
 import { InstrumentAutoService } from '../../../cards/instruments/InstrumentAutoService';
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
+import { UniversalAmountExtractor } from '../UniversalAmountExtractor';
 
 export class BankAccountDebitExtractor {
     static async extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {
@@ -49,22 +50,7 @@ export class BankAccountDebitExtractor {
     }
 
     private static extractAmount(text: string): number {
-        const match = text.match(BankParserPatterns.AMOUNT_INR);
-        if (match) return parseFloat(match[1].replace(/,/g, ''));
-
-        // Fallback
-        const commonPatterns = [
-            /(?:debited|spent|paid|amount|for)\s+(?:[₹$€£]|rs\.?|inr|usd|eur|gbp)?\s*([\d,]+(?:\.\d{1,2})?)/i,
-            /(?:inr|rs\.?|₹)\s*([\d,]+(?:\.\d{1,2})?)\s*(?:is|has\s+been)\s+(?:debited|paid)/i,
-            /valued\s+at\s+(?:inr|rs\.?|₹)\s*([\d,]+(?:\.\d{1,2})?)/i
-        ];
-
-        for (const pattern of commonPatterns) {
-            const m = text.match(pattern);
-            if (m) return parseFloat(m[1].replace(/,/g, ''));
-        }
-
-        throw new Error('Amount not found');
+        return UniversalAmountExtractor.extract(text);
     }
 
     private static extractAccountLast4(text: string): string | null {

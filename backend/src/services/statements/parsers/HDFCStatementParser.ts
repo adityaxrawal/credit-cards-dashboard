@@ -1,32 +1,39 @@
-const pdf = require('pdf-parse');
 import { IStatementParser } from './IStatementParser';
 import { ExtractedStatement, StatementTransaction } from '../../../types/statement.types';
 
 export class HDFCStatementParser implements IStatementParser {
 
     supports(text: string): boolean {
-        return text.includes('HDFC BANK') || text.includes('Process Date') && text.includes('Transaction Description');
+        return text.includes('HDFC BANK') || (text.includes('Process Date') && text.includes('Transaction Description'));
     }
 
-    async parse(buffer: Buffer): Promise<ExtractedStatement> {
-        const data = await pdf(buffer);
-        const text = data.text;
+    async parse(pdfDoc: any): Promise<ExtractedStatement> {
+        let text = '';
+        const numPages = pdfDoc.numPages;
+
+        for (let i = 1; i <= numPages; i++) {
+            const page = await pdfDoc.getPage(i);
+            const content = await page.getTextContent();
+
+            // Simple joining strategy for now. 
+            // Better strategy: sort by Y, then X. 
+            // For HDFC, usually items are distinct enough.
+            const pageText = content.items.map((item: any) => item.str).join(' ');
+            text += pageText + '\n';
+        }
 
         const transactions: StatementTransaction[] = [];
 
-        // Regex for HDFC Credit Card Statement Line
-        // Example: 15/01/2024 AMAZON PAY INDIA PRIVATE 500.00
-        // Sometimes usually: Date Description Amount Cr/Dr(optional or implied)
-        // Adjusting regex to be flexible
+        // Updated Regex for loose matching on pdfjs extracted text (which might have extra spaces)
+        // HDFC: 15/01/2024 Description... Amount...
+        // Note: pdfjs might produce "15/01/2024 AMAZON 500.00"
 
-        // Pattern: Date (dd/mm/yyyy) followed by space, then Description, then Amount (with commas/dots), then 'Cr' optional
         const lineRegex = /(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+([\d,]+\.\d{2})(?:\s+(Cr))?/gi;
 
         let match;
         while ((match = lineRegex.exec(text)) !== null) {
             const [fullMatch, dateStr, description, amountStr, creditIndicator] = match;
 
-            // Basic filter: skip lines that look like headers or summaries if they accidentally match
             if (description.includes('Opening Balance') || description.includes('Total Dues')) {
                 continue;
             }
@@ -35,8 +42,9 @@ export class HDFCStatementParser implements IStatementParser {
             const [day, month, year] = dateStr.split('/').map(Number);
             const date = new Date(year, month - 1, day);
 
-            // If line ends with 'Cr', it's a credit (payment/refund). Otherwise typically debit in CC statements.
-            // HDFC statements often explicitly mark credits with 'Cr'.
+            // Validation: valid date
+            if (isNaN(date.getTime())) continue;
+
             const type = creditIndicator === 'Cr' ? 'credit' : 'debit';
 
             transactions.push({

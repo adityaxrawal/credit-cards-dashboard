@@ -3,6 +3,7 @@ import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
 import { InstrumentAutoService } from '../../../cards/instruments/InstrumentAutoService';
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
+import { UniversalAmountExtractor } from '../UniversalAmountExtractor';
 
 export class CreditCardSpendExtractor {
     static async extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {
@@ -52,17 +53,7 @@ export class CreditCardSpendExtractor {
     }
 
     private static extractAmount(text: string): number {
-        const match = text.match(BankParserPatterns.AMOUNT_INTL);
-        if (match) {
-            return parseFloat(match[1].replace(/,/g, ''));
-        }
-
-        // Fallback for simple numbers
-        const matchFallback = text.match(/spent\s+([\d,]+(?:\.\d{2})?)/i) ||
-            text.match(/(?:for|amount)\s+(?:rs\.?|inr|₹)?\s*([\d,]+(?:\.\d{2})?)/i);
-        if (matchFallback) return parseFloat(matchFallback[1].replace(/,/g, ''));
-
-        throw new Error('Amount not found');
+        return UniversalAmountExtractor.extract(text);
     }
 
     private static extractMerchant(text: string): string {

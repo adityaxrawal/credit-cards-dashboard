@@ -3,15 +3,16 @@ import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
 import { InstrumentAutoService } from '../../../cards/instruments/InstrumentAutoService';
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
+import { UPIParser } from '../../../../utils/text/UPIParser';
+import { UniversalAmountExtractor } from '../UniversalAmountExtractor';
 
 export class BankAccountUPIDebitExtractor {
     static async extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {
-        const text = (email.subject + ' ' + email.cleanedBody).toLowerCase();
         const combined = email.subject + ' ' + email.cleanedBody;
 
-        const amount = this.extractAmount(combined);
+        const amount = UniversalAmountExtractor.extract(combined);
         const accountLast4 = this.extractAccountLast4(combined);
-        const recipientUPI = this.extractRecipientUPI(combined);
+        const recipientUPI = UPIParser.extractVPA(combined);
         const date = new Date(email.internalDate);
         const referenceNumber = this.extractReferenceNumber(combined);
 
@@ -27,16 +28,25 @@ export class BankAccountUPIDebitExtractor {
             await InstrumentAutoService.findOrCreateUPI(userId, recipientUPI, email);
         }
 
+        let merchant = this.extractMerchant(combined);
+        // Try to derive merchant from VPA if regex failed or returned generic
+        if ((!merchant || merchant === 'UPI Merchant') && recipientUPI) {
+            const fromVpa = UPIParser.getMerchantFromVPA(recipientUPI);
+            if (fromVpa) {
+                merchant = fromVpa;
+            } else {
+                merchant = recipientUPI; // Fallback to VPA itself
+            }
+        }
+        merchant = merchant || 'UPI Merchant';
+
         const fingerprint = TransactionDeduplicator.generateFingerprint({
             amount,
-            merchant: recipientUPI || 'UPI Merchant',
+            merchant: merchant,
             date: date,
             cardLastFour: accountLast4 || undefined,
             direction: TransactionDirection.DEBIT
         });
-
-        // Try to find a merchant name in the text if UPI handle is generic
-        const merchant = this.extractMerchant(combined) || recipientUPI || 'UPI Merchant';
 
         return {
             type: TransactionType.BANK_ACCOUNT_UPI_DEBIT,
@@ -57,12 +67,6 @@ export class BankAccountUPIDebitExtractor {
         };
     }
 
-    private static extractAmount(text: string): number {
-        const match = text.match(BankParserPatterns.AMOUNT_INR);
-        if (match) return parseFloat(match[1].replace(/,/g, ''));
-        throw new Error('Amount not found');
-    }
-
     private static extractAccountLast4(text: string): string | null {
         const patterns = [
             BankParserPatterns.CARD_XX_DIGITS,
@@ -73,11 +77,6 @@ export class BankAccountUPIDebitExtractor {
             if (match && match[1]) return match[1];
         }
         return null;
-    }
-
-    private static extractRecipientUPI(text: string): string | null {
-        const match = text.match(/to\s+([a-zA-Z0-9._-]+@[a-zA-Z]+)/i);
-        return match ? match[1] : null;
     }
 
     private static extractMerchant(text: string): string | null {
@@ -91,7 +90,9 @@ export class BankAccountUPIDebitExtractor {
             const match = text.match(pattern);
             if (match && match[1]) {
                 const merchant = match[1].trim();
+                // Filter out false positives
                 if (merchant.length > 2 && !BankParserPatterns.FALSE_MERCHANT.test(merchant)) {
+                    // Clean up trailing chars check?
                     return merchant;
                 }
             }

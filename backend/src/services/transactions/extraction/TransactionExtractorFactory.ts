@@ -5,6 +5,7 @@ import { MissingExtractorError } from '../../../utils/AppError';
 import { CreditCardPaymentExtractor } from './extractors/CreditCardPaymentExtractor';
 import { CreditCardSpendExtractor } from './extractors/CreditCardSpendExtractor';
 import { CreditCardUPIExtractor } from './extractors/CreditCardUPIExtractor';
+import { InvestmentExtractor } from './extractors/InvestmentExtractor';
 import { BankAccountCreditExtractor } from './extractors/BankAccountCreditExtractor';
 import { BankAccountDebitExtractor } from './extractors/BankAccountDebitExtractor';
 import { BankAccountUPIDebitExtractor } from './extractors/BankAccountUPIDebitExtractor';
@@ -47,6 +48,7 @@ export class TransactionExtractorFactory {
         this.register(TransactionType.REFUND_REVERSAL, RefundExtractor);
         this.register(TransactionType.CHARGEBACK, RefundExtractor);
         this.register(TransactionType.STATEMENT_TRANSACTION, CreditCardSpendExtractor);
+        this.register(TransactionType.INVESTMENT, InvestmentExtractor);
 
         // Handle common GPT hallucination
         this.register('cc_debit' as any, CreditCardSpendExtractor);

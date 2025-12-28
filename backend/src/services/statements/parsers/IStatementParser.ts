@@ -2,13 +2,13 @@ import { ExtractedStatement } from '../../../types/statement.types';
 
 export interface IStatementParser {
     /**
-     * Parse a PDF buffer into a structured statement
+     * Parse a PDF Document into a structured statement
+     * @param pdfDoc - The unlocked PDFDocumentProxy from pdfjs-dist
      */
-    parse(buffer: Buffer): Promise<ExtractedStatement>;
+    parse(pdfDoc: any): Promise<ExtractedStatement>;
 
     /**
-     * Check if this parser supports the given text/metadata
-     * (Optional helper for factory)
+     * Check if this parser supports the given text
      */
     supports(text: string): boolean;
 }

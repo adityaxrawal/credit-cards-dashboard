@@ -155,16 +155,41 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
     },
 
     REFUND: {
-        priority: 9,
+        priority: 12,
         isTransaction: true,
         transactionType: 'refund',
         direction: 'credit',
         keywords: [
-            { pattern: /refund\s+(?:of|for|processed|initiated|successful).*[₹Rs.INR]*\s*[\d,]+/i, weight: 1.0 },
-            { pattern: /[₹Rs.INR]*\s*[\d,]+\s+(?:refunded|refund|reversed)/i, weight: 0.95 },
-            { pattern: /(?:order|transaction|payment)\s+.*(?:cancelled|reversed).*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.9 },
-            { pattern: /chargeback.*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.85 },
+            { pattern: /refund\s+(?:of|for|processed|initiated|successful).*(?:₹|Rs\.?|INR)?\s*[\d,]+/i, weight: 1.0 },
+            { pattern: /(?:₹|Rs\.?|INR)?\s*[\d,]+\s+(?:refunded|refund|reversed)/i, weight: 0.95 },
+            { pattern: /(?:order|transaction|payment)\s+.*(?:cancelled|reversed).*(?:₹|Rs\.?|INR)?\s*[\d,]+/i, weight: 0.9 },
+            { pattern: /chargeback.*(?:₹|Rs\.?|INR)?\s*[\d,]+/i, weight: 0.85 },
+            { pattern: /reversal\s+of\s+transaction/i, weight: 0.9 },
         ],
+    },
+
+    CC_UPI_SPEND: {
+        priority: 11,
+        isTransaction: true,
+        transactionType: 'cc_upi',
+        direction: 'debit',
+        keywords: [
+            { pattern: /upi\s+txn\s+on\s+(?:rupay|credit)\s+card/i, weight: 1.0 },
+            { pattern: /debited\s+from\s+your\s+(?:rupay|credit)\s+card/i, weight: 0.95 },
+            { pattern: /transaction\s+on\s+your\s+rupay\s+credit\s+card/i, weight: 0.95 },
+        ]
+    },
+
+    CC_POS_SPEND: {
+        priority: 10,
+        isTransaction: true,
+        transactionType: 'cc_spend',
+        direction: 'debit',
+        keywords: [
+            { pattern: /spent\s+on\s+credit\s+card/i, weight: 0.95 },
+            { pattern: /debited\s+from\s+your\s+hdfc\s+bank\s+credit\s+card/i, weight: 0.95 }, // Specific HDFC Format
+            { pattern: /payment\s+was\s+successful/i, weight: 0.9 }, // Generic success
+        ]
     },
 
     // ============================================
@@ -324,9 +349,9 @@ export const BANK_PATTERNS: Record<string, {
     domains: string[];
     displayName: string;
 }> = {
-    hdfc: { domains: ['hdfc', 'hdfcbank'], displayName: 'HDFC Bank' },
+    hdfc: { domains: ['hdfc', 'hdfcbank', 'alerts@hdfcbank.net'], displayName: 'HDFC Bank' },
     icici: { domains: ['icici', 'icicibank'], displayName: 'ICICI Bank' },
-    axis: { domains: ['axis', 'axisbank'], displayName: 'Axis Bank' },
+    axis: { domains: ['axis', 'axisbank', 'alerts@axis.bank.in'], displayName: 'Axis Bank' },
     sbi: { domains: ['sbi', 'statebank', 'onlinesbi'], displayName: 'State Bank of India' },
     indusind: { domains: ['indusind', 'indusindbank'], displayName: 'IndusInd Bank' },
     kotak: { domains: ['kotak', 'kotakbank', 'kotak811'], displayName: 'Kotak Mahindra Bank' },
@@ -343,9 +368,12 @@ export const BANK_PATTERNS: Record<string, {
     federal: { domains: ['federalbank'], displayName: 'Federal Bank' },
     idfc: { domains: ['idfcfirst', 'idfc'], displayName: 'IDFC First Bank' },
     au: { domains: ['aubank'], displayName: 'AU Small Finance Bank' },
+    csb: { domains: ['csbbank', 'csb'], displayName: 'CSB Bank' },
+    bandhan: { domains: ['bandhanbank'], displayName: 'Bandhan Bank' },
+    south_indian: { domains: ['southindianbank', 'sib'], displayName: 'South Indian Bank' },
 
     // Digital banks / Fintech
-    jupiter: { domains: ['jupiter'], displayName: 'Jupiter' },
+    jupiter: { domains: ['jupiter', 'jupiter.money'], displayName: 'Jupiter' },
     fi: { domains: ['fi.money', 'epifi'], displayName: 'Fi Money' },
     niyo: { domains: ['niyo', 'goniyo'], displayName: 'Niyo' },
     slice: { domains: ['slice'], displayName: 'Slice' },
