@@ -42,7 +42,7 @@ export async function runHistoricalScan(
     const from = fromDateToUse.format('YYYY/MM/DD');
     const to = toDate ? dayjs(toDate).format('YYYY/MM/DD') : dayjs().format('YYYY/MM/DD');
     // Fetch ALL emails to ensure we never miss a transaction.
-    const query = `after:${from} before:${to} in:inbox`;
+    const query = `after:${from} before:${to} in:inbox -category:promotions -category:social`;
 
     // Initialize job status
     await safeQuery(

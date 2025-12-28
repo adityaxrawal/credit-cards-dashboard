@@ -18,6 +18,7 @@ import * as transactionsQueries from '../../../db/queries/transactions.queries';
 import * as scannedEmailsQueries from '../../../db/queries/scanned_emails.queries';
 import { StatementParserFactory } from '../../statements/StatementParserFactory';
 import { StatementReconciler } from '../../statements/StatementReconciler';
+import { featureFlags } from '../../../config/featureFlags';
 import { MerchantEnricher } from '../enrichment/MerchantEnricher';
 
 export interface IPipelineDependencies {
@@ -248,8 +249,8 @@ VALUES($1, $2, $3, $4, $5, NOW())
             const isLowConfidence = !classificationResult || (classificationResult.confidence < 0.85);
 
             if (isLowConfidence) {
-                if (options.skipGpt) {
-                    logger.info(`[Pipeline] Skiping GPT for now, queuing for background worker.`);
+                if (options.skipGpt || featureFlags.SKIP_GPT) {
+                    logger.info(`[Pipeline] Skiping GPT for now (config or flag), queuing for background worker.`);
                     return {
                         status: 'queued_for_gpt',
                         cleanEmail, // Pass this out so queue manager can use it

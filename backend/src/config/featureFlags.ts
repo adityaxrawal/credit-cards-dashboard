@@ -6,6 +6,7 @@ export const featureFlags = {
     NEW_PIPELINE_ROLLOUT_PERCENTAGE: parseInt(
         process.env.NEW_PIPELINE_ROLLOUT_PERCENTAGE || '100' // Default 100% - already deployed
     ),
+    SKIP_GPT: env.SKIP_GPT === 'true',
 };
 
 /**

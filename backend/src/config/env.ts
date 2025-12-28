@@ -37,6 +37,7 @@ const envSchema = z.object({
   // Feature Flags
   USE_NEW_PIPELINE: z.string().optional().default('true'),
   NEW_PIPELINE_ROLLOUT_PERCENTAGE: z.string().optional().default('100'),
+  SKIP_GPT: z.string().optional().default('false'),
 
   // Gmail
   GMAIL_PUBSUB_TOPIC: z.string().optional(),
