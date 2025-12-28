@@ -68,6 +68,9 @@ export class GptQueueManager {
     /**
      * Wait until all queues are empty and all workers are idle
      */
+    /**
+     * Wait until all queues are empty and all workers are idle
+     */
     public async drain() {
         // Wait until main queue is empty, sub queues are empty, and active workers are 0
         while (
@@ -75,6 +78,19 @@ export class GptQueueManager {
             this.subQueues.some(q => q.length > 0) ||
             this.activeWorkers.some(c => c > 0)
         ) {
+            // Optimization: If queues are empty but workers are active, 
+            // it's possible they are waiting for GPT batch accumulation.
+            // Force flush to unblock them.
+            if (
+                this.mainQueue.length === 0 &&
+                this.subQueues.every(q => q.length === 0) &&
+                this.activeWorkers.some(c => c > 0)
+            ) {
+                // Dynamically import to avoid circular dependency
+                const { GPTClassifier } = require('../classification/GPTClassifier');
+                GPTClassifier.forceFlush();
+            }
+
             await new Promise(r => setTimeout(r, 200));
         }
     }

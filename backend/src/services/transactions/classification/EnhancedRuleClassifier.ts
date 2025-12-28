@@ -52,6 +52,25 @@ export class EnhancedRuleClassifier {
         return { isExcluded: false };
     }
 
+    static checkFinancialUnknown(cleanEmail: CleanEmail): EnhancedClassificationResult | null {
+        const fullText = `${cleanEmail.subject} ${cleanEmail.cleanedBody}`.toLowerCase();
+
+        // Use the existing quick check from isLikelyFinancial but simpler
+        // If it looks financial but didn't match any specific category
+        const check = this.isLikelyFinancial(fullText);
+        if (check.isFinancial && check.confidence > 0.6) {
+            return {
+                type: 'unclassified',
+                confidence: check.confidence,
+                metadata: {
+                    reason: check.reason,
+                    pattern: 'financial_unknown'
+                }
+            };
+        }
+        return null;
+    }
+
     /**
      * Classify an email using rule-based pattern matching
      */
@@ -87,7 +106,9 @@ export class EnhancedRuleClassifier {
         // Check if best match is good enough
         const bestMatch = matches[0];
         if (!bestMatch || bestMatch.score < this.MINIMUM_CONFIDENCE) {
-            return null; // No strong match
+            // Fallback: If no specific category matched, checking if generic financial
+            // This prevents "null" which leads to GPT abuse, or "non-financial" misclassification
+            return this.checkFinancialUnknown(cleanEmail);
         }
 
         // Apply bank sender bonus
@@ -147,11 +168,13 @@ export class EnhancedRuleClassifier {
         // Count keyword matches and calculate weighted score
         let matchedWeight = 0;
         let matchedCount = 0;
+        let maxSingleWeight = 0;
 
         for (const keyword of pattern.keywords) {
             if (keyword.pattern.test(text)) {
                 matchedWeight += keyword.weight;
                 matchedCount++;
+                maxSingleWeight = Math.max(maxSingleWeight, keyword.weight);
             }
         }
 
@@ -160,10 +183,17 @@ export class EnhancedRuleClassifier {
         }
 
         // Calculate final score
-        // Fixed Formula: (matched_weight / matched_count) * (priority / 10)
-        // We do NOT divide by totalKeywords because patterns in a group are often alternatives (OR), not cumulative requirements (AND).
-        const avgWeight = matchedWeight / matchedCount;
-        const priorityFactor = pattern.priority / 10;
+        // Formula: (matched_weight / matched_count) * (priority / 10)
+        let avgWeight = matchedWeight / matchedCount;
+        let priorityFactor = pattern.priority / 10;
+
+        // --- OVER-CLASSIFICATION FIX ---
+        // If we have High Priority (>10 aka >1.0 factor) but only 1 keyword matched,
+        // and that keyword wasn't a "perfect" 1.0 match (like a specific ID/Amount),
+        // we damp the priority factor to 1.0 to prevent weak signals from dominating.
+        if (pattern.priority > 10 && matchedCount === 1 && maxSingleWeight < 1.0) {
+            priorityFactor = 1.0;
+        }
 
         // Base score
         let score = avgWeight * priorityFactor;

@@ -331,11 +331,13 @@ export class InstrumentAutoService {
      */
     static extractAccountLast4(text: string): string | undefined {
         const patterns = [
-            /a\/c\s*(?:no\.?|number)?[:\s]*(?:xx+|\*+)?(\d{4})/i,
-            /account\s*(?:no\.?|number)?[:\s]*(?:xx+|\*+)?(\d{4})/i,
-            /ac\s*(?:no\.?)?[:\s]*(?:xx+|\*+)?(\d{4})/i,
-            /(?:saving|current|salary)\s*a\/c[:\s]*(?:xx+|\*+)?(\d{4})/i,
-            /(?:xx+|\*+)(\d{4})/i,
+            /a\/c\s*(?:no\.?|number)?[:\s]*(?:xx+|\*+|x-)?(\d{4})/i,
+            /account\s*(?:no\.?|number)?[:\s]*(?:xx+|\*+|x-)?(\d{4})/i,
+            /ac\s*(?:no\.?)?[:\s]*(?:xx+|\*+|x-)?(\d{4})/i,
+            /(?:saving|current|salary)\s*a\/c[:\s]*(?:xx+|\*+|x-)?(\d{4})/i,
+            /(?:ending|ending\s+with|ending\s+in)\s*(?:xx+|\*+|x-|no\.|card\s+no\.)?\s*(\d{4})/i,
+            /card\s*(?:no\.?|number)?\s*(?:ending)?[\s:]*(?:xx+|\*+|x-)?(\d{4})/i,
+            /(?:xx+|\*+|x-)(\d{4})/i,
         ];
 
         for (const pattern of patterns) {

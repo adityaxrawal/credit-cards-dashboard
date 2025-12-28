@@ -4,6 +4,7 @@ import logger from '../../../utils/infrastructure/logger';
 import OpenAI from 'openai';
 import { env } from '../../../config/env';
 import pLimit from 'p-limit';
+import { BroadFinancialDetector } from '../detection/BroadFinancialDetector';
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -23,12 +24,14 @@ interface GPTBatch {
     resolveCallbacks: Array<(value: ClassificationResult) => void>;
     rejectCallbacks: Array<(reason?: any) => void>;
     estimatedTokens: number;
+    userId: string;
+    instruments: Instrument[];
 }
 
 export class GPTClassifier {
     private static pendingBatch: GPTBatch | null = null;
-    private static batchSize = env.BATCH_SIZE || 20; // Increase default batch size
-    private static batchTimeoutMs = 2000;
+    private static batchSize = 5; // User requested exact batch size of 5
+    private static batchTimeoutMs = 30000; // 30s Safety net (Primary trigger is count or forceFlush)
     private static timeoutHandle: NodeJS.Timeout | null = null;
 
     private static estimateTokens(text: string): number {
@@ -56,7 +59,7 @@ export class GPTClassifier {
 
                 if (willExceedTokens || willExceedCount) {
                     // Flush current batch FIRST
-                    this.triggerFlush(userId, instruments);
+                    this.triggerFlush();
                 }
             }
 
@@ -68,12 +71,14 @@ export class GPTClassifier {
                     createdAt: new Date(),
                     resolveCallbacks: [],
                     rejectCallbacks: [],
-                    estimatedTokens: 0
+                    estimatedTokens: 0,
+                    userId,         // Store context
+                    instruments     // Store context
                 };
 
                 // Set timeout
                 this.timeoutHandle = setTimeout(() => {
-                    this.triggerFlush(userId, instruments);
+                    this.triggerFlush();
                 }, this.batchTimeoutMs);
             }
 
@@ -83,15 +88,23 @@ export class GPTClassifier {
             this.pendingBatch.rejectCallbacks.push(reject);
             this.pendingBatch.estimatedTokens += emailTokens;
 
-            // Check IMMEDIATE flush condition (e.g. single massive email or just hit limit exactly)
+            // Check IMMEDIATE flush condition (Strictly on size 5)
             if (this.pendingBatch.estimatedTokens >= MAX_BATCH_TOKENS || this.pendingBatch.emails.length >= this.batchSize) {
                 if (this.timeoutHandle) clearTimeout(this.timeoutHandle);
-                this.triggerFlush(userId, instruments);
+                this.triggerFlush();
             }
         });
     }
 
-    private static triggerFlush(userId: string, instruments: Instrument[]) {
+    // Public method to force flush remaining items (e.g. at end of job)
+    public static forceFlush() {
+        if (this.pendingBatch) {
+            logger.info(`[GPT] Forcing flush of pending batch (Size: ${this.pendingBatch.emails.length})`);
+            this.triggerFlush();
+        }
+    }
+
+    private static triggerFlush() {
         if (!this.pendingBatch) return;
         const batchToProcess = this.pendingBatch;
 
@@ -103,12 +116,12 @@ export class GPTClassifier {
         }
 
         // Execute with concurrency limit
-        limit(() => this.processBatch(userId, instruments, batchToProcess)).catch(err => {
+        limit(() => this.processBatch(batchToProcess)).catch(err => {
             logger.error('Failed to process batch via limit', err);
         });
     }
 
-    private static async processBatch(userId: string, instruments: Instrument[], batch: GPTBatch): Promise<void> {
+    private static async processBatch(batch: GPTBatch): Promise<void> {
         if (!batch.emails.length) return;
 
         try {
@@ -128,18 +141,20 @@ Return a result for EVERY message ID provided. Do not skip any.
 OBJECTIVE:
 Identify ALL valid financial transactions. 
 A transaction is any event where money is spent, received, or moved.
-Keywords: "spent", "debited", "charged", "paid", "sent", "received", "credited", "refunded", "withdrawal", "purchase".
+Keywords: "spent", "debited", "charged", "paid", "sent", "received", "credited", "refunded", "withdrawal", "purchase", "invested", "redeemed".
 
 RULES:
-1. IGNORE "Available Balance", "Credit Limit", or "Outstanding Due". These are NOT the transaction amount.
-2. IGNORE OTPs, Login Alerts, or Marketing. Mark "is_transaction": false.
-3. If the email contains multiple transactions (e.g. a statement), extract the most recent one only.
+1. IGNORE "Available Balance", "Credit Limit", or "Outstanding Due" ALONE. Only extract if there is also a SPEND/CREDIT event.
+2. IGNORE OTPs (One Time Password) or Login Alerts. Mark "is_transaction": false.
+3. If the email contains multiple transactions (e.g. a statement summary), extract the MOST RECENT or LARGEST one.
 4. Merchant Name: Extract the CLEAN merchant name (e.g. "Uber" instead of "Uber India Tech Pvt Ltd"). REMOVE location/city if possible.
-5. Amount: Extract pure number.
+5. Amount: Extract pure number. IGNORE commas if necessary but preserve decimals.
+6. Currency: Standardize to INR, USD, etc.
+7. Date: Extract date if available.
 
-REASONING GUIDELINES:
-- Explain WHY you classified it as a transaction or not.
-- If "is_transaction" is true, cite the specific text.
+GUARDRAILS:
+- Do NOT mark "is_transaction": false if there is a clear amount and words like "debited" or "credited".
+- Use "unclassified" if you are unsure of the type but it looks financial.
 `;
 
             const userPrompt = `Classify these ${batch.emails.length} emails:\n\n${emailTexts}`;
@@ -164,7 +179,7 @@ REASONING GUIDELINES:
                                     reasoning: { type: "string" },
                                     type: {
                                         type: "string",
-                                        enum: ["cc_spend", "cc_payment", "cc_upi", "bank_debit", "bank_credit", "bank_upi_debit", "bank_upi_credit", "refund", "unclassified", "non_financial"]
+                                        enum: ["cc_spend", "cc_payment", "cc_upi", "bank_debit", "bank_credit", "bank_upi_debit", "bank_upi_credit", "refund", "investment", "travel", "food", "transport", "unclassified", "non_financial"]
                                     },
                                     confidence: { type: "number" },
                                     extracted: {
@@ -243,8 +258,27 @@ REASONING GUIDELINES:
                     const result = results.find(r => r.messageId === req.messageId) || results[index];
 
                     if (result) {
-                        // Check if GPT thinks it's a transaction
-                        if (result.is_transaction === false) {
+                        // === GUARDRAILS === 
+                        // Guard against false "Non-Financial" negatives
+                        if (result.is_transaction === false || result.type === 'non_financial') {
+                            // Check with BroadDetector
+                            const detection = BroadFinancialDetector.detect(req.email.subject + ' ' + req.email.cleanedBody);
+
+                            // If Rule-based detector is VERY confident (>70) that it IS financial, 
+                            // we override GPT's negative decision to force manual review.
+                            if (detection.isFinancial && detection.score >= 70) {
+                                logger.info(`[GPT] Guardrail Triggered: GPT said non-financial, but BroadDetector score is ${detection.score}. Marking for review.`);
+                                batch.resolveCallbacks[index]({
+                                    type: 'unclassified' as any,
+                                    confidence: 0.5, // Low confidence to trigger review
+                                    metadata: {
+                                        reason: `GPT said non-financial but BroadDetector detected: ${detection.reasons.join(', ')}`,
+                                        original_gpt_reason: result.reasoning
+                                    }
+                                });
+                                return;
+                            }
+
                             batch.resolveCallbacks[index]({
                                 type: 'non_financial' as any,
                                 confidence: result.confidence || 0.9,

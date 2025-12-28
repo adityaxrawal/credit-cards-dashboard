@@ -12,7 +12,8 @@ export class TerminatorService {
         stage: string,
         statusCategory: string,
         jobId: string,
-        rawEmailId: string
+        rawEmailId: string,
+        markProcessed: boolean = true
     ): Promise<void> {
         try {
             await safeQuery(
@@ -31,10 +32,12 @@ export class TerminatorService {
             // Guide says "processed_at" usually implies success, but for queue management
             // we might want to mark it so it doesn't get picked up again unless reprocessing.
             // But typically "Terminated" means done for this cycle.
-            await safeQuery(
-                `UPDATE gmail_scanned_emails SET processed = true, processed_at = NOW() WHERE id = $1`,
-                [rawEmailId]
-            );
+            if (markProcessed) {
+                await safeQuery(
+                    `UPDATE gmail_scanned_emails SET processed = true, processed_at = NOW() WHERE id = $1`,
+                    [rawEmailId]
+                );
+            }
 
         } catch (error) {
             logger.error('Failed to log termination', error);

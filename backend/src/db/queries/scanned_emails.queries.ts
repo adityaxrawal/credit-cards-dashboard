@@ -147,6 +147,23 @@ export async function updateScannedEmailProcessed(
 }
 
 /**
+ * Update scanned email error reason (keeps processed=false)
+ */
+export async function updateScannedEmailError(
+  userId: string,
+  messageId: string,
+  reason: string
+): Promise<void> {
+  await pool.query(
+    `UPDATE gmail_scanned_emails 
+     SET detection_reason = $3,
+         processed = false
+     WHERE user_id = $1 AND message_id = $2`,
+    [userId, messageId, reason]
+  );
+}
+
+/**
  * Bulk update scanned emails as processed
  */
 export async function updateScannedEmailsProcessedBulk(

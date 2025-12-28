@@ -73,19 +73,26 @@ export class SanitizerService {
                 const $ = cheerio.load(html);
                 $('script').remove();
                 $('style').remove();
+                $('img').remove(); // Remove images
+
+                // Enhance structure preservation
                 $('br').replaceWith('\n');
-                $('p').after('\n');
+                $('p, div, li, tr').after('\n'); // Add newline after block elements
+                $('td, th').after(' '); // Add space after table cells
+
                 textToParse = $('body').text();
             } else {
                 textToParse = html.replace(/<br\s*\/?>/gi, '\n')
                     .replace(/<\/p>/gi, '\n')
+                    .replace(/<\/div>/gi, '\n')
+                    .replace(/<\/tr>/gi, '\n')
                     .replace(/<[^>]+>/g, ' ')
                     .replace(/\s+/g, ' ')
                     .trim();
             }
         }
 
-        // Apply strict text cleaning
+        // Apply strict text cleaning but PRESERVE NEWLINES
         return this.cleanText(textToParse);
     }
 
@@ -97,10 +104,11 @@ export class SanitizerService {
             .replace(/&gt;/gi, '>')
             .replace(/&#\d+;/g, ' ')
             .replace(/\u00a0/g, ' ')
-            .replace(/\r\n/g, ' ')
-            .replace(/[\r\n]+/g, ' ')
-            .replace(/\t+/g, ' ')
-            .replace(/\s{2,}/g, ' ')
+            // Normalize newlines but don't remove them completely if they are structural
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n')
+            .replace(/\n{3,}/g, '\n\n') // Max 2 consecutive newlines
+            .replace(/[ \t]{2,}/g, ' ') // Collapse multiple spaces/tabs (but not newlines)
             .trim();
     }
 }

@@ -2,6 +2,7 @@ import pool, { safeQuery } from '../../../lib/db';
 import logger from '../../../utils/infrastructure/logger';
 import { SimplifiedEmail, CleanEmail, PipelineResult, TransactionType, TransactionDirection, InstrumentType } from '../../../types/transaction.types';
 import { InstrumentAutoService } from '../../cards/instruments/InstrumentAutoService';
+import { BankPDFPasswordResolver } from '../../statements/BankPDFPasswordResolver';
 
 import { SanitizerService } from '../../gmail/sanitize/sanitizer';
 import { BroadFinancialDetector } from '../detection/BroadFinancialDetector';
@@ -18,7 +19,6 @@ import * as scannedEmailsQueries from '../../../db/queries/scanned_emails.querie
 import { StatementParserFactory } from '../../statements/StatementParserFactory';
 import { StatementReconciler } from '../../statements/StatementReconciler';
 import { MerchantEnricher } from '../enrichment/MerchantEnricher';
-import { BankPDFPasswordResolver } from '../../statements/password/BankPDFPasswordResolver';
 
 export interface IPipelineDependencies {
     sanitizer: typeof SanitizerService;
@@ -60,9 +60,9 @@ export class UniversalTransactionPipeline {
         const startTime = Date.now();
 
         try {
-            const emailInfo = `[${rawEmail.messageId}] "${rawEmail.subject}"`;
-            logger.info(`\n>>> [PIPELINE START] ${emailInfo}`);
-            console.log(`[PIPELINE] Processing: ${rawEmail.subject.substring(0, 50)}... [${rawEmail.messageId}]`);
+            const emailInfo = `[${rawEmail.messageId}]"${rawEmail.subject}"`;
+            logger.info(`\n >>> [PIPELINE START] ${emailInfo} `);
+            console.log(`[PIPELINE] Processing: ${rawEmail.subject.substring(0, 50)}...[${rawEmail.messageId}]`);
 
             // ========================================
             // STAGE 1: SAVE RAW (Audit Trail)
@@ -70,22 +70,22 @@ export class UniversalTransactionPipeline {
             const s1Start = Date.now();
             // Note: Keeping pool call direct for now as it wasn't in the plan to abstract DB connection
             const rawInsert = await safeQuery(
-                `INSERT INTO gmail_scanned_emails 
-         (user_id, message_id, internal_date, raw_snippet, scan_job_id, scanned_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())
-         ON CONFLICT (user_id, message_id) DO UPDATE SET scan_job_id = EXCLUDED.scan_job_id
+                `INSERT INTO gmail_scanned_emails
+    (user_id, message_id, internal_date, raw_snippet, scan_job_id, scanned_at)
+VALUES($1, $2, $3, $4, $5, NOW())
+         ON CONFLICT(user_id, message_id) DO UPDATE SET scan_job_id = EXCLUDED.scan_job_id
          RETURNING id`,
                 [userId, rawEmail.messageId, rawEmail.internalDate, rawEmail.snippet || '', jobId]
             );
             rawEmailId = rawInsert.rows[0].id;
-            logger.debug(`[Pipeline] Stage 1 (Audit) took ${Date.now() - s1Start}ms`);
+            logger.debug(`[Pipeline] Stage 1(Audit) took ${Date.now() - s1Start} ms`);
 
             // ========================================
             // STAGE 2: SANITIZE (Extract & Clean Text)
             // ========================================
             const s2Start = Date.now();
             const cleanEmail = await this.deps.sanitizer.sanitize(rawEmail, fetchAttachmentFn);
-            logger.debug(`[Pipeline] Stage 2 (Sanitize) took ${Date.now() - s2Start}ms`);
+            logger.debug(`[Pipeline] Stage 2(Sanitize) took ${Date.now() - s2Start} ms`);
 
 
             // ========================================
@@ -121,13 +121,19 @@ export class UniversalTransactionPipeline {
                 }
 
                 // 2. Use Resolver
-                // (We need to import BankPDFPasswordResolver)
-                const resolved = BankPDFPasswordResolver.generateCandidates({
-                    userName: 'ADITYA',
-                    accountLast4: instruments[0]?.account_number_masked?.slice(-4)
-                });
+                // Combine mocked/inferred data with instruments
+                // TODO: Integrate real UserProfileService when available
+                const context = {
+                    firstName: 'ADITYA', // Placeholder
+                    dob: new Date('2000-01-01'), // Placeholder
+                    instruments: instruments
+                };
 
+                const resolved = BankPDFPasswordResolver.generateCandidates(context);
                 candidatePasswords.push(...resolved);
+
+                // Add explicit user-provided passwords if any (e.g. from a text file or settings)
+                // candidatePasswords.push(...userSettings.customPasswords);
 
                 const uniquePasswords = [...new Set(candidatePasswords)];
                 if (uniquePasswords.length > 0) {
@@ -139,10 +145,10 @@ export class UniversalTransactionPipeline {
                         try {
                             const statement = await this.deps.statementParserFactory.process(att.data, uniquePasswords);
                             if (statement) {
-                                logger.info(`[Pipeline] Successfully processed statement for ${att.filename}: ${statement.transactions.length} txns (${statement.bankName})`);
+                                logger.info(`[Pipeline] Successfully processed statement for ${att.filename}: ${statement.transactions.length} txns(${statement.bankName})`);
 
                                 const stats = await this.deps.statementReconciler.reconcile(statement, userId);
-                                logger.info(`[Pipeline] Reconciliation Stats: matched=${stats.matched}, inserted=${stats.newInserted}`);
+                                logger.info(`[Pipeline] Reconciliation Stats: matched = ${stats.matched}, inserted = ${stats.newInserted} `);
 
                                 // Mark that we successfully processed a statement
                                 if (stats.matched > 0 || stats.newInserted > 0) {
@@ -151,11 +157,11 @@ export class UniversalTransactionPipeline {
                                 }
                             }
                         } catch (err) {
-                            logger.warn(`[Pipeline] Failed to process attachment ${att.filename}`, err);
+                            logger.warn(`[Pipeline] Failed to process attachment ${att.filename} `, err);
                         }
                     }
                 }
-                logger.debug(`[Pipeline] Stage 2.5 (Attachments) took ${Date.now() - s2_5Start}ms`);
+                logger.debug(`[Pipeline] Stage 2.5(Attachments) took ${Date.now() - s2_5Start} ms`);
             }
 
             // ========================================
@@ -169,7 +175,7 @@ export class UniversalTransactionPipeline {
                 const text = cleanEmail.subject + ' ' + cleanEmail.cleanedBody;
                 isBroadFinancial = this.deps.broadDetector.isFinancialEmail(text);
             }
-            logger.info(`[Pipeline] Stage 3 (Broad Detection) took ${Date.now() - s3Start}ms. Result: ${isBroadFinancial ? 'PASS' : 'FAIL'}${statementProcessedSuccessfully ? ' (Statement bypass)' : ''}`);
+            logger.info(`[Pipeline] Stage 3(Broad Detection) took ${Date.now() - s3Start} ms.Result: ${isBroadFinancial ? 'PASS' : 'FAIL'}${statementProcessedSuccessfully ? ' (Statement bypass)' : ''} `);
 
             if (!isBroadFinancial) {
                 await this.deps.terminator.terminate(
@@ -181,7 +187,7 @@ export class UniversalTransactionPipeline {
                     jobId,
                     rawEmailId
                 );
-                logger.info(`<<< [PIPELINE END] ${rawEmail.messageId} - Terminated (Non-Financial)`);
+                logger.info(`<< <[PIPELINE END] ${rawEmail.messageId} - Terminated(Non - Financial)`);
                 return { status: 'terminated', reason: 'non_financial' };
             }
 
@@ -191,13 +197,13 @@ export class UniversalTransactionPipeline {
                 await this.deps.terminator.terminate(
                     userId,
                     cleanEmail.id,
-                    `Excluded by pattern: ${exclusionCheck.matchedPattern}`,
+                    `Excluded by pattern: ${exclusionCheck.matchedPattern} `,
                     'stage_2_exclusion',
                     'NON_FINANCIAL',
                     jobId,
                     rawEmailId
                 );
-                logger.info(`<<< [PIPELINE END] ${rawEmail.messageId} - Terminated (Excluded: ${exclusionCheck.matchedPattern})`);
+                logger.info(`<< <[PIPELINE END] ${rawEmail.messageId} - Terminated(Excluded: ${exclusionCheck.matchedPattern})`);
                 return { status: 'terminated', reason: 'exclusion_match' };
             }
 
@@ -209,7 +215,7 @@ export class UniversalTransactionPipeline {
             let classificationMethod = 'rule_based';
             let classificationStage = 'stage_4_rule_based';
 
-            logger.info(`[Pipeline] Stage 4: Starting classification. cleanEmail.id=${cleanEmail.id}`);
+            logger.info(`[Pipeline] Stage 4: Starting classification.cleanEmail.id = ${cleanEmail.id} `);
 
             // STEP 1: Try Enhanced Rule Classifier
             try {
@@ -225,7 +231,7 @@ export class UniversalTransactionPipeline {
                         await this.deps.terminator.terminate(
                             userId,
                             cleanEmail.id,
-                            `Enhanced classifier: non-financial (${enhancedResult.metadata?.pattern})`,
+                            `Enhanced classifier: non - financial(${enhancedResult.metadata?.pattern})`,
                             'stage_4_enhanced_rule',
                             'NON_FINANCIAL',
                             jobId,
@@ -251,8 +257,8 @@ export class UniversalTransactionPipeline {
                     } as any; // Cast as any if Types not yet updated, or strictly typed if possible
                 }
 
-                logger.info(`[Pipeline] Classification: Low confidence (${classificationResult?.confidence}). Attempting GPT fallback.`);
-                logger.info(`[Pipeline] Low confidence/No rule match, attempting GPT classification...`);
+                logger.info(`[Pipeline] Classification: Low confidence(${classificationResult?.confidence}).Attempting GPT fallback.`);
+                logger.info(`[Pipeline] Low confidence / No rule match, attempting GPT classification...`);
                 const gptResult = await this.classifyWithGPT(userId, cleanEmail);
 
                 if (gptResult) {
@@ -275,28 +281,28 @@ export class UniversalTransactionPipeline {
                     await this.deps.terminator.terminate(
                         userId,
                         cleanEmail.id,
-                        `GPT classification: non-financial (${classificationResult.metadata?.reason || 'No reason'})`,
+                        `GPT classification: non - financial(${classificationResult.metadata?.reason || 'No reason'})`,
                         'stage_4_gpt_fallback',
                         'NON_FINANCIAL',
                         jobId,
                         rawEmailId
                     );
-                    logger.info(`<<< [PIPELINE END] ${rawEmail.messageId} - Terminated (GPT Non-Financial)`);
+                    logger.info(`<< <[PIPELINE END] ${rawEmail.messageId} - Terminated(GPT Non - Financial)`);
                     return { status: 'terminated', reason: 'non_financial' };
                 }
 
                 classificationStage = 'stage_4_gpt_fallback';
             }
-            logger.info(`[Pipeline] Stage 4 (Classify) took ${Date.now() - s4Start}ms via ${classificationMethod}`);
-            console.log(`[PIPELINE] Classification: ${classificationResult?.type} (Confidence: ${classificationResult?.confidence}) Method: ${classificationMethod}`);
+            logger.info(`[Pipeline] Stage 4(Classify) took ${Date.now() - s4Start}ms via ${classificationMethod} `);
+            console.log(`[PIPELINE] Classification: ${classificationResult?.type} (Confidence: ${classificationResult?.confidence}) Method: ${classificationMethod} `);
 
             // If verification failed or confidence is low, set needs_review
             if (!classificationResult || classificationResult.confidence < 0.75) {
-                logger.warn(`[Pipeline] Low confidence (${classificationResult?.confidence || 0}), marking for review`);
+                logger.warn(`[Pipeline] Low confidence(${classificationResult?.confidence || 0}), marking for review`);
                 await this.deps.terminator.terminate(
                     userId,
                     cleanEmail.id,
-                    `Low confidence classification: ${classificationResult?.confidence || 0}`,
+                    `Low confidence classification: ${classificationResult?.confidence || 0} `,
                     classificationStage,
                     'LOW_CONFIDENCE',
                     jobId,
@@ -323,7 +329,7 @@ export class UniversalTransactionPipeline {
                     rawExtraction: classificationResult
                 });
 
-                logger.info(`<<< [PIPELINE END] ${rawEmail.messageId} - Needs Review`);
+                logger.info(`<< <[PIPELINE END] ${rawEmail.messageId} - Needs Review`);
                 return { status: 'needs_review', reason: 'low_confidence' };
             }
 
@@ -345,7 +351,7 @@ export class UniversalTransactionPipeline {
             );
 
         } catch (error) {
-            logger.error(`[Pipeline] Fatal error processing email ${rawEmail.messageId}:`, {
+            logger.error(`[Pipeline] Fatal error processing email ${rawEmail.messageId}: `, {
                 message: error instanceof Error ? error.message : String(error),
                 stack: error instanceof Error ? error.stack : undefined,
                 userId,
@@ -431,7 +437,7 @@ export class UniversalTransactionPipeline {
                 rawExtraction: classificationResult
             });
 
-            logger.info(`<<< [PIPELINE END] ${messageId} - Marked for Review (Unclassified)`);
+            logger.info(`<< <[PIPELINE END] ${messageId} - Marked for Review(Unclassified)`);
             return { status: 'needs_review', reason: 'unclassified' };
         }
 
@@ -448,7 +454,7 @@ export class UniversalTransactionPipeline {
                 // If we found a good match (confidence > 0.8), update the data
                 // Or if the original was "Unknown Merchant" and we got something better
                 if (enriched.confidence >= 0.8) {
-                    logger.info(`[Pipeline] Enriched merchant: "${extracted.merchant}" -> "${enriched.canonicalName}" [${enriched.category}]`);
+                    logger.info(`[Pipeline] Enriched merchant: "${extracted.merchant}" -> "${enriched.canonicalName}"[${enriched.category}]`);
                     extracted.merchant = enriched.canonicalName;
 
                     // Update category if the current one is generic/missing and we have a specific one
@@ -461,9 +467,9 @@ export class UniversalTransactionPipeline {
                 logger.warn(`[Pipeline] Enrichment failed`, enrichError);
             }
 
-            logger.info(`[Pipeline] Stage 5 (Extract) took ${Date.now() - s5Start}ms. Data: ${extracted.amount} ${extracted.currency} @ ${extracted.merchant}`);
+            logger.info(`[Pipeline] Stage 5(Extract) took ${Date.now() - s5Start} ms.Data: ${extracted.amount} ${extracted.currency} @${extracted.merchant} `);
         } catch (error) {
-            logger.warn(`[Pipeline] Extraction failed via rules (${error instanceof Error ? error.message : String(error)}). Attempting GPT Fallback.`);
+            logger.warn(`[Pipeline] Extraction failed via rules(${error instanceof Error ? error.message : String(error)}).Attempting GPT Fallback.`);
 
             // Fallback: Use GPT if not already used or if rule based failed
             try {
@@ -475,7 +481,7 @@ export class UniversalTransactionPipeline {
                 }
 
                 if (gptResult && gptResult.metadata && gptResult.metadata.amount) {
-                    logger.info(`[Pipeline] GPT Fallback Extraction Successful. Using GPT data.`);
+                    logger.info(`[Pipeline] GPT Fallback Extraction Successful.Using GPT data.`);
                     // Manually construct ExtractedTransaction from GPT data
                     const metadata = gptResult.metadata;
 
@@ -511,7 +517,7 @@ export class UniversalTransactionPipeline {
                     throw new Error('GPT Fallback failed to extract amount');
                 }
             } catch (gptError) {
-                logger.error(`[Pipeline] GPT Fallback entirely failed:`, gptError);
+                logger.error(`[Pipeline] GPT Fallback entirely failed: `, gptError);
                 await this.deps.terminator.terminate(
                     userId,
                     cleanEmail.id,
@@ -519,8 +525,17 @@ export class UniversalTransactionPipeline {
                     'stage_5_extraction',
                     'EXTRACTION_FAILED',
                     jobId,
-                    rawEmailId
+                    rawEmailId,
+                    false // Do NOT mark as processed, allowing retry
                 );
+
+                // ALSO update the checking reason so we know why it failed
+                await this.deps.scannedEmailsQueries.updateScannedEmailError(
+                    userId,
+                    cleanEmail.id,
+                    `Extraction Failed: ${error instanceof Error ? error.message : String(error)}`
+                );
+
                 return { status: 'failed', reason: 'extraction_error', error: String(error) };
             }
         }
@@ -565,19 +580,19 @@ export class UniversalTransactionPipeline {
                 jobId,
                 rawEmailId
             );
-            logger.info(`<<< [PIPELINE END] ${messageId} - Is Duplicate`);
+            logger.info(`<< <[PIPELINE END] ${messageId} - Is Duplicate`);
             return { status: 'duplicate' };
         }
 
         const transactionId = txnResult.id;
-        logger.info(`[Pipeline] Transaction created successfully: ${transactionId}`);
+        logger.info(`[Pipeline] Transaction created successfully: ${transactionId} `);
 
         // Mark scanned email as processed
         await this.deps.scannedEmailsQueries.updateScannedEmailProcessed(userId, cleanEmail.id, transactionId);
 
-        logger.debug(`[Pipeline] Stage 6 (Persist) took ${Date.now() - s6Start}ms`);
-        logger.info(`<<< [PIPELINE END] ${messageId} - Total: ${Date.now() - startTime}ms Transaction: ${transactionId}`);
-        console.log(`✅ [PIPELINE SUCCESS] ${messageId} -> Transaction: ${transactionId}`);
+        logger.debug(`[Pipeline] Stage 6(Persist) took ${Date.now() - s6Start} ms`);
+        logger.info(`<< <[PIPELINE END] ${messageId} - Total: ${Date.now() - startTime}ms Transaction: ${transactionId} `);
+        console.log(`✅[PIPELINE SUCCESS] ${messageId} -> Transaction: ${transactionId} `);
         return { status: 'success', transactionId };
     }
 
@@ -588,7 +603,7 @@ export class UniversalTransactionPipeline {
         rawEmailId: string
     ): Promise<PipelineResult> {
         const startTime = Date.now();
-        logger.info(`[Pipeline-GPT] Starting GPT-only processing for ${cleanEmail.id}`);
+        logger.info(`[Pipeline - GPT] Starting GPT - only processing for ${cleanEmail.id}`);
 
         try {
             const gptResult = await this.classifyWithGPT(userId, cleanEmail);
@@ -600,20 +615,20 @@ export class UniversalTransactionPipeline {
                 await this.deps.terminator.terminate(
                     userId,
                     cleanEmail.id,
-                    `GPT classification: non-financial (${classificationResult.metadata?.reason || 'No reason'})`,
+                    `GPT classification: non - financial(${classificationResult.metadata?.reason || 'No reason'})`,
                     'stage_4_gpt_fallback',
                     'NON_FINANCIAL',
                     jobId,
                     rawEmailId
                 );
-                logger.info(`<<< [PIPELINE-GPT END] ${cleanEmail.id} - Terminated (GPT Non-Financial)`);
+                logger.info(`<< <[PIPELINE-GPT END] ${cleanEmail.id} - Terminated(GPT Non - Financial)`);
                 return { status: 'terminated', reason: 'non_financial' };
             }
 
             // If confidence is still low, maybe fallback to Unclassified?
             if (!classificationResult || classificationResult.confidence < 0.75) {
                 // ... termination logic copied or reused ...
-                logger.warn(`[Pipeline-GPT] Low confidence (${classificationResult?.confidence || 0}), marking for review`);
+                logger.warn(`[Pipeline - GPT] Low confidence(${classificationResult?.confidence || 0}), marking for review`);
                 // Just proceed to extractAndPersist which handles unclassified if we set type='unclassified'
                 // OR we can manually do what the main flow does.
                 // Main flow sets needsReview=true.
@@ -628,7 +643,7 @@ export class UniversalTransactionPipeline {
                 await this.deps.terminator.terminate(
                     userId,
                     cleanEmail.id,
-                    `Low confidence classification: ${classificationResult?.confidence || 0}`,
+                    `Low confidence classification: ${classificationResult?.confidence || 0} `,
                     'stage_4_gpt_fallback_low_conf',
                     'LOW_CONFIDENCE',
                     jobId,
@@ -658,7 +673,7 @@ export class UniversalTransactionPipeline {
             );
 
         } catch (err) {
-            logger.error(`[Pipeline-GPT] Error:`, err);
+            logger.error(`[Pipeline - GPT] Error: `, err);
             return { status: 'failed', reason: 'gpt_error', error: String(err) };
         }
     }

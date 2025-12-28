@@ -4,32 +4,39 @@ export class CurrencyNormalizer {
      * Normalizes a currency string to a clean number.
      * Handles:
      * - Commas: "1,23,456" -> "123456"
-     * - Symbols: "₹100", "Rs. 100", "INR 100"
+     * - Symbols: "₹100", "Rs. 100", "INR 100", "Rs 100"
      * - Suffixes: "100/-"
      * - Whitespace: " 100 "
-     * - Trailing/Leading text junk that might be caught in loose regex
+     * - OCR Artifacts: "Rs. 100.00." -> 100.00
      */
     static normalize(amountStr: string): number {
-        if (!amountStr) return NaN;
+        if (!amountStr || typeof amountStr !== 'string') return NaN;
 
-        let clean = amountStr.toString().trim();
+        let clean = amountStr.trim();
 
-        // Remove commonly used currency symbols and codes (case insensitive)
-        clean = clean.replace(/(?:₹|INR|Rs\.?)\s?/gi, '');
-
-        // Remove suffixes like "/-" often used in Indian formatting
+        // 1. Remove suffixes specifically (/-)
         clean = clean.replace(/\/-\s*$/, '');
 
-        // Remove commas
+        // 2. Remove common currency prefixes (case insensitive)
+        // Handle "Rs.", "Rs", "INR", "₹"
+        clean = clean.replace(/^(?:₹|INR|Rs\.?)\s*/i, '');
+        // Also remove if at end
+        clean = clean.replace(/\s*(?:₹|INR|Rs\.?)$/i, '');
+
+        // 3. Remove commas (Indian or Western)
         clean = clean.replace(/,/g, '');
 
-        // Remove any other non-numeric characters except the decimal point
-        // NOTE: We must be careful not to remove the decimal point or negative sign
-        // But usually negative sign is handled by direction, not amount value here.
-        // Let's assume absolute amount for now, or handle negative.
+        // 4. Remove any remaining non-numeric chars logic
+        // We want to keep: 0-9, decimal point, negative sign
+        // But some OCR might return "100.." or "100. "
         clean = clean.replace(/[^0-9.-]/g, '');
 
-        // Parse
+        // 5. Fix double decimals if any (simple heuristic: keep first)
+        const parts = clean.split('.');
+        if (parts.length > 2) {
+            clean = parts[0] + '.' + parts[1]; // Discard sub-decimals
+        }
+
         const num = parseFloat(clean);
         return num;
     }
@@ -40,18 +47,17 @@ export class CurrencyNormalizer {
      */
     static extractCandidates(text: string): number[] {
         // Broad regex to capture things looking like amounts
-        // \d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?
-        // Plus handling symbols
-        const regex = /(?:₹|INR|Rs\.?|Amount)\s*[:\s]*(\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?)|(\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?)\s*(?:\/-|INR)/gi;
+        // We look for numbers that might have commas, and optionally decimals
+        // We accept 1 to 3 digits, then optional comma groups, then optional decimal
+        const regex = /(?:₹|INR|Rs\.?|Amount)\s*[:\s]*((?:\d{1,3}(?:,\d{2,3})*|\d+)(?:\.\d{1,2})?)|\b((?:\d{1,3}(?:,\d{2,3})*|\d+)(?:\.\d{1,2})?)\s*(?:\/-|INR|Rs)/gi;
 
         const matches: number[] = [];
         let match;
         while ((match = regex.exec(text)) !== null) {
-            // match[1] or match[2]
             const val = match[1] || match[2];
             if (val) {
                 const num = this.normalize(val);
-                if (!isNaN(num)) matches.push(num);
+                if (!isNaN(num) && num > 0) matches.push(num);
             }
         }
         return matches;
