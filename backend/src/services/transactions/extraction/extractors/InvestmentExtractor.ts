@@ -3,10 +3,12 @@ import { UniversalAmountExtractor } from '../UniversalAmountExtractor';
 import { InstrumentAutoService } from '../../../cards/instruments/InstrumentAutoService';
 import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
+import { EnhancedClassificationResult } from '../../classification/EnhancedRuleClassifier';
 
 export class InvestmentExtractor {
-    static async extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {
-        const text = (email.subject + ' ' + email.cleanedBody).toLowerCase();
+
+    static async extract(userId: string, email: CleanEmail, classification?: EnhancedClassificationResult): Promise<ExtractedTransaction> {
+        const fullText = (email.subject + ' ' + email.cleanedBody).toLowerCase();
         const combined = email.subject + ' ' + email.cleanedBody;
 
         // Use Universal Extractor for robust amount detection
@@ -18,25 +20,34 @@ export class InvestmentExtractor {
         // Date
         const date = new Date(email.internalDate);
 
+        // Check direction
+        const isRedemption = classification?.metadata?.pattern === 'MF_REDEMPTION' ||
+            classification?.metadata?.direction === 'credit' ||
+            /redemption|redim|sold|credit/i.test(fullText);
+
+        const direction = isRedemption ? TransactionDirection.CREDIT : TransactionDirection.DEBIT;
+        const category = isRedemption ? 'Income' : 'Investment';
+
         const fingerprint = TransactionDeduplicator.generateFingerprint({
             amount,
             merchant,
             date,
-            direction: TransactionDirection.DEBIT
+            direction
         });
 
         return {
             type: TransactionType.INVESTMENT,
-            direction: TransactionDirection.DEBIT, // Investments are usually debits from bank
+            direction,
             amount,
             currency: 'INR',
             merchant,
             instrumentType: InstrumentType.BANK_ACCOUNT, // Usually funded from bank
-            category: 'Investment',
+            category,
             fingerprint,
             metadata: {
                 extractedAt: new Date().toISOString(),
-                emailSubject: email.subject
+                emailSubject: email.subject,
+                subType: isRedemption ? 'Redemption' : 'Purchase'
             }
         };
     }

@@ -180,16 +180,27 @@ export function GmailSyncModal({
             console.log('[GmailSync] Received update:', event);
             if (event.payload) {
                 const status = event.payload;
-                setProgress(prev => ({
-                    ...prev,
-                    ...status,
-                    // Map WebSocket stats to UI expectation
-                    inserted: status.totalTransactions ?? prev?.inserted,
-                    total: status.totalEmails ?? prev?.total,
-                    // Keep previous errors/lists if not provided in update
-                    errorList: status.errorList || prev?.errorList || [], 
-                    jobId: jobId // Ensure jobId is preserved
-                }));
+                setProgress(prev => {
+                    // Calculate merged stats
+                    const newInserted = status.totalTransactions ?? prev?.inserted ?? 0;
+                    const newTotal = status.totalEmails ?? prev?.total ?? 0;
+                    const newProcessed = status.totalProcessed ?? prev?.processed ?? 0;
+                    const newErrors = status.totalErrors ?? prev?.errors ?? 0;
+
+                    return {
+                        ...prev,
+                        ...status,
+                        // Explicitly map backend fields to UI Expected fields
+                        inserted: newInserted,
+                        total: newTotal,
+                        processed: newProcessed, // Ensure processed count is updated
+                        fetched: newTotal,       // Map total emails to fetched as well
+                        errors: newErrors,      // Map errors
+                        // Keep previous errorList if not provided
+                        errorList: status.errorList || prev?.errorList || [], 
+                        jobId: jobId
+                    };
+                });
 
                 // Reset timeout on activity
                 lastStatusChangeRef.current = Date.now();

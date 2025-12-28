@@ -3,9 +3,17 @@ import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
 import { InstrumentAutoService } from '../../../cards/instruments/InstrumentAutoService';
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
+import { EnhancedClassificationResult } from '../../classification/EnhancedRuleClassifier';
 
 export class BankAccountUPICreditExtractor {
-    static async extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {
+    static async extract(userId: string, email: CleanEmail, classification?: EnhancedClassificationResult): Promise<ExtractedTransaction> {
+        // Bank Specific Handling
+        const patternName = classification?.metadata?.pattern;
+
+        if (patternName === 'SLICE_UPI') {
+            return this.extractSliceUPI(userId, email);
+        }
+
         const text = (email.subject + ' ' + email.cleanedBody).toLowerCase();
 
         const amount = this.extractAmount(text);
@@ -73,5 +81,44 @@ export class BankAccountUPICreditExtractor {
     private static extractReferenceNumber(text: string): string | null {
         const match = text.match(/ref(?:erence)?\s*(?:no\.?)?\s*[:]\s*([A-Z0-9]+)/i);
         return match ? match[1] : null;
+    }
+
+    private static async extractSliceUPI(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {
+        const fullText = email.subject + ' ' + (email.cleanedBody || '');
+        // Format: "Received ₹283 via UPI"
+        const regex = /Received\s+(?:₹|Rs\.?)(\d+(?:\.\d{2})?)\s+via\s+UPI/i;
+
+        const match = fullText.match(regex);
+        let amount = 0;
+
+        if (match) {
+            amount = parseFloat(match[1]);
+        } else {
+            // Fallback
+            amount = this.extractAmount(fullText);
+        }
+
+        // Slice usually means it's credited to the Slice account (which is effectively a bank account/wallet)
+        // We will create a generic "Slice" instrument.
+        const instrument = await InstrumentAutoService.findOrCreateGenericCard(userId, 'Slice', email);
+
+        const merchant = 'UPI Sender';
+        // Can try to extract name from body if available, but snippet often short.
+
+        return {
+            type: TransactionType.BANK_ACCOUNT_UPI_CREDIT,
+            direction: TransactionDirection.CREDIT,
+            amount,
+            currency: 'INR',
+            merchant,
+            instrumentType: InstrumentType.BANK_ACCOUNT,
+            instrumentId: instrument.id,
+            category: 'Income',
+            fingerprint: TransactionDeduplicator.generateFingerprint({ amount, merchant, date: new Date(email.internalDate), direction: TransactionDirection.CREDIT }),
+            metadata: {
+                source: 'SLICE_UPI_STRICT',
+                senderUPI: 'slice-user' // Placeholder
+            }
+        };
     }
 }

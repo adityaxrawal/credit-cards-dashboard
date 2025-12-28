@@ -24,6 +24,344 @@ export interface PatternGroup {
 
 export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
     // ============================================
+    // EXPLICIT REJECTIONS (Noise Filter) - Highest Priority
+    // ============================================
+    NOISE_FILTER: {
+        priority: 100,
+        isTransaction: false,
+        transactionType: 'non_financial',
+        keywords: [
+            // DevOps / Code
+            { pattern: /deployment/i, weight: 10.0 },
+            { pattern: /pull request/i, weight: 10.0 },
+            { pattern: /preview/i, weight: 10.0 },
+            { pattern: /Review Requested/i, weight: 10.0 },
+            { pattern: /github/i, weight: 5.0 },
+            { pattern: /vercel/i, weight: 5.0 },
+
+            // Security / Alerts (Non-Transactional)
+            { pattern: /reset\s+your\s+pin/i, weight: 10.0 },
+            { pattern: /security\s+alert/i, weight: 10.0 },
+            { pattern: /device\s+login/i, weight: 10.0 },
+            { pattern: /suspended\s+if\s+not\s+activated/i, weight: 10.0 }, // IndusInd warning
+            { pattern: /kyc/i, weight: 10.0 }, // ReKYC
+            { pattern: /update\s+regarding\s+your/i, weight: 5.0 }, // Generic updates
+
+            // Social / Other
+            { pattern: /messaged\s+you/i, weight: 10.0 },
+            { pattern: /invitation/i, weight: 10.0 },
+
+            // Recruitment / Job Applications (High Volume Noise)
+            { pattern: /application.*(?:received|viewed|status|update|sent|review)/i, weight: 10.0 },
+            { pattern: /regarding.*application/i, weight: 10.0 },
+            { pattern: /received.*application/i, weight: 10.0 }, // "Reuters received your application"
+            { pattern: /thank\s+you\s+for\s+applying/i, weight: 10.0 },
+            { pattern: /thanks\s+for\s+applying/i, weight: 10.0 },
+            // NEW RULES
+            { pattern: /job.*alert/i, weight: 10.0 },
+            { pattern: /jobs.*you.*might.*be.*interested/i, weight: 10.0 },
+            { pattern: /recommended.*jobs/i, weight: 10.0 },
+            { pattern: /talent.*network/i, weight: 10.0 },
+            { pattern: /glassdoor/i, weight: 10.0 },
+            { pattern: /job.*recommendation/i, weight: 10.0 },
+            { pattern: /apply.*now/i, weight: 10.0 },
+            { pattern: /interview/i, weight: 10.0 },
+            { pattern: /statement.*available/i, weight: 10.0 },
+            { pattern: /login.*alert/i, weight: 10.0 },
+            { pattern: /otp/i, weight: 10.0 },
+
+            // Phase 4: Expanded Noise
+            { pattern: /you\s+have\s+a\s+new\s+message/i, weight: 10.0 }, // LinkedIn/Social
+            { pattern: /updates?.*privacy\s+policy/i, weight: 10.0 },
+            { pattern: /security\s+alert/i, weight: 10.0 },
+            { pattern: /renew\s+policy/i, weight: 5.0 }, // PolicyBazaar noise
+            { pattern: /policy\s+expired/i, weight: 5.0 },
+            { pattern: /review\s+of\s+charges/i, weight: 5.0 },
+            { pattern: /sankalp\s+pooja/i, weight: 5.0 },
+            { pattern: /software\s+engineer/i, weight: 5.0 }, // Job titles
+            { pattern: /interesting\s+opportunities/i, weight: 5.0 },
+            { pattern: /submitted\s+application/i, weight: 10.0 },
+            { pattern: /jobs?.*for\s+you/i, weight: 10.0 },
+            { pattern: /recruit(?:er|ing|ment)/i, weight: 10.0 },
+            { pattern: /talent\s+acquisition/i, weight: 10.0 },
+            { pattern: /career|hiring/i, weight: 5.0 },
+            { pattern: /workday/i, weight: 10.0 }, // Workday notifications
+            { pattern: /greenhouse/i, weight: 10.0 }, // Greenhouse ATS
+            { pattern: /hirist/i, weight: 10.0 },
+            { pattern: /indeed/i, weight: 10.0 },
+            { pattern: /naukri/i, weight: 10.0 },
+            { pattern: /foundit/i, weight: 10.0 },
+            { pattern: /cutshort/i, weight: 10.0 },
+            { pattern: /cfa\s+institute/i, weight: 8.0 },
+            { pattern: /coursera/i, weight: 10.0 }, // Coursera is education noise
+            { pattern: /financial\s+aid/i, weight: 10.0 },
+            { pattern: /cv\s+reviewed/i, weight: 10.0 },
+
+            // Rewards / Non-Monetary
+            { pattern: /bluchips\s+earned/i, weight: 10.0 },
+            { pattern: /miles\s+earned/i, weight: 5.0 },
+            { pattern: /joined\s+your\s+family/i, weight: 10.0 }, // Apple Family Sharing
+
+            // Generic Alerts (Non-Transactional)
+            { pattern: /account\s+update/i, weight: 5.0 },
+            { pattern: /balance\s+notification/i, weight: 5.0 }, // HDFC "New A/c Balance Notification"
+            { pattern: /balance\s+is\s+below/i, weight: 5.0 },
+            { pattern: /biometric\s+login/i, weight: 5.0 },
+            { pattern: /login\s+pin/i, weight: 5.0 },
+            { pattern: /device\s+for\s+mobilebanking/i, weight: 5.0 },
+            { pattern: /alert\s+triggered/i, weight: 8.0 }, // Price alerts
+            // Phase 4 Extensions
+            { pattern: /digest|newsletter|edition|brief/i, weight: 10.0 }, // News
+            { pattern: /update\s+on\s+dark\s+web/i, weight: 10.0 },
+            { pattern: /fraud|advisory|maintenance/i, weight: 10.0 },
+            { pattern: /support|ticket|contacting\s+us/i, weight: 10.0 },
+            { pattern: /credit\s+limit\s+increase/i, weight: 10.0 },
+            { pattern: /sound\s+was\s+played/i, weight: 10.0 }, // Find My
+            { pattern: /lot\s+size|stock\s+split/i, weight: 10.0 },
+            { pattern: /relationship\s+manager/i, weight: 10.0 },
+            { pattern: /refund\s+request/i, weight: 10.0 }, // Request received/decision
+            { pattern: /verify\s+your\s+email/i, weight: 10.0 },
+            { pattern: /confirm\s+your\s+application/i, weight: 10.0 },
+            { pattern: /welcome\s+aboard|welcome\s+to/i, weight: 5.0 }, // Generic welcomes
+            { pattern: /survey|feedback|opinion/i, weight: 10.0 },
+        ]
+    },
+
+    STATEMENT_READY: {
+        priority: 20,
+        isTransaction: false,
+        transactionType: 'statement_ready',
+        keywords: [
+            { pattern: /statement.*is.*ready/i, weight: 2.0 },
+            { pattern: /your.*monthly.*statement/i, weight: 2.0 },
+            { pattern: /e-?statement.*for/i, weight: 2.0 },
+            { pattern: /account.*statement/i, weight: 2.0 },
+            { pattern: /consolidated.*statement/i, weight: 2.0 },
+            { pattern: /statement.*period/i, weight: 1.5 }
+        ]
+    },
+    ALERT_NOISE: {
+        priority: 95,
+        isTransaction: false,
+        transactionType: 'non_financial',
+        keywords: [
+            { pattern: /alert.*triggered/i, weight: 2.0 },
+            { pattern: /price.*alert/i, weight: 2.0 },
+            { pattern: /stock.*alert/i, weight: 2.0 },
+            { pattern: /market.*update/i, weight: 2.0 },
+            { pattern: /trading.*view/i, weight: 2.0 }
+        ]
+    },
+    APPLE_NOISE: {
+        priority: 95,
+        isTransaction: false,
+        transactionType: 'non_financial',
+        keywords: [
+            { pattern: /icloud.*storage/i, weight: 2.0 },
+            { pattern: /storage.*is.*full/i, weight: 2.0 },
+            { pattern: /subscription.*expiring/i, weight: 2.0 },
+            { pattern: /payment.*problem/i, weight: 2.0 },
+
+            // Phase 5: Long Tail Noise
+            { pattern: /maharaja.*club.*enrolment/i, weight: 10.0 }, // Air India
+            { pattern: /cfa.*exam.*appointment/i, weight: 10.0 },
+            { pattern: /verification.*in.*progress/i, weight: 10.0 },
+            { pattern: /action.*required.*verify.*account/i, weight: 10.0 },
+            { pattern: /otp.*for.*online.*transaction/i, weight: 10.0 },
+            { pattern: /important.*update.*credit.*card/i, weight: 5.0 }, // Generic bank updates
+
+            // Phase 6: Deep Mining Noise
+            { pattern: /new.*matches.*on.*himalayas/i, weight: 10.0 }, // Recruitment
+            { pattern: /opportunities.*at.*dp.*world/i, weight: 10.0 }, // Recruitment
+            { pattern: /binance.*login.*verification/i, weight: 10.0 },
+            { pattern: /permanently.*delete.*my.*account/i, weight: 10.0 },
+            { pattern: /payment.*unsuccessful/i, weight: 10.0 },
+            { pattern: /transaction.*failed/i, weight: 5.0 }
+        ]
+    },
+
+    // ============================================
+    // LIFESTYLE & SERVICES (Low Priority)
+    // ============================================
+    RIDE_APP: {
+        priority: 60,
+        isTransaction: true,
+        transactionType: 'transport',
+        keywords: [
+            { pattern: /ride\s+with\s+ola/i, weight: 2.0 },
+            { pattern: /your\s+ride\s+with\s+uber/i, weight: 2.0 },
+            { pattern: /uber\s+receipt/i, weight: 2.0 },
+            { pattern: /(?:rapido|blusmart).*(?:ride|trip|invoice)/i, weight: 2.0 },
+            { pattern: /total\s+fare/i, weight: 0.5 } // Broad but boosted by subject
+        ]
+    },
+    FOOD_DELIVERY: {
+        priority: 60,
+        isTransaction: true,
+        transactionType: 'food',
+        keywords: [
+            { pattern: /order.*?swiggy/i, weight: 2.0 },
+            { pattern: /your\s+order\s+from\s+zomato/i, weight: 2.0 },
+            { pattern: /zomato.*?order\s+summary/i, weight: 2.0 },
+            { pattern: /blinkit/i, weight: 2.0 },
+            { pattern: /(?:eatsure|zepto|instamart).*(?:order|delivered)/i, weight: 2.0 }
+        ]
+    },
+
+    // ============================================
+    // HIGH PRIORITY BANK SPECIFIC (90-99)
+    // ============================================
+    // Jupiter
+    JUPITER_UPI_SPEND: {
+        priority: 25,
+        isTransaction: true,
+        transactionType: 'bank_upi_debit',
+        direction: 'debit',
+        keywords: [
+            { pattern: /You\s+paid\s+(?:Rs\.?|INR|₹)/i, weight: 1.0 },
+            { pattern: /to\s+.*\s+from\s+your\s+Jupiter\s+account/i, weight: 1.0 },
+            { pattern: /jupiteraxis/i, weight: 0.8 } // VPA handle
+        ]
+    },
+    JUPITER_CC_SPEND: { // RuPay
+        priority: 25,
+        isTransaction: true,
+        transactionType: 'cc_spend',
+        direction: 'debit',
+        keywords: [
+            { pattern: /You\s+paid\s+(?:Rs\.?|INR|₹).*?Paid\s+to/i, weight: 1.0 },
+            { pattern: /CSB\s+Bank/i, weight: 0.5 }
+        ]
+    },
+    JUPITER_POT_TRANSFER: {
+        priority: 25,
+        isTransaction: true,
+        transactionType: 'transfer',
+        direction: 'debit', // Money moving to pot is debit from main account usually, or internal transfer
+        keywords: [
+            { pattern: /Money\s+added\s+to\s+Pot/i, weight: 1.0 },
+            { pattern: /moving\s+closer\s+to\s+your\s+dream/i, weight: 0.5 }
+        ]
+    },
+    JUPITER_POT_WITHDRAWAL: {
+        priority: 25,
+        isTransaction: true,
+        transactionType: 'transfer',
+        direction: 'credit', // Back to main account
+        keywords: [
+            { pattern: /Money\s+withdrawn\s+from\s+Pots/i, weight: 1.0 }
+        ]
+    },
+
+    // Fees
+    DEMAT_CHARGES: {
+        priority: 25,
+        isTransaction: true,
+        transactionType: 'fee',
+        direction: 'debit',
+        keywords: [
+            { pattern: /account\s+maintenance\s+charge/i, weight: 1.0 },
+            { pattern: /Demat\s+account/i, weight: 0.5 }
+        ]
+    },
+
+    // Statements
+    AXIS_STATEMENT: {
+        priority: 25,
+        isTransaction: false, // It's a statement, not a transaction line item
+        transactionType: 'statement_ready',
+        keywords: [
+            { pattern: /Axis\s+Bank\s+.*Credit\s+Card\s+Statement/i, weight: 1.0 }
+        ]
+    },
+
+    HDFC_UPI_DEBIT: {
+        priority: 25,
+        isTransaction: true,
+        transactionType: 'bank_upi_debit',
+        direction: 'debit',
+        keywords: [
+            { pattern: /You\s+have\s+done\s+a\s+UPI\s+txn/i, weight: 1.0 },
+            { pattern: /Is\s+debited\s+from\s+account\s+\d+\s+to\s+VPA/i, weight: 0.95 },
+            { pattern: /has\s+been\s+debited\s+from\s+account/i, weight: 0.95 }
+        ]
+    },
+
+    SBI_CC_SPEND: {
+        priority: 25,
+        isTransaction: true,
+        transactionType: 'cc_spend',
+        direction: 'debit',
+        keywords: [
+            { pattern: /Transaction\s+Alert\s+from.*SBI\s+Card/i, weight: 1.0 },
+            { pattern: /spent\s+on\s+your\s+SBI\s+Credit\s+Card/i, weight: 1.0 }
+        ]
+    },
+
+
+
+    HDFC_CC_SPEND: {
+        priority: 25,
+        isTransaction: true,
+        transactionType: 'cc_spend',
+        direction: 'debit',
+        keywords: [
+            { pattern: /debited\s+via\s+Credit\s+Card\s+.*\*\*/i, weight: 1.0 },
+            { pattern: /debited\s+from\s+your\s+HDFC\s+Bank\s+Credit\s+Card/i, weight: 1.0 }
+        ]
+    },
+
+    AXIS_CC_SPEND: {
+        priority: 25,
+        isTransaction: true,
+        transactionType: 'cc_spend',
+        direction: 'debit',
+        keywords: [
+            { pattern: /Transaction\s+alert\s+on\s+Axis\s+Bank\s+Credit\s+Card/i, weight: 1.0 }
+        ]
+    },
+
+    SLICE_UPI: {
+        priority: 25,
+        isTransaction: true,
+        transactionType: 'bank_upi_credit',
+        direction: 'credit',
+        keywords: [
+            { pattern: /Received\s+[₹Rs.INR]*\s*[\d,]+\s+via\s+UPI/i, weight: 1.0 }
+        ]
+    },
+
+    HDFC_DEPOSIT: {
+        priority: 25,
+        isTransaction: true,
+        transactionType: 'bank_credit',
+        direction: 'credit',
+        keywords: [
+            { pattern: /New\s+Deposit\s+Alert/i, weight: 1.0 }
+        ]
+    },
+
+    APPLE_SPEND: {
+        priority: 25,
+        isTransaction: true,
+        transactionType: 'cc_spend', // It's a receipt, assumes CC/Debit usage
+        direction: 'debit',
+        keywords: [
+            { pattern: /Your\s+invoice\s+from\s+Apple/i, weight: 1.0 }
+        ]
+    },
+
+    YES_BANK_SPEND: {
+        priority: 25,
+        isTransaction: true,
+        transactionType: 'bank_debit', // Could be CC or Bank, default to debit
+        direction: 'debit',
+        keywords: [
+            { pattern: /YES\s+BANK\s+-\s+Transaction\s+Alert/i, weight: 1.0 }
+        ]
+    },
+
+    // ============================================
     // HIGH PRIORITY TRANSACTION PATTERNS (8-10)
     // ============================================
 
@@ -73,7 +411,8 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
             { pattern: /otp\s+is\s+|verification\s+code|one\s+time\s+password/i, weight: 1.0 },
             { pattern: /authori[zs]e\s+payment|authenticate\s+transaction/i, weight: 0.95 },
             { pattern: /do\s+not\s+share\s+this\s+code/i, weight: 0.9 },
-            { pattern: /login\s+alert|new\s+device\s+detected/i, weight: 0.9 }
+            { pattern: /login\s+alert|new\s+device\s+detected/i, weight: 0.9 },
+            { pattern: /OTP\s+for\s+Dhan\s+Login/i, weight: 1.0 }
         ]
     },
 
@@ -127,7 +466,15 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
             { pattern: /(?:salary|income|bonus|incentive)\s+.*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.9 },
             { pattern: /(?:neft|imps|rtgs)\s+(?:received|credited).*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.9 },
             { pattern: /fund\s+transfer.*received.*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.85 },
+            // Missing IMPS patterns
+            { pattern: /(?:received|credited)\s+[₹Rs.INR]*\s*[\d,]+\s+via\s+(?:imps|neft|rtgs)/i, weight: 1.0 },
+            { pattern: /money\s+credited\s+to\s+your.*account/i, weight: 1.0 },
+            { pattern: /money\s+credited\s+to\s+your.*account/i, weight: 1.0 },
         ],
+        excludePatterns: [
+            /job|interview|application|hiring|recruit|career/i,
+            /apply\s+now|referral|bonus\s+points/i
+        ]
     },
 
     UPI_DEBIT: {
@@ -168,6 +515,11 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
             { pattern: /chargeback.*(?:₹|Rs\.?|INR)?\s*[\d,]+/i, weight: 0.85 },
             { pattern: /reversal\s+of\s+transaction/i, weight: 0.9 },
         ],
+        excludePatterns: [
+            /refund\s+policy/i,
+            /return\s+policy/i,
+            /cancellation\s+policy/i
+        ]
     },
 
     CC_UPI_SPEND: {
@@ -271,9 +623,34 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
         keywords: [
             { pattern: /sip\s+(?:instalment|installment|deducted|auto-pay)/i, weight: 1.0 },
             { pattern: /mutual\s+fund.*(?:purchase|unit|allotted)/i, weight: 0.95 },
+            { pattern: /processing.*of.*purchase.*in.*(?:kotak|hsbc).*mutual.*fund/i, weight: 2.0 }, // Phase 6
             { pattern: /(?:groww|zerodha|upstox|kuvera|coin|smallcase).*(?:order|payment)/i, weight: 0.95 },
             { pattern: /folio\s+no|unit\s+price|nav:/i, weight: 0.9 },
             { pattern: /investment\s+(?:of|amount).*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.9 },
+            { pattern: /redemption.*(?:tsxn|id)/i, weight: 0.95 },
+        ]
+    },
+
+    MF_REDEMPTION: {
+        priority: 12,
+        isTransaction: true,
+        transactionType: 'investment', // Or create 'redemption' type if needed
+        direction: 'credit',
+        keywords: [
+            { pattern: /Receipt\s+of\s+Redemption\s+Trxn/i, weight: 1.0 }
+        ]
+    },
+
+    CRYPTO_TRADE: {
+        priority: 12,
+        isTransaction: true,
+        transactionType: 'investment',
+        direction: 'debit', // Default
+        keywords: [
+            { pattern: /New\s+kills\s+for\s+your/i, weight: 1.0 }, // Typo in email? "kills"? log said "fills"
+            { pattern: /New\s+fills\s+for\s+your/i, weight: 1.0 },
+            { pattern: /Liquidation\s+Alert/i, weight: 1.0 },
+            { pattern: /Delta\s+Exchange/i, weight: 0.5 }
         ]
     },
 
@@ -290,29 +667,7 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
         ]
     },
 
-    FOOD_DELIVERY: {
-        priority: 12,
-        isTransaction: true,
-        transactionType: 'food',
-        direction: 'debit',
-        keywords: [
-            { pattern: /(?:swiggy|zomato|eatsure).*(?:order|payment)/i, weight: 1.0 },
-            { pattern: /order\s+(?:delivered|placed).*(?:restaurant|food)/i, weight: 0.85 },
-            { pattern: /(?:blinkit|instamart|zepto).*(?:order|delivered)/i, weight: 0.9 },
-        ]
-    },
 
-    RIDE_HAILING: {
-        priority: 12,
-        isTransaction: true,
-        transactionType: 'transport',
-        direction: 'debit',
-        keywords: [
-            { pattern: /(?:uber|ola|rapido|blusmart).*(?:ride|trip|payment)/i, weight: 1.0 },
-            { pattern: /ride\s+(?:completed|receipt).*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.9 },
-            { pattern: /trip\s+(?:fare|receipt).*[₹Rs.INR]*\s*[\d,]+/i, weight: 0.9 },
-        ]
-    },
 
     // ============================================
     // LOW PRIORITY / REJECTION PATTERNS (1-4)

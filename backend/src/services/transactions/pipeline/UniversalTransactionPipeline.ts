@@ -20,6 +20,8 @@ import { StatementParserFactory } from '../../statements/StatementParserFactory'
 import { StatementReconciler } from '../../statements/StatementReconciler';
 import { featureFlags } from '../../../config/featureFlags';
 import { MerchantEnricher } from '../enrichment/MerchantEnricher';
+import { UnclassifiedRepository } from '../../manual-review/UnclassifiedRepository'; // NEW IMPORT
+
 
 export interface IPipelineDependencies {
     sanitizer: typeof SanitizerService;
@@ -245,54 +247,27 @@ VALUES($1, $2, $3, $4, $5, NOW())
                 logger.warn('[Pipeline] EnhancedRuleClassifier failed:', error);
             }
 
-            // STEP 2: GPT Fallback with strict checks
+            // STEP 2: GPT Fallback REMOVED
+            // If rule-based classification failed or had low confidence, we now default to 'unclassified'
+            // and rely on manual review or further pattern mining.
             const isLowConfidence = !classificationResult || (classificationResult.confidence < 0.85);
 
             if (isLowConfidence) {
-                if (options.skipGpt || featureFlags.SKIP_GPT) {
-                    logger.info(`[Pipeline] Skiping GPT for now (config or flag), queuing for background worker.`);
-                    return {
-                        status: 'queued_for_gpt',
-                        cleanEmail, // Pass this out so queue manager can use it
-                        rawEmailId
-                    } as any; // Cast as any if Types not yet updated, or strictly typed if possible
+                logger.info(`[Pipeline] Low confidence / No rule match. GPT Disabled. Defaulting to unclassified.`);
+
+                // If we had a weak result, keep it but let it fail verification or be marked for review later?
+                // Actually, if it's < 0.85, we treat it as unclassified usage for safety in this strict mode.
+                // But strictly, if we matched a rule but it was weak (e.g. generic financial), maybe we keep it?
+                // The current logic only sets classificationResult if >= 0.85. 
+                // So classificationResult is likely null here.
+
+                if (!classificationResult) {
+                    classificationResult = {
+                        type: 'unclassified',
+                        confidence: 0,
+                        metadata: { note: 'No rule matched (Strict Rule Mode)' }
+                    };
                 }
-
-                logger.info(`[Pipeline] Classification: Low confidence(${classificationResult?.confidence}).Attempting GPT fallback.`);
-                logger.info(`[Pipeline] Low confidence / No rule match, attempting GPT classification...`);
-                const gptResult = await this.classifyWithGPT(userId, cleanEmail);
-
-                if (gptResult) {
-                    // Result Merging Strategy
-                    // If we had a weak rule match, we might want to combine insights
-                    if (classificationResult && classificationResult.type === gptResult.type) {
-                        // Same type, boost confidence?
-                        // For now, trust GPT if confidence is decent
-                        classificationResult = gptResult;
-                        classificationMethod = 'gpt';
-                    } else if (gptResult.confidence > 0.7) {
-                        // GPT found something significant
-                        classificationResult = gptResult;
-                        classificationMethod = 'gpt';
-                    }
-                }
-
-                // CHECK: If GPT returned non_financial, terminate immediately
-                if (classificationResult && classificationResult.type === 'non_financial') {
-                    await this.deps.terminator.terminate(
-                        userId,
-                        cleanEmail.id,
-                        `GPT classification: non - financial(${classificationResult.metadata?.reason || 'No reason'})`,
-                        'stage_4_gpt_fallback',
-                        'NON_FINANCIAL',
-                        jobId,
-                        rawEmailId
-                    );
-                    logger.info(`<< <[PIPELINE END] ${rawEmail.messageId} - Terminated(GPT Non - Financial)`);
-                    return { status: 'terminated', reason: 'non_financial' };
-                }
-
-                classificationStage = 'stage_4_gpt_fallback';
             }
             logger.info(`[Pipeline] Stage 4(Classify) took ${Date.now() - s4Start}ms via ${classificationMethod} `);
             console.log(`[PIPELINE] Classification: ${classificationResult?.type} (Confidence: ${classificationResult?.confidence}) Method: ${classificationMethod} `);
@@ -438,6 +413,9 @@ VALUES($1, $2, $3, $4, $5, NOW())
                 rawExtraction: classificationResult
             });
 
+            // NEW: Add to Manual Review Repository
+            await UnclassifiedRepository.add(cleanEmail, 'Unclassified');
+
             logger.info(`<< <[PIPELINE END] ${messageId} - Marked for Review(Unclassified)`);
             return { status: 'needs_review', reason: 'unclassified' };
         }
@@ -445,7 +423,7 @@ VALUES($1, $2, $3, $4, $5, NOW())
         try {
             logger.info(`[Pipeline] Stage 5: Starting extraction with ${classificationResult.type} extractor`);
             const Extractor = this.deps.extractorFactory.getExtractor(classificationResult.type as TransactionType);
-            extracted = await Extractor.extract(userId, cleanEmail);
+            extracted = await Extractor.extract(userId, cleanEmail, classificationResult);
 
             // === ENRICHMENT ===
             try {
@@ -470,75 +448,33 @@ VALUES($1, $2, $3, $4, $5, NOW())
 
             logger.info(`[Pipeline] Stage 5(Extract) took ${Date.now() - s5Start} ms.Data: ${extracted.amount} ${extracted.currency} @${extracted.merchant} `);
         } catch (error) {
-            logger.warn(`[Pipeline] Extraction failed via rules(${error instanceof Error ? error.message : String(error)}).Attempting GPT Fallback.`);
+            logger.warn(`[Pipeline] Extraction failed via rules(${error instanceof Error ? error.message : String(error)}). Marking as Unclassified for Review.`);
 
-            // Fallback: Use GPT if not already used or if rule based failed
-            try {
-                // If we haven't tried GPT yet, or if we want to re-try for extraction specifically using GPT
-                let gptResult = classificationMethod === 'gpt' ? classificationResult : null;
+            // NEW: Instead of AI Fallback, we strictly fail to Manual Review
+            await this.deps.transactionsQueries.createTransaction({
+                userId,
+                transactionDate: new Date(internalDate),
+                merchant: subject,
+                category: 'Unclassified',
+                amount: 0.01,
+                transactionType: 'unclassified',
+                emailMessageId: cleanEmail.id,
+                emailSubject: subject,
+                emailSender: sender,
+                classificationMethod: 'rule_failed',
+                confidenceScore: 0,
+                needsReview: true,
+                reviewReason: `Extraction Failed: ${error instanceof Error ? error.message : String(error)}`,
+                rawEmailId,
+                scanJobId: jobId,
+                rawExtraction: classificationResult
+            });
 
-                if (!gptResult) {
-                    gptResult = await this.classifyWithGPT(userId, cleanEmail);
-                }
+            // Add to Manual Review Repository
+            await UnclassifiedRepository.add(cleanEmail, `Extraction Failed: ${classificationResult.type}`);
 
-                if (gptResult && gptResult.metadata && gptResult.metadata.amount) {
-                    logger.info(`[Pipeline] GPT Fallback Extraction Successful.Using GPT data.`);
-                    // Manually construct ExtractedTransaction from GPT data
-                    const metadata = gptResult.metadata;
-
-                    // Attempt to find instrument
-                    // We default to 'credit_card' or try to guess from metadata if possible? 
-                    // GPT metadata doesn't usually have card last 4 unless we change prompt.
-                    // But let's check text for card ending using regex as helper.
-                    const cardMatch = cleanEmail.cleanedBody.match(/(?:ending|no)\.?\s*[*x#]*(\d{4})/i);
-                    const cardLast4 = cardMatch ? cardMatch[1] : undefined;
-
-                    let instrumentId: string | undefined = undefined;
-                    if (cardLast4) {
-                        const instrument = await InstrumentAutoService.findOrCreateCard(userId, 'credit_card', cardLast4, cleanEmail);
-                        instrumentId = instrument.id;
-                    }
-
-                    extracted = {
-                        type: gptResult.type || TransactionType.CREDIT_CARD_SPEND,
-                        direction: TransactionDirection.DEBIT, // Default
-                        amount: Number(metadata.amount),
-                        currency: (metadata.currency as string) || 'INR',
-                        merchant: (metadata.merchant as string) || 'Unknown',
-                        instrumentType: InstrumentType.CREDIT_CARD, // Fallback default
-                        instrumentId,
-                        category: 'Others',
-                        fingerprint: 'gpt_' + cleanEmail.id, // Simple fingerprint
-                        metadata: {
-                            classification: 'gpt_fallback',
-                            original_error: String(error)
-                        }
-                    };
-                } else {
-                    throw new Error('GPT Fallback failed to extract amount');
-                }
-            } catch (gptError) {
-                logger.error(`[Pipeline] GPT Fallback entirely failed: `, gptError);
-                await this.deps.terminator.terminate(
-                    userId,
-                    cleanEmail.id,
-                    `Extraction failed: ${error instanceof Error ? error.message : String(error)}`,
-                    'stage_5_extraction',
-                    'EXTRACTION_FAILED',
-                    jobId,
-                    rawEmailId,
-                    false // Do NOT mark as processed, allowing retry
-                );
-
-                // ALSO update the checking reason so we know why it failed
-                await this.deps.scannedEmailsQueries.updateScannedEmailError(
-                    userId,
-                    cleanEmail.id,
-                    `Extraction Failed: ${error instanceof Error ? error.message : String(error)}`
-                );
-
-                return { status: 'failed', reason: 'extraction_error', error: String(error) };
-            }
+            logger.info(`<< <[PIPELINE END] ${messageId} - Marked for Review(Extraction Failed)`);
+            return { status: 'needs_review', reason: 'extraction_failed', error: String(error) };
         }
 
         // ========================================

@@ -12,6 +12,7 @@ export enum TransactionType {
     CHARGEBACK = 'chargeback',
     STATEMENT_TRANSACTION = 'statement_txn',
     INVESTMENT = 'investment',
+    FEE = 'fee',
     UNCLASSIFIED = 'unclassified',
 }
 
@@ -182,4 +183,16 @@ export interface TransactionFilters {
     offset?: number;
     needsReview?: boolean;
     search?: string;
+}
+
+export interface UnclassifiedRecord {
+    id: string;
+    emailId: string;
+    from: string;
+    subject: string;
+    bodySnippet: string;
+    receivedAt: Date;
+    analyzedAt: Date;
+    tags?: string[];
+    potentialCategory?: string;
 }

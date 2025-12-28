@@ -8,6 +8,7 @@ import { universalPipeline } from '../services/transactions/pipeline/UniversalTr
 import { GptQueueManager } from '../services/transactions/pipeline/GptQueueManager';
 import { SimplifiedEmail } from '../types/transaction.types'; // Use new types
 import dayjs from 'dayjs';
+import { broadcastProcessingUpdate, broadcastJobComplete } from '../services/alerts/WebSocketState';
 
 /**
  * Historical Email Scanner (Optimized for 200/sec Throughput)
@@ -108,6 +109,17 @@ export async function runHistoricalScan(
             totalFetched += messages.length;
             processingQueue.push(...messages as any[]);
             WorkflowLogger.log('FETCH', `Pushed ${messages.length} to queue. Total Fetched: ${totalFetched}`, { jobId, queueSize: processingQueue.length });
+
+            // Broadcast fetch progress immediately
+            broadcastProcessingUpdate(jobId, {
+              status: 'PROCESSING',
+              currentStep: 'FETCHING',
+              totalEmails: totalFetched,
+              totalProcessed: stats.success + stats.failed + stats.terminated + stats.duplicate + stats.needs_review,
+              totalTransactions: stats.success,
+              totalErrors: stats.failed,
+              queueStatus: { queue1: processingQueue.length, queue2: 0, queue3: 0 }
+            });
           }
 
         } while (pageToken);
@@ -175,9 +187,9 @@ export async function runHistoricalScan(
         const batchDuration = Date.now() - batchStartTime;
         console.log(`[PHASE: PROCESS] Processed ${batch.length} emails in ${batchDuration}ms (${Math.round(batch.length / (batchDuration / 1000))} emails/sec)`);
 
-        // Update DB every 4 batches to reduce churn (was every batch)
+        // Update DB/WS more frequently - every batch (approx 15 items)
         const processed = stats.success + stats.failed + stats.terminated + stats.duplicate + stats.needs_review;
-        if (processed % 32 === 0 || processingQueue.length === 0) {
+        if (true) { // Always update after a batch
           await updateJobStats(jobId, totalFetched, stats);
         }
       }
@@ -255,6 +267,18 @@ export async function runHistoricalScan(
              WHERE id = $9`,
         [total, processed, progress, curStats.success, curStats.failed, curStats.needs_review, curStats.terminated, errorsJson, jid]
       );
+
+      // Broadcast real-time update via WebSocket
+      broadcastProcessingUpdate(jid, {
+        jobId: jid,
+        status: 'PROCESSING',
+        currentStep: 'PROCESSING_AND_FETCHING', // Unified step name to avoid flickering
+        totalEmails: total,
+        totalProcessed: processed,
+        totalTransactions: curStats.success,
+        totalErrors: curStats.failed,
+        queueStatus: { queue1: processingQueue.length, queue2: 0, queue3: 0 }
+      });
     };
 
 
@@ -308,7 +332,6 @@ export async function runHistoricalScan(
     );
     console.log(`[POST-PROC] Step: ANALYTICS for job ${jobId}`);
     // Broadcast status update
-    const { broadcastProcessingUpdate, broadcastJobComplete } = await import('../services/alerts/WebSocketService');
     broadcastProcessingUpdate(jobId, {
       status: 'PROCESSING',
       currentStep: 'POST_PROCESSING_ANALYTICS',

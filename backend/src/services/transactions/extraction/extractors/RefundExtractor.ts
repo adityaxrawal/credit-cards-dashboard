@@ -44,8 +44,21 @@ export class RefundExtractor {
     }
 
     private static extractAmount(text: string): number {
+        // Strict: Look for amount near "refund", "reversal", "credit"
+        // e.g. "Refund of Rs 500", "Rs 500 refunded"
+        const strictPattern = /(?:refund|reversal|credit|back).{0,20}(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d{2})?)/i;
+        const strictMatch = text.match(strictPattern);
+        if (strictMatch) return parseFloat(strictMatch[1].replace(/,/g, ''));
+
+        // Reverse: "Rs 500 refunded"
+        const strictReverse = /(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d{2})?)\s*.{0,20}(?:refund|reversal|credit|back)/i;
+        const reverseMatch = text.match(strictReverse);
+        if (reverseMatch) return parseFloat(reverseMatch[1].replace(/,/g, ''));
+
+        // Fallback (only if matched as REFUND type initially)
         const match = text.match(/[₹](?:\s+)?([\d,]+(?:\.\d{2})?)/);
         if (match) return parseFloat(match[1].replace(/,/g, ''));
+
         throw new Error('Amount not found');
     }
 

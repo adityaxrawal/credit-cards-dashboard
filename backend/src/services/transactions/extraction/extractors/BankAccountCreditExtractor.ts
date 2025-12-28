@@ -3,6 +3,7 @@ import { TransactionDeduplicator } from '../../TransactionDeduplicator';
 import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '../../../../types/transaction.types';
 import { InstrumentAutoService } from '../../../cards/instruments/InstrumentAutoService';
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
+import { isKnownBankSender } from '../../../../data/transaction-patterns';
 
 export class BankAccountCreditExtractor {
     static async extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {
@@ -31,7 +32,17 @@ export class BankAccountCreditExtractor {
         });
 
         // Determine specific type: SALARY or BANK_CREDIT
-        const type = /salary|payroll/i.test(source) ? TransactionType.SALARY : TransactionType.BANK_CREDIT;
+        let type = /salary|payroll/i.test(source) ? TransactionType.SALARY : TransactionType.BANK_CREDIT;
+
+        // Safety: If identified as SALARY but sender is not a known bank, downgrade to Transfer
+        // This prevents "Salary Negotiation" emails from being classified as Income
+        if (type === TransactionType.SALARY) {
+            const senderCheck = isKnownBankSender(email.from);
+            if (!senderCheck.isKnown) {
+                type = TransactionType.BANK_CREDIT;
+            }
+        }
+
         const category = type === TransactionType.SALARY ? 'Income' : 'Transfer';
 
         return {
@@ -60,7 +71,7 @@ export class BankAccountCreditExtractor {
         // 2. Context-based extraction (Credited X, Received X)
         const actionPatterns = [
             /(?:credited|received|added|deposited)\s+(?:with|of)?\s*(?:[₹$€£]|rs\.?|inr|usd)?\s*([\d,]+(?:\.\d{1,2})?)/i,
-            /(?:inr|rs\.?|₹)\s*([\d,]+(?:\.\d{1,2})?)\s*(?:is|has\s+been)\s+(?:credited|added|received)/i,
+            /(?:inr|rs\.?|₹)\s*([\d,]+(?:\.\d{1,2})?)\s*(?:is|was|has\s+been)\s+(?:credited|added|received)/i,
             /(?:amt|amount|txn|transaction)\s*(?:of)?\s*(?:[₹$€£]|rs\.?|inr)?\s*([\d,]+(?:\.\d{1,2})?)/i
         ];
 
@@ -81,6 +92,7 @@ export class BankAccountCreditExtractor {
 
     private static extractAccountLast4(text: string): string | null {
         const patterns = [
+            /(?:account|a\/c)\s+(?:ending|ending\s+with|ending\s+in|no|number)[\s:]*(?:x+|X+)?(\d{4})/i,
             BankParserPatterns.CARD_XX_DIGITS,
             BankParserPatterns.CARD_ENDING,
         ];
@@ -100,6 +112,7 @@ export class BankAccountCreditExtractor {
 
         // Try generic merchant detection if transferred from X
         const patterns = [
+            /payment\s+from\s*[:\-]?\s*([A-Za-z0-9\s.&'-]+?)(?:\s+on|\s+date|\.|via|info|$)/i,
             BankParserPatterns.MERCHANT_FROM,
             BankParserPatterns.MERCHANT_BY, // Might need to add BY to cache
             /from\s+([A-Za-z0-9\s.&'-]+?)(?:\s+on|\.|via|$)/i

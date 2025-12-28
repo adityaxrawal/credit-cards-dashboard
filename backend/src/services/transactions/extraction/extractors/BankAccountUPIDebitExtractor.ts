@@ -5,9 +5,20 @@ import { InstrumentAutoService } from '../../../cards/instruments/InstrumentAuto
 import { BankParserPatterns } from '../../../../utils/cache/regexCache';
 import { UPIParser } from '../../../../utils/text/UPIParser';
 import { UniversalAmountExtractor } from '../UniversalAmountExtractor';
+import { EnhancedClassificationResult } from '../../classification/EnhancedRuleClassifier';
 
 export class BankAccountUPIDebitExtractor {
-    static async extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {
+    static async extract(userId: string, email: CleanEmail, classification?: EnhancedClassificationResult): Promise<ExtractedTransaction> {
+        // Bank Specific Handling
+        const patternName = classification?.metadata?.pattern;
+
+        if (patternName === 'HDFC_UPI_DEBIT') {
+            return this.extractHDFCUPI(userId, email);
+        }
+        if (patternName === 'JUPITER_UPI_SPEND') {
+            return this.extractJupiterUPI(userId, email);
+        }
+
         const combined = email.subject + ' ' + email.cleanedBody;
 
         const amount = UniversalAmountExtractor.extract(combined);
@@ -78,6 +89,112 @@ export class BankAccountUPIDebitExtractor {
                 accountLast4,
                 recipientUPI,
             }
+        };
+    }
+
+    private static async extractHDFCUPI(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {
+        const fullText = email.subject + ' ' + (email.cleanedBody || '');
+        // Rs.200.00 has been debited from account 4691 to VPA SHREESOMNATHTRUSTVAS.76061863@hdfcbank SHREE SOMNATH TRUST VAS on 23-12-25
+        const regex = /Rs\.(\d+(?:\.\d{2})?).*?from\s+account\s+(\d+)\s+to\s+VPA\s+(.*?)\s+on\s+(\d{2}-\d{2}-\d{2})/i;
+
+        const match = fullText.match(regex);
+        let amount = 0;
+        let accountLast4 = '';
+        let recipientVPAandMerchant = '';
+        let merchant = 'UPI Merchant';
+        let date = new Date(email.internalDate);
+
+        if (match) {
+            amount = parseFloat(match[1]);
+            accountLast4 = match[2];
+            recipientVPAandMerchant = match[3];
+
+            // Date: 23-12-25
+            const dateParts = match[4].split('-');
+            if (dateParts.length === 3) {
+                const day = parseInt(dateParts[0]);
+                const month = parseInt(dateParts[1]) - 1;
+                const year = 2000 + parseInt(dateParts[2]);
+                date = new Date(year, month, day);
+            }
+
+            // VPA and Merchant often combined: "user@okicici Some Name"
+            // Split by space? Or use UPIParser logic
+            const vpaMatch = UPIParser.extractVPA(recipientVPAandMerchant);
+            if (vpaMatch) {
+                // Name follows VPA often
+                merchant = recipientVPAandMerchant.replace(vpaMatch, '').trim();
+                if (!merchant) merchant = UPIParser.getMerchantFromVPA(vpaMatch) || vpaMatch;
+            } else {
+                merchant = recipientVPAandMerchant.trim();
+            }
+        } else {
+            amount = UniversalAmountExtractor.extract(fullText);
+            merchant = 'HDFC UPI';
+            accountLast4 = this.extractAccountLast4(fullText) || '';
+        }
+
+        const instrument = await InstrumentAutoService.findOrCreateAccount(userId, accountLast4, email);
+        const fingerprint = TransactionDeduplicator.generateFingerprint({
+            amount, merchant, date, cardLastFour: accountLast4, direction: TransactionDirection.DEBIT
+        });
+
+        return {
+            type: TransactionType.BANK_ACCOUNT_UPI_DEBIT,
+            direction: TransactionDirection.DEBIT,
+            amount,
+            currency: 'INR',
+            merchant,
+            instrumentType: InstrumentType.BANK_ACCOUNT,
+            instrumentId: instrument.id,
+            category: 'UPI',
+            fingerprint,
+            metadata: { source: 'HDFC_STRICT', emailSubject: email.subject, accountLast4 }
+        };
+    }
+
+    private static async extractJupiterUPI(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {
+        const fullText = email.subject + ' ' + (email.cleanedBody || '');
+        // You paid ₹200 Paid to SHREE SOMNATH TRUST VAS... Date Dec 23, 2025
+        const regex = /You\s+paid\s+(?:₹|Rs\.?|INR)\s*(\d+(?:\.\d{2})?)\s+Paid\s+to\s+(.*?)\s+Date/i;
+
+        const match = fullText.match(regex);
+        let amount = 0;
+        let merchant = 'Jupiter UPI';
+
+        if (match) {
+            amount = parseFloat(match[1]);
+            merchant = match[2].trim();
+
+            // Clean merchant if it contains trailing identifiers
+            const parts = merchant.split(' ');
+            if (parts.length > 0 && parts[parts.length - 1].includes('@')) {
+                // Ends with VPA like 'Aditya 8127696200@jupiteraxis'
+                // Wait, snippet earlier: "Paid to SHREE SOMNATH TRUST VAS SHREESOMNATHTRUSTVAS.76061863@hdfcbank Date"
+                // So VPA is part of "merchant" string here.
+            }
+        } else {
+            amount = UniversalAmountExtractor.extract(fullText);
+        }
+
+        // Jupiter uses account linked or wallet (pots)
+        // Usually generic "Jupiter" bank account unless linked to Federal
+        const instrument = await InstrumentAutoService.findOrCreateGenericCard(userId, 'Jupiter Account', email);
+        // Note: GenericCard isn't ideal for Bank Account, but findOrCreateAccount requires Last4. 
+        // We need a findOrCreateGenericAccount or similar. 
+        // For now, mapping to generic UPI handle or instrument is acceptable if no account number is found.
+
+        return {
+            type: TransactionType.BANK_ACCOUNT_UPI_DEBIT,
+            direction: TransactionDirection.DEBIT,
+            amount,
+            currency: 'INR',
+            merchant,
+            instrumentType: InstrumentType.BANK_ACCOUNT, // Force bank account type
+            instrumentId: instrument.id,
+            category: 'UPI',
+            fingerprint: TransactionDeduplicator.generateFingerprint({ amount, merchant, date: new Date(email.internalDate), direction: TransactionDirection.DEBIT }),
+            metadata: { source: 'JUPITER_UPI_STRICT', emailSubject: email.subject }
         };
     }
 

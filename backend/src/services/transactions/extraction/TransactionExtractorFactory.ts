@@ -11,19 +11,22 @@ import { BankAccountDebitExtractor } from './extractors/BankAccountDebitExtracto
 import { BankAccountUPIDebitExtractor } from './extractors/BankAccountUPIDebitExtractor';
 import { BankAccountUPICreditExtractor } from './extractors/BankAccountUPICreditExtractor';
 import { RefundExtractor } from './extractors/RefundExtractor';
+import { FeeExtractor } from './extractors/FeeExtractor';
+
+import { EnhancedClassificationResult } from '../classification/EnhancedRuleClassifier';
 
 /**
  * Interface that all transaction extractors must implement
  */
 export interface ITransactionExtractor {
-    extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction>;
+    extract(userId: string, email: CleanEmail, classification?: EnhancedClassificationResult): Promise<ExtractedTransaction>;
 }
 
 /**
  * Type for extractor classes (static implementation)
  */
 export type TransactionExtractorClass = {
-    extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction>;
+    extract(userId: string, email: CleanEmail, classification?: EnhancedClassificationResult): Promise<ExtractedTransaction>;
 };
 
 export class TransactionExtractorFactory {
@@ -49,6 +52,18 @@ export class TransactionExtractorFactory {
         this.register(TransactionType.CHARGEBACK, RefundExtractor);
         this.register(TransactionType.STATEMENT_TRANSACTION, CreditCardSpendExtractor);
         this.register(TransactionType.INVESTMENT, InvestmentExtractor);
+        this.register(TransactionType.FEE, FeeExtractor);
+
+        // Fee
+        this.register('fee' as any, FeeExtractor);
+        this.register('demat_charges' as any, FeeExtractor);
+
+        // Transfers
+        this.register('transfer' as any, BankAccountDebitExtractor);
+
+        // Statements/Noise
+        this.register('statement_ready' as any, CreditCardSpendExtractor); // Won't actually extract much, but pipeline needs handler
+        this.register('non_financial' as any, CreditCardSpendExtractor);
 
         // Handle common GPT hallucination
         this.register('cc_debit' as any, CreditCardSpendExtractor);
