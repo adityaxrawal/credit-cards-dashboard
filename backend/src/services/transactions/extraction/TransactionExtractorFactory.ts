@@ -12,6 +12,11 @@ import { BankAccountUPIDebitExtractor } from './extractors/BankAccountUPIDebitEx
 import { BankAccountUPICreditExtractor } from './extractors/BankAccountUPICreditExtractor';
 import { RefundExtractor } from './extractors/RefundExtractor';
 import { FeeExtractor } from './extractors/FeeExtractor';
+// New extractors
+import { BankChargeExtractor } from './extractors/BankChargeExtractor';
+import { InterestExtractor } from './extractors/InterestExtractor';
+import { ChequeExtractor } from './extractors/ChequeExtractor';
+import { StandingInstructionExtractor } from './extractors/StandingInstructionExtractor';
 
 import { EnhancedClassificationResult } from '../classification/EnhancedRuleClassifier';
 
@@ -54,9 +59,26 @@ export class TransactionExtractorFactory {
         this.register(TransactionType.INVESTMENT, InvestmentExtractor);
         this.register(TransactionType.FEE, FeeExtractor);
 
+        // New transaction types
+        this.register(TransactionType.BANK_CHARGE, BankChargeExtractor);
+        this.register(TransactionType.INTEREST_DEBIT, InterestExtractor);
+        this.register(TransactionType.INTEREST_CREDIT, InterestExtractor);
+        this.register(TransactionType.CHEQUE_DEPOSIT, ChequeExtractor);
+        this.register(TransactionType.CHEQUE_RETURN, ChequeExtractor);
+        this.register(TransactionType.STANDING_INSTRUCTION, StandingInstructionExtractor);
+        this.register(TransactionType.ENACH, StandingInstructionExtractor);
+        this.register(TransactionType.ATM_WITHDRAWAL, BankAccountDebitExtractor);
+        this.register(TransactionType.CASH_DEPOSIT, BankAccountCreditExtractor);
+        this.register(TransactionType.SWEEP_IN, BankAccountCreditExtractor);
+        this.register(TransactionType.SWEEP_OUT, BankAccountDebitExtractor);
+        this.register(TransactionType.WALLET_LOAD, BankAccountDebitExtractor);
+        this.register(TransactionType.WALLET_UNLOAD, BankAccountCreditExtractor);
+
         // Fee
         this.register('fee' as any, FeeExtractor);
         this.register('demat_charges' as any, FeeExtractor);
+        this.register('bank_charge' as any, BankChargeExtractor);
+        this.register('interest' as any, InterestExtractor);
 
         // Transfers
         this.register('transfer' as any, BankAccountDebitExtractor);

@@ -111,12 +111,13 @@ export async function runHistoricalScan(
             WorkflowLogger.log('FETCH', `Pushed ${messages.length} to queue. Total Fetched: ${totalFetched}`, { jobId, queueSize: processingQueue.length });
 
             // Broadcast fetch progress immediately
+            // Only send totalTransactions if > 0 to prevent UI flickering
             broadcastProcessingUpdate(jobId, {
               status: 'PROCESSING',
               currentStep: 'FETCHING',
               totalEmails: totalFetched,
               totalProcessed: stats.success + stats.failed + stats.terminated + stats.duplicate + stats.needs_review,
-              totalTransactions: stats.success,
+              ...(stats.success > 0 && { totalTransactions: stats.success }),
               totalErrors: stats.failed,
               queueStatus: { queue1: processingQueue.length, queue2: 0, queue3: 0 }
             });

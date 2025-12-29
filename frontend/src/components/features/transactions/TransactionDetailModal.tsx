@@ -223,6 +223,99 @@ export function TransactionDetailModal({
               )}
             </div>
           </div>
+
+          {/* NEW: Extended Transaction Fields Section */}
+          <div className="mt-6 pt-6 border-t border-muted-text/10">
+            <h4 className="text-sm font-semibold text-primary-text mb-4">Transaction Details</h4>
+            
+            <div className="space-y-4">
+              {/* Reference Numbers */}
+              {transaction.rrn && (
+                <DetailRow label="RRN" icon={<Hash className="w-4 h-4" />}>
+                  <code className="bg-hover-bg px-2 py-1 rounded text-xs">{transaction.rrn}</code>
+                </DetailRow>
+              )}
+              {transaction.utr && (
+                <DetailRow label="UTR" icon={<Hash className="w-4 h-4" />}>
+                  <code className="bg-hover-bg px-2 py-1 rounded text-xs">{transaction.utr}</code>
+                </DetailRow>
+              )}
+              {transaction.arn && (
+                <DetailRow label="ARN" icon={<Hash className="w-4 h-4" />}>
+                  <code className="bg-hover-bg px-2 py-1 rounded text-xs">{transaction.arn}</code>
+                </DetailRow>
+              )}
+
+              {/* Transaction Status */}
+              {transaction.transaction_status && transaction.transaction_status !== 'posted' && (
+                <DetailRow label="Status">
+                  <Badge 
+                    label={transaction.transaction_status.toUpperCase()} 
+                    variant={transaction.transaction_status === 'pending' ? 'warning' : 
+                             transaction.transaction_status === 'reversed' ? 'error' : 'default'}
+                  />
+                </DetailRow>
+              )}
+
+              {/* Channel */}
+              {transaction.channel && (
+                <DetailRow label="Channel">
+                  <Badge label={transaction.channel.toUpperCase()} variant="info" size="sm" />
+                </DetailRow>
+              )}
+
+              {/* FX Rate */}
+              {transaction.fx_rate && transaction.original_currency_code && (
+                <DetailRow label="Exchange Rate" icon={<Globe className="w-4 h-4" />}>
+                  <span className="text-sm">
+                    1 {transaction.original_currency_code} = ₹{transaction.fx_rate.toFixed(2)}
+                  </span>
+                </DetailRow>
+              )}
+
+              {/* Running Balance */}
+              {transaction.running_balance !== undefined && (
+                <DetailRow label="Balance After">
+                  <span className="font-semibold">{formatCurrency(transaction.running_balance)}</span>
+                </DetailRow>
+              )}
+
+              {/* Lifecycle Flags */}
+              <div className="flex flex-wrap gap-2 justify-end">
+                {transaction.is_recurring && <Badge label="Recurring" variant="info" size="sm" />}
+                {transaction.is_reversal && <Badge label="Reversal" variant="warning" size="sm" />}
+                {transaction.is_provisional && <Badge label="Pending" variant="default" size="sm" />}
+                {transaction.dispute_flag && <Badge label="Disputed" variant="error" size="sm" />}
+                {transaction.chargeback_flag && <Badge label="Chargeback" variant="error" size="sm" />}
+              </div>
+
+              {/* Linked Transaction */}
+              {transaction.linked_transaction_id && transaction.link_type && (
+                <DetailRow label="Linked Transaction">
+                  <span className="text-xs text-secondary-text">
+                    {transaction.link_type.replace('_', ' ')} • {transaction.linked_transaction_id.substring(0, 8)}...
+                  </span>
+                </DetailRow>
+              )}
+
+              {/* Fee Components */}
+              {transaction.fee_components && Object.keys(transaction.fee_components).length > 0 && (
+                <DetailRow label="Fee Breakdown">
+                  <div className="text-xs text-right space-y-1">
+                    {transaction.fee_components.gst && (
+                      <div>GST: ₹{transaction.fee_components.gst.toFixed(2)}</div>
+                    )}
+                    {transaction.fee_components.tax && (
+                      <div>Tax: ₹{transaction.fee_components.tax.toFixed(2)}</div>
+                    )}
+                    {transaction.fee_components.service_charge && (
+                      <div>Service: ₹{transaction.fee_components.service_charge.toFixed(2)}</div>
+                    )}
+                  </div>
+                </DetailRow>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Actions */}

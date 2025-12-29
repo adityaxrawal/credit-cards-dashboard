@@ -27,6 +27,11 @@ export interface ScanStatus {
     billsCreated?: number;
     instrumentsCreated?: number;
   };
+  // WebSocket specific fields
+  totalTransactions?: number;
+  totalEmails?: number;
+  totalProcessed?: number;
+  totalErrors?: number;
 }
 
 export const gmailApi = {

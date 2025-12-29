@@ -123,17 +123,34 @@ VALUES($1, $2, $3, $4, $5, NOW())
                     }
                 }
 
-                // 2. Use Resolver
+                // 2. Use Resolver with Expanded Context
                 // Combine mocked/inferred data with instruments
                 // TODO: Integrate real UserProfileService when available
+                // We create multiple permutations for DOB as that's common (DDMMYYYY, DDMMYY, MMDDYYYY)
+                const dob = new Date('2000-05-23'); // Placeholder
+
                 const context = {
                     firstName: 'ADITYA', // Placeholder
-                    dob: new Date('2000-01-01'), // Placeholder
+                    dob: dob,
                     instruments: instruments
                 };
 
                 const resolved = BankPDFPasswordResolver.generateCandidates(context);
                 candidatePasswords.push(...resolved);
+
+                // 3. Brute Force Dates (Common for many banks)
+                // Add DDMMYYYY and DDMMYY of DOB if not covered
+                const dd = String(dob.getDate()).padStart(2, '0');
+                const mm = String(dob.getMonth() + 1).padStart(2, '0');
+                const yyyy = String(dob.getFullYear());
+                const yy = yyyy.slice(-2);
+
+                candidatePasswords.push(`${dd}${mm}${yyyy}`);
+                candidatePasswords.push(`${dd}${mm}${yy}`);
+
+                // 4. Name + Date Combinations (Common: ADIT1234)
+                candidatePasswords.push(`ADIT${dd}${mm}`); // First 4 name + DDMM
+                candidatePasswords.push(`ADIT${yyyy}`);    // First 4 name + YYYY
 
                 // Add explicit user-provided passwords if any (e.g. from a text file or settings)
                 // candidatePasswords.push(...userSettings.customPasswords);

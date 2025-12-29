@@ -314,4 +314,193 @@ export class TransactionDeduplicator {
 
         return updated;
     }
+
+    // ============================================
+    // TRANSACTION LINKING METHODS
+    // ============================================
+
+    /**
+     * Find potential refund match for a credit transaction
+     * Looks for original debit within configurable window
+     */
+    static async findRefundMatch(
+        userId: string,
+        amount: number,
+        merchant: string,
+        refundDate: Date,
+        windowDays: number = 90
+    ): Promise<{ originalTransactionId: string | null; confidence: number }> {
+        try {
+            const windowStart = new Date(refundDate.getTime() - windowDays * 24 * 60 * 60 * 1000);
+            const normalizedMerchant = this.normalizeMerchant(merchant);
+
+            const result = await pool.query(
+                `SELECT id, merchant, amount, transaction_date
+                 FROM transactions
+                 WHERE user_id = $1
+                   AND amount = $2
+                   AND direction = 'debit'
+                   AND transaction_date BETWEEN $3 AND $4
+                   AND linked_transaction_id IS NULL
+                 ORDER BY transaction_date DESC
+                 LIMIT 5`,
+                [userId, amount, windowStart, refundDate]
+            );
+
+            for (const row of result.rows) {
+                const similarity = this.merchantSimilarity(normalizedMerchant, this.normalizeMerchant(row.merchant));
+                if (similarity > 0.6) {
+                    return { originalTransactionId: row.id, confidence: similarity };
+                }
+            }
+
+            return { originalTransactionId: null, confidence: 0 };
+        } catch (error) {
+            logger.error('[Deduplicator] Failed to find refund match:', error);
+            return { originalTransactionId: null, confidence: 0 };
+        }
+    }
+
+    /**
+     * Find potential authorization for a settlement transaction
+     */
+    static async findAuthorizationMatch(
+        userId: string,
+        amount: number,
+        merchant: string,
+        settlementDate: Date,
+        amountTolerance: number = 0.01  // 1% tolerance for FX
+    ): Promise<{ authTransactionId: string | null; confidence: number }> {
+        try {
+            const windowStart = new Date(settlementDate.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days
+            const amountMin = amount * (1 - amountTolerance);
+            const amountMax = amount * (1 + amountTolerance);
+            const normalizedMerchant = this.normalizeMerchant(merchant);
+
+            const result = await pool.query(
+                `SELECT id, merchant, amount, transaction_date, is_provisional
+                 FROM transactions
+                 WHERE user_id = $1
+                   AND amount BETWEEN $2 AND $3
+                   AND direction = 'debit'
+                   AND transaction_date BETWEEN $4 AND $5
+                   AND (is_provisional = TRUE OR transaction_status = 'pending')
+                 ORDER BY transaction_date DESC
+                 LIMIT 5`,
+                [userId, amountMin, amountMax, windowStart, settlementDate]
+            );
+
+            for (const row of result.rows) {
+                const similarity = this.merchantSimilarity(normalizedMerchant, this.normalizeMerchant(row.merchant));
+                if (similarity > 0.7) {
+                    return { authTransactionId: row.id, confidence: similarity };
+                }
+            }
+
+            return { authTransactionId: null, confidence: 0 };
+        } catch (error) {
+            logger.error('[Deduplicator] Failed to find auth match:', error);
+            return { authTransactionId: null, confidence: 0 };
+        }
+    }
+
+    /**
+     * Link two transactions together
+     */
+    static async linkTransactions(
+        transactionId: string,
+        linkedTransactionId: string,
+        linkType: 'refund' | 'settlement' | 'partial_refund' | 'split' | 'authorization' | 'reversal'
+    ): Promise<boolean> {
+        try {
+            await pool.query(
+                `UPDATE transactions 
+                 SET linked_transaction_id = $1, link_type = $2, updated_at = NOW()
+                 WHERE id = $3`,
+                [linkedTransactionId, linkType, transactionId]
+            );
+            return true;
+        } catch (error) {
+            logger.error('[Deduplicator] Failed to link transactions:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Check for partial refund scenario (multiple refunds summing to original)
+     */
+    static async checkPartialRefunds(
+        userId: string,
+        originalTransactionId: string
+    ): Promise<{ refundIds: string[]; totalRefunded: number; remainingAmount: number }> {
+        try {
+            const originalResult = await pool.query(
+                `SELECT amount FROM transactions WHERE id = $1`,
+                [originalTransactionId]
+            );
+
+            if (originalResult.rows.length === 0) {
+                return { refundIds: [], totalRefunded: 0, remainingAmount: 0 };
+            }
+
+            const originalAmount = parseFloat(originalResult.rows[0].amount);
+
+            const refundsResult = await pool.query(
+                `SELECT id, amount
+                 FROM transactions
+                 WHERE user_id = $1
+                   AND linked_transaction_id = $2
+                   AND link_type IN ('refund', 'partial_refund')`,
+                [userId, originalTransactionId]
+            );
+
+            const refundIds = refundsResult.rows.map(r => r.id);
+            const totalRefunded = refundsResult.rows.reduce((sum, r) => sum + parseFloat(r.amount), 0);
+
+            return {
+                refundIds,
+                totalRefunded,
+                remainingAmount: originalAmount - totalRefunded
+            };
+        } catch (error) {
+            logger.error('[Deduplicator] Failed to check partial refunds:', error);
+            return { refundIds: [], totalRefunded: 0, remainingAmount: 0 };
+        }
+    }
+
+    /**
+     * Detect and flag potential duplicate clusters
+     * Used for admin review
+     */
+    static async findDuplicateClusters(
+        userId: string,
+        windowDays: number = 7
+    ): Promise<Array<{ amount: number; merchant: string; transactionIds: string[]; dates: Date[] }>> {
+        try {
+            const result = await pool.query(
+                `SELECT amount, merchant, 
+                        ARRAY_AGG(id) as ids,
+                        ARRAY_AGG(transaction_date) as dates
+                 FROM transactions
+                 WHERE user_id = $1
+                   AND transaction_date > NOW() - INTERVAL '${windowDays} days'
+                 GROUP BY amount, LOWER(TRIM(merchant))
+                 HAVING COUNT(*) > 1
+                 ORDER BY COUNT(*) DESC
+                 LIMIT 50`,
+                [userId]
+            );
+
+            return result.rows.map(row => ({
+                amount: parseFloat(row.amount),
+                merchant: row.merchant,
+                transactionIds: row.ids,
+                dates: row.dates
+            }));
+        } catch (error) {
+            logger.error('[Deduplicator] Failed to find duplicate clusters:', error);
+            return [];
+        }
+    }
 }
+

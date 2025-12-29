@@ -13,6 +13,27 @@ export enum TransactionType {
     STATEMENT_TRANSACTION = 'statement_txn',
     INVESTMENT = 'investment',
     FEE = 'fee',
+    // Extended transaction types
+    BANK_CHARGE = 'bank_charge',
+    INTEREST_DEBIT = 'interest_debit',
+    INTEREST_CREDIT = 'interest_credit',
+    CHEQUE_DEPOSIT = 'cheque_deposit',
+    CHEQUE_RETURN = 'cheque_return',
+    ATM_INQUIRY = 'atm_inquiry',
+    ATM_WITHDRAWAL = 'atm_withdrawal',
+    SWEEP_IN = 'sweep_in',
+    SWEEP_OUT = 'sweep_out',
+    STANDING_INSTRUCTION = 'standing_instruction',
+    ENACH = 'enach',
+    CASH_DEPOSIT = 'cash_deposit',
+    WALLET_LOAD = 'wallet_load',
+    WALLET_UNLOAD = 'wallet_unload',
+    CARD_LIMIT_CHANGE = 'card_limit_change',
+    PRE_AUTHORIZATION = 'pre_authorization',
+    LOAN_DISBURSAL = 'loan_disbursal',        // Classification only, excluded from ingestion
+    LOAN_REPAYMENT = 'loan_repayment',        // Classification only, excluded from ingestion
+    EMI_CREATION = 'emi_creation',            // Classification only, excluded from ingestion
+    EMI_INSTALLMENT = 'emi_installment',      // Classification only, excluded from ingestion
     UNCLASSIFIED = 'unclassified',
 }
 
@@ -28,6 +49,37 @@ export enum InstrumentType {
 export enum TransactionDirection {
     DEBIT = 'debit',
     CREDIT = 'credit',
+}
+
+export enum TransactionStatus {
+    PENDING = 'pending',
+    POSTED = 'posted',
+    REVERSED = 'reversed',
+    FAILED = 'failed',
+    HOLD = 'hold',
+}
+
+export enum TransactionChannel {
+    ATM = 'atm',
+    POS = 'pos',
+    ECOMMERCE = 'ecommerce',
+    UPI = 'upi',
+    NETBANKING = 'netbanking',
+    NEFT = 'neft',
+    RTGS = 'rtgs',
+    IMPS = 'imps',
+    WIRE = 'wire',
+    INTERNAL = 'internal',
+    CHEQUE = 'cheque',
+}
+
+export enum TransactionLinkType {
+    REFUND = 'refund',
+    SETTLEMENT = 'settlement',
+    PARTIAL_REFUND = 'partial_refund',
+    SPLIT = 'split',
+    AUTHORIZATION = 'authorization',
+    REVERSAL = 'reversal',
 }
 
 export interface Instrument {
@@ -114,6 +166,37 @@ export interface ExtractedTransaction {
     referenceNumber?: string;
     fingerprint: string;
     metadata?: TransactionMetadata;
+
+    // Extended fields for new capabilities
+    rrn?: string;
+    utr?: string;
+    arn?: string;
+    authCode?: string;
+    postingDate?: Date;
+    valueDate?: Date;
+    transactionStatus?: TransactionStatus;
+    runningBalance?: number;
+    fxRate?: number;
+    originalCurrency?: string;
+    feeComponents?: {
+        gst?: number;
+        tax?: number;
+        serviceCharge?: number;
+    };
+    instrumentDetails?: {
+        cardLast4?: string;
+        accountMasked?: string;
+        upiVpaPayer?: string;
+        upiVpaPayee?: string;
+    };
+    channel?: TransactionChannel;
+    mcc?: string;
+    isRecurring?: boolean;
+    isReversal?: boolean;
+    isProvisional?: boolean;
+    patternGroupId?: string;
+    ruleId?: string;
+    extractionQualityScore?: number;
 }
 
 export interface PipelineResult {
@@ -140,7 +223,7 @@ export interface Transaction {
     is_settled: boolean;
     email_message_id: string | null;
     is_manually_added: boolean;
-    metadata: TransactionMetadata; // Was any
+    metadata: TransactionMetadata;
     created_at: Date;
     updated_at: Date;
     exact_timestamp?: Date;
@@ -160,6 +243,74 @@ export interface Transaction {
     review_reason?: string;
     counterparty_name?: string;
     counterparty_identifier?: string;
+
+    // ============================================
+    // Extended Fields (Migration 026)
+    // ============================================
+
+    // Reference Numbers
+    rrn?: string;                           // Retrieval Reference Number
+    utr?: string;                           // Unique Transaction Reference
+    arn?: string;                           // Acquirer Reference Number
+    auth_code?: string;                     // Authorization code
+
+    // Date Differentiation
+    posting_date?: Date;                    // When posted to account
+    value_date?: Date;                      // For interest calculation
+
+    // Status & Lifecycle
+    transaction_status?: TransactionStatus;
+
+    // Balance & Currency
+    running_balance?: number;               // Balance after transaction
+    fx_rate?: number;                       // Foreign exchange rate
+    original_currency_code?: string;        // Original currency if converted
+
+    // Fee Components
+    fee_components?: {
+        gst?: number;
+        tax?: number;
+        service_charge?: number;
+        [key: string]: number | undefined;
+    };
+
+    // Instrument Details
+    instrument_details?: {
+        card_last4?: string;
+        account_masked?: string;
+        upi_vpa_payer?: string;
+        upi_vpa_payee?: string;
+        [key: string]: string | undefined;
+    };
+
+    // Channel & Merchant
+    channel?: TransactionChannel;
+    mcc?: string;                           // Merchant Category Code
+
+    // Lifecycle Flags
+    is_recurring?: boolean;
+    is_reversal?: boolean;
+    is_provisional?: boolean;
+    is_adjustment?: boolean;
+    dispute_flag?: boolean;
+    chargeback_flag?: boolean;
+
+    // Transaction Linking
+    linked_transaction_id?: string;
+    link_type?: TransactionLinkType;
+
+    // Provenance & Audit
+    parser_version?: string;
+    rule_id?: string;
+    pattern_group_id?: string;
+    extraction_quality_score?: number;
+    review_assignee?: string;
+    source_message_timestamp?: Date;
+
+    // Category Hierarchy (Migration 027)
+    category_id?: string;
+    category_confidence?: number;
+    category_override_by_user?: boolean;
 }
 
 export interface PostProcessingStats {
@@ -183,6 +334,20 @@ export interface TransactionFilters {
     offset?: number;
     needsReview?: boolean;
     search?: string;
+
+    // Extended filters
+    categoryId?: string;
+    channel?: TransactionChannel;
+    transactionStatus?: TransactionStatus;
+    isRecurring?: boolean;
+    isReversal?: boolean;
+    hasDispute?: boolean;
+    hasChargeback?: boolean;
+    minAmount?: number;
+    maxAmount?: number;
+    rrn?: string;
+    utr?: string;
+    linkedTransactionId?: string;
 }
 
 export interface UnclassifiedRecord {
@@ -196,3 +361,43 @@ export interface UnclassifiedRecord {
     tags?: string[];
     potentialCategory?: string;
 }
+
+// ============================================
+// Category Hierarchy Types
+// ============================================
+
+export interface Category {
+    id: string;
+    name: string;
+    slug: string;
+    parentId?: string;
+    icon?: string;
+    color?: string;
+    description?: string;
+    isSystem: boolean;
+    isPersonal: boolean;
+    isTaxDeductible: boolean;
+    sortOrder: number;
+    createdAt: Date;
+    updatedAt: Date;
+    children?: Category[];
+}
+
+export interface MerchantCategoryMapping {
+    id: string;
+    merchantPattern: string;
+    categoryId: string;
+    priority: number;
+    isRegex: boolean;
+    createdBy?: string;
+    createdAt: Date;
+}
+
+// Types that should be excluded from transaction ingestion
+export const EXCLUDED_FROM_INGESTION: TransactionType[] = [
+    TransactionType.LOAN_DISBURSAL,
+    TransactionType.LOAN_REPAYMENT,
+    TransactionType.EMI_CREATION,
+    TransactionType.EMI_INSTALLMENT,
+];
+

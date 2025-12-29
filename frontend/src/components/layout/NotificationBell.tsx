@@ -34,7 +34,7 @@ export function NotificationBell() {
   React.useEffect(() => {
     if (!user?.id) return;
 
-    const socket: Socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000', {
+    const socket: Socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', {
       transports: ['websocket'],
     });
 

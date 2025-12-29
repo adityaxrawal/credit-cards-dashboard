@@ -66,7 +66,7 @@ class ApiClient {
         // Add auth token if available (backend uses 'accessToken' cookie)
         if (typeof window !== "undefined") {
           // Add CSRF token for non-GET requests
-          if (config.method !== "get" && !config.url?.includes("/api/csrf-token")) {
+          if (config.method !== "get" && !config.url?.includes("/api/csrf-token") && !config.url?.includes("/api/auth/google")) {
             const token = await this.getCsrfToken();
             if (token && config.headers) {
               config.headers["X-CSRF-Token"] = token;

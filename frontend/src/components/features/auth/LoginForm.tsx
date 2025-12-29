@@ -69,6 +69,11 @@ export default function LoginForm() {
       await login(code);
       // If login succeeds, user is redirected by AuthContext
       // No need to manually redirect here
+      
+      // Clear code param on success too, to avoid re-triggering if user hits back button
+      const url = new URL(window.location.href);
+      url.searchParams.delete("code");
+      window.history.replaceState({}, "", url.toString());
     } catch (err) {
       console.error("Login error:", err);
 
@@ -85,7 +90,13 @@ export default function LoginForm() {
       setIsProcessing(false);
 
       // Clear the code from URL to prevent retry
-      window.history.replaceState({}, "", "/login");
+      // Clear the code from URL to prevent retry
+      const url = new URL(window.location.href);
+      url.searchParams.delete("code");
+      url.searchParams.delete("scope");
+      url.searchParams.delete("authuser");
+      url.searchParams.delete("prompt");
+      window.history.replaceState({}, "", url.toString());
     }
   }
 
@@ -93,7 +104,8 @@ export default function LoginForm() {
    * Initiate Google OAuth flow
    */
   function handleGoogleLogin() {
-    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/login`;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+    const redirectUri = `${appUrl}/login`;
 
     // Log for debugging
     console.log("🔐 Starting Google OAuth flow");

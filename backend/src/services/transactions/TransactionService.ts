@@ -189,6 +189,36 @@ export async function insertFromEmail(
     rawExtraction?: any;
     scanJobId?: string;
     rawEmailId?: string;
+    // Extended fields (Phase 1-5)
+    rrn?: string;
+    utr?: string;
+    arn?: string;
+    authCode?: string;
+    postingDate?: Date;
+    valueDate?: Date;
+    transactionStatus?: 'pending' | 'posted' | 'reversed' | 'failed' | 'hold';
+    runningBalance?: number;
+    fxRate?: number;
+    originalCurrencyCode?: string;
+    feeComponents?: { gst?: number; tax?: number; service_charge?: number };
+    instrumentDetails?: Record<string, string>;
+    channel?: string;
+    mcc?: string;
+    isRecurring?: boolean;
+    isReversal?: boolean;
+    isProvisional?: boolean;
+    isAdjustment?: boolean;
+    disputeFlag?: boolean;
+    chargebackFlag?: boolean;
+    linkedTransactionId?: string;
+    linkType?: string;
+    parserVersion?: string;
+    ruleId?: string;
+    patternGroupId?: string;
+    extractionQualityScore?: number;
+    reviewAssignee?: string;
+    categoryId?: string;
+    categoryConfidence?: number;
   }
 ) {
   console.log(`[TransactionService] Inserting transaction from email for user ${userId}, message ${data.emailMessageId}`);
@@ -264,6 +294,36 @@ export async function insertFromEmailBulk(
     rawExtraction?: any;
     scanJobId?: string;
     rawEmailId?: string;
+    // Extended fields (Phase 1-5)
+    rrn?: string;
+    utr?: string;
+    arn?: string;
+    authCode?: string;
+    postingDate?: Date;
+    valueDate?: Date;
+    transactionStatus?: 'pending' | 'posted' | 'reversed' | 'failed' | 'hold';
+    runningBalance?: number;
+    fxRate?: number;
+    originalCurrencyCode?: string;
+    feeComponents?: { gst?: number; tax?: number; service_charge?: number };
+    instrumentDetails?: Record<string, string>;
+    channel?: string;
+    mcc?: string;
+    isRecurring?: boolean;
+    isReversal?: boolean;
+    isProvisional?: boolean;
+    isAdjustment?: boolean;
+    disputeFlag?: boolean;
+    chargebackFlag?: boolean;
+    linkedTransactionId?: string;
+    linkType?: string;
+    parserVersion?: string;
+    ruleId?: string;
+    patternGroupId?: string;
+    extractionQualityScore?: number;
+    reviewAssignee?: string;
+    categoryId?: string;
+    categoryConfidence?: number;
   }>
 ) {
   console.log(`[TransactionService] Inserting bulk transactions from email for user ${userId}, count: ${items.length}`);

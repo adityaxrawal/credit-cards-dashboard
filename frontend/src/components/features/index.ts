@@ -5,7 +5,6 @@
 
 // Gmail Features
 export { GmailSyncButton, GmailSyncModal } from './gmail/GmailSyncButton';
-export { default as HistoricalScanProgress } from './gmail/HistoricalScanProgress';
 export { default as ManualReviewQueue } from './gmail/ManualReviewQueue';
 
 // Dashboard Features

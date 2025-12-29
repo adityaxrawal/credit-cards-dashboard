@@ -9,6 +9,7 @@ import { GlobalLoadingSpinner } from "@/components/ui/feedback/GlobalLoadingSpin
 import { GlobalLoadingOverlay } from "@/components/ui/feedback/LoadingOverlay";
 import { ToastProvider } from "@/components/ui/feedback/Toast";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
+import { GmailWebSocketProvider } from "@/lib/contexts/GmailWebSocketContext";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -29,19 +30,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <ToastProvider>
           <LoadingProvider>
             <AuthProvider>
-              {children}
-              <GlobalLoadingSpinner />
-              <GlobalLoadingOverlay />
-              <Toaster
-                position="top-right"
-                toastOptions={{
-                  duration: 4000,
-                  style: {
-                    background: "#363636",
-                    color: "#fff",
-                  },
-                }}
-              />
+              <GmailWebSocketProvider>
+                {children}
+                <GlobalLoadingSpinner />
+                <GlobalLoadingOverlay />
+                <Toaster
+                  position="top-right"
+                  toastOptions={{
+                    duration: 4000,
+                    style: {
+                      background: "#363636",
+                      color: "#fff",
+                    },
+                  }}
+                />
+              </GmailWebSocketProvider>
             </AuthProvider>
           </LoadingProvider>
         </ToastProvider>

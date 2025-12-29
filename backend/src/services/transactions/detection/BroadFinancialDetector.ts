@@ -74,6 +74,14 @@ export class BroadFinancialDetector {
             }
         }
 
+        // 2a. TRANSACTION ALERTS (New Pattern) (+15 points)
+        // Explicitly catch "Transaction Alert" which might miss verbs or be generic
+        const alertPattern = /transaction\s+(?:alert|notification|update)|alert\s+from\s+.*card/i;
+        if (alertPattern.test(lowerText)) {
+            score += 15;
+            reasons.push('Transaction Alert Pattern');
+        }
+
         // 3. FINANCIAL ACCOUNT/INSTRUMENT (+20 points)
         const instruments = /credit\s+card|debit\s+card|bank\s+account|savings\s+a\/c|current\s+a\/c|rupay|visa|mastercard|amex|upi|neft|rtgs|imps|wallet/i;
         if (instruments.test(lowerText)) {

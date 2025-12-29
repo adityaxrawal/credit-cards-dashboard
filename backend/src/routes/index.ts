@@ -12,6 +12,7 @@ import extractionRoutes from './extraction.routes';
 import billsRoutes from './bills.routes';
 import monitoringRoutes from './monitoring.routes';
 import statementsRoutes from './statements.routes';
+import categoriesRoutes from './categories.routes';
 
 
 const router = Router();
@@ -34,6 +35,7 @@ router.use('/rewards', rewardsRoutes);
 router.use('/extraction', extractionRoutes);
 router.use('/bills', billsRoutes);
 router.use('/statements', statementsRoutes);
+router.use('/categories', categoriesRoutes);
 
 
 export default router;

@@ -6,6 +6,9 @@ import { activeJobs } from './WebSocketState';
 export function initializeWebSocket(httpServer: Server) {
     const io = new SocketIOServer(httpServer, {
         cors: { origin: '*' },
+        pingInterval: 25000,    // Send ping every 25 seconds
+        pingTimeout: 60000,     // Wait 60 seconds for pong response (increased from 20s)
+        transports: ['websocket', 'polling'], // Allow polling fallback for better reliability
     });
 
     // Share io instance globally for the broadcast functions in WebSocketState
@@ -14,6 +17,14 @@ export function initializeWebSocket(httpServer: Server) {
     io.on('connection', (socket) => {
         logger.info(`Client connected: ${socket.id}`);
         console.log(`[WS] Client connected: ${socket.id}`);
+
+        // Heartbeat handler for client-initiated keepalive
+        socket.on('heartbeat', (data: { timestamp?: number }) => {
+            socket.emit('heartbeat_ack', {
+                timestamp: Date.now(),
+                clientTimestamp: data?.timestamp
+            });
+        });
 
         socket.on('subscribe', async (data) => {
             const { jobId, userId } = data;
@@ -62,8 +73,9 @@ export function initializeWebSocket(httpServer: Server) {
             }
         });
 
-        socket.on('disconnect', () => {
-            logger.info(`Client disconnected: ${socket.id}`);
+        socket.on('disconnect', (reason) => {
+            logger.info(`Client disconnected: ${socket.id}, reason: ${reason}`);
+            console.log(`[WS] Client disconnected: ${socket.id}, reason: ${reason}`);
         });
     });
 

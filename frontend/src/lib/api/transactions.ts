@@ -38,6 +38,49 @@ export interface Transaction {
   confidence_score?: number;
   scan_job_id?: string;
   txn_fingerprint?: string;
+
+  // Extended fields (Phase 1-5 additions)
+  rrn?: string;
+  utr?: string;
+  arn?: string;
+  auth_code?: string;
+  posting_date?: string;
+  value_date?: string;
+  transaction_status?: 'pending' | 'posted' | 'reversed' | 'failed' | 'hold';
+  running_balance?: number;
+  fx_rate?: number;
+  original_currency_code?: string;
+  fee_components?: {
+    gst?: number;
+    tax?: number;
+    service_charge?: number;
+    [key: string]: number | undefined;
+  };
+  instrument_details?: {
+    card_last4?: string;
+    account_masked?: string;
+    upi_vpa_payer?: string;
+    upi_vpa_payee?: string;
+    [key: string]: string | undefined;
+  };
+  channel?: 'atm' | 'pos' | 'ecommerce' | 'upi' | 'netbanking' | 'neft' | 'rtgs' | 'imps' | 'wire' | 'internal' | 'cheque';
+  mcc?: string;
+  is_recurring?: boolean;
+  is_reversal?: boolean;
+  is_provisional?: boolean;
+  is_adjustment?: boolean;
+  dispute_flag?: boolean;
+  chargeback_flag?: boolean;
+  linked_transaction_id?: string;
+  link_type?: 'refund' | 'settlement' | 'partial_refund' | 'split' | 'authorization' | 'reversal';
+  parser_version?: string;
+  rule_id?: string;
+  pattern_group_id?: string;
+  extraction_quality_score?: number;
+  review_assignee?: string;
+  category_id?: string;
+  category_confidence?: number;
+  category_override_by_user?: boolean;
 }
 
 export interface TransactionFormData {

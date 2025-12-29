@@ -697,6 +697,171 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
             { pattern: /advertisement|sponsored|partner\s+offer/i, weight: 0.85 },
         ],
     },
+
+    // ============================================
+    // NEW TRANSACTION TYPES (Phase 2 Implementation)
+    // ============================================
+
+    BANK_CHARGE: {
+        priority: 12,
+        isTransaction: true,
+        transactionType: 'bank_charge',
+        direction: 'debit',
+        keywords: [
+            { pattern: /(?:annual|membership|joining|renewal)\s+fee/i, weight: 1.0 },
+            { pattern: /(?:account|a\/c)\s+maintenance\s+(?:fee|charge)/i, weight: 1.0 },
+            { pattern: /(?:min|minimum)\s+balance\s+(?:charge|fee|penalty)/i, weight: 1.0 },
+            { pattern: /sms\s+(?:alert)?\s*(?:fee|charge)/i, weight: 0.9 },
+            { pattern: /late\s+payment\s+(?:fee|charge|penalty)/i, weight: 1.0 },
+            { pattern: /penal\s+(?:interest|charge)/i, weight: 1.0 },
+            { pattern: /(?:atm|cash)\s+(?:withdrawal|transaction)\s+(?:fee|charge)/i, weight: 0.9 },
+            { pattern: /demat\s+(?:account)?\s*(?:maintenance|charge)/i, weight: 0.95 },
+            { pattern: /service\s+charge/i, weight: 0.8 },
+        ],
+        excludePatterns: [
+            /will\s+be\s+(?:charged|debited)/i,
+        ]
+    },
+
+    INTEREST_CREDIT: {
+        priority: 11,
+        isTransaction: true,
+        transactionType: 'interest_credit',
+        direction: 'credit',
+        keywords: [
+            { pattern: /interest\s+(?:credited|credit|earned|received)/i, weight: 1.0 },
+            { pattern: /(?:savings|fd|fixed\s+deposit|rd).*interest.*credited/i, weight: 1.0 },
+            { pattern: /quarterly\s+interest\s+(?:credited|paid)/i, weight: 1.0 },
+            { pattern: /interest\s+(?:for|of)\s+(?:quarter|month|period)/i, weight: 0.9 },
+        ],
+    },
+
+    INTEREST_DEBIT: {
+        priority: 11,
+        isTransaction: true,
+        transactionType: 'interest_debit',
+        direction: 'debit',
+        keywords: [
+            { pattern: /interest\s+(?:debited|debit|charged|deducted)/i, weight: 1.0 },
+            { pattern: /(?:overdraft|od).*interest.*(?:debited|charged)/i, weight: 1.0 },
+            { pattern: /penal\s+interest/i, weight: 1.0 },
+            { pattern: /interest\s+on\s+(?:overdue|outstanding)/i, weight: 0.9 },
+        ],
+    },
+
+    CHEQUE_DEPOSIT: {
+        priority: 11,
+        isTransaction: true,
+        transactionType: 'cheque_deposit',
+        direction: 'credit',
+        keywords: [
+            { pattern: /cheque\s+(?:deposited|credit|cleared)/i, weight: 1.0 },
+            { pattern: /(?:chq|cheque)\s+no\.?\s*\d+\s+(?:credited|deposited|cleared)/i, weight: 1.0 },
+            { pattern: /local\s+cheque\s+(?:collection|credit)/i, weight: 0.95 },
+            { pattern: /cheque\s+realization/i, weight: 0.9 },
+        ],
+    },
+
+    CHEQUE_RETURN: {
+        priority: 12,
+        isTransaction: true,
+        transactionType: 'cheque_return',
+        direction: 'debit',
+        keywords: [
+            { pattern: /cheque\s+(?:returned|bounced|dishonoured|dishonored)/i, weight: 1.0 },
+            { pattern: /(?:chq|cheque)\s+(?:return|bounce)/i, weight: 1.0 },
+            { pattern: /insufficient\s+funds?.*cheque/i, weight: 1.0 },
+            { pattern: /reason\s+for\s+return/i, weight: 0.9 },
+        ],
+    },
+
+    STANDING_INSTRUCTION: {
+        priority: 10,
+        isTransaction: true,
+        transactionType: 'standing_instruction',
+        direction: 'debit',
+        keywords: [
+            { pattern: /standing\s+(?:instruction|order)\s+(?:executed|processed)/i, weight: 1.0 },
+            { pattern: /si\s+(?:debit|transaction)/i, weight: 0.95 },
+            { pattern: /scheduled\s+(?:payment|transfer)\s+(?:executed|processed)/i, weight: 0.9 },
+            { pattern: /periodic\s+payment/i, weight: 0.85 },
+        ],
+    },
+
+    ENACH_MANDATE: {
+        priority: 11,
+        isTransaction: true,
+        transactionType: 'enach',
+        direction: 'debit',
+        keywords: [
+            { pattern: /e[- ]?nach\s+(?:debit|mandate|transaction)/i, weight: 1.0 },
+            { pattern: /nach\s+(?:debit|mandate|transaction)/i, weight: 1.0 },
+            { pattern: /auto[- ]?(?:debit|pay)\s+(?:processed|successful)/i, weight: 0.95 },
+            { pattern: /mandate.*(?:debited|executed)/i, weight: 0.9 },
+            { pattern: /recurring\s+(?:debit|payment)\s+(?:processed|successful)/i, weight: 0.9 },
+        ],
+    },
+
+    ATM_TRANSACTION: {
+        priority: 10,
+        isTransaction: true,
+        transactionType: 'atm_withdrawal',
+        direction: 'debit',
+        keywords: [
+            { pattern: /atm\s+(?:withdrawal|cash\s+withdrawal)/i, weight: 1.0 },
+            { pattern: /cash\s+withdrawn\s+(?:from|at)\s+atm/i, weight: 1.0 },
+            { pattern: /atm\s+txn/i, weight: 0.9 },
+        ],
+    },
+
+    CASH_DEPOSIT: {
+        priority: 10,
+        isTransaction: true,
+        transactionType: 'cash_deposit',
+        direction: 'credit',
+        keywords: [
+            { pattern: /cash\s+(?:deposit|deposited)/i, weight: 1.0 },
+            { pattern: /(?:cdm|cash\s+deposit\s+machine)/i, weight: 0.95 },
+            { pattern: /self\s+deposit/i, weight: 0.9 },
+        ],
+    },
+
+    SWEEP_TRANSACTION: {
+        priority: 9,
+        isTransaction: true,
+        transactionType: 'sweep_out',
+        direction: 'debit',
+        keywords: [
+            { pattern: /auto[- ]?sweep/i, weight: 1.0 },
+            { pattern: /sweep[- ]?(?:in|out)/i, weight: 1.0 },
+            { pattern: /flexi\s+(?:rd|fd)\s+(?:created|transfer)/i, weight: 0.9 },
+        ],
+    },
+
+    WALLET_TRANSFER: {
+        priority: 9,
+        isTransaction: true,
+        transactionType: 'wallet_load',
+        direction: 'debit',
+        keywords: [
+            { pattern: /wallet\s+(?:load|top[- ]?up|recharge)/i, weight: 1.0 },
+            { pattern: /added\s+to\s+(?:paytm|phonepe|amazon\s+pay)\s+wallet/i, weight: 1.0 },
+            { pattern: /wallet\s+balance\s+added/i, weight: 0.9 },
+        ],
+    },
+
+    // Classification-only patterns (excluded from ingestion)
+    LOAN_EMI_INDICATOR: {
+        priority: 5,
+        isTransaction: false, // NOT a transaction - classification only
+        transactionType: 'emi_installment',
+        keywords: [
+            { pattern: /emi\s+(?:due|payment|deducted|debited)/i, weight: 1.0 },
+            { pattern: /(?:loan|home\s+loan|personal\s+loan|car\s+loan)\s+emi/i, weight: 1.0 },
+            { pattern: /(?:instalment|installment)\s+(?:due|payment)/i, weight: 0.9 },
+            { pattern: /loan\s+(?:repayment|disburs)/i, weight: 0.9 },
+        ],
+    },
 };
 
 // ============================================

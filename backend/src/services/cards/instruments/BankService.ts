@@ -15,20 +15,37 @@ export class BankService {
 
     // Get or create bank by name
     static async getOrCreateBank(bankName: string): Promise<Bank> {
+        // 1. First check
         const existing = await this.findBankByName(bankName);
         if (existing) return existing;
 
         // Use code-first lookup for common banks
         const bankCode = this.deriveBankCode(bankName);
 
-        const bank = await BankRepository.create({
-            name: bankName,
-            code: bankCode,
-            isActive: true
-        });
+        try {
+            // 2. Try to create
+            const bank = await BankRepository.create({
+                name: bankName,
+                code: bankCode,
+                isActive: true
+            });
 
-        this.bankCache.set(bank.name, bank);
-        return bank;
+            this.bankCache.set(bank.name, bank);
+            return bank;
+        } catch (error: any) {
+            // 3. Handle race condition (duplicate key)
+            if (error?.code === '23505' || error?.message?.includes('duplicate key') || error?.message?.includes('violates unique constraint')) {
+                // Someone else created it, fetch it again
+                // Clear cache for this name to force db lookup
+                const created = await BankRepository.findByName(bankName);
+                if (created) {
+                    this.bankCache.set(created.name, created);
+                    return created;
+                }
+            }
+            // Real error, rethrow
+            throw error;
+        }
     }
 
     // Get bank by ID
