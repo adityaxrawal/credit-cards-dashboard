@@ -28,3 +28,14 @@ dump.rdb
 frontend/dump-frontend.js
 *.dump
 *.rdb
+# Sensitive Files Ignored from History Purge
+*.rdb
+*.dump
+*_dump.js
+*.backup
+backend/src/db/seeds.sql
+backend/src/db/schema.sql
+backend/src/db/migrations/*.sql
+database/migrations/*.sql
+backend/services/api-gateway/backup/services-old/gmail/token-manager.ts
+
