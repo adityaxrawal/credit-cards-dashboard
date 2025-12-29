@@ -20,3 +20,4 @@ backend/logs
 *.png
 CC Dashboard _ Gmail Sync Flow.svg
 *.pdf
+*/*.md
