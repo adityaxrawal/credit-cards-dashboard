@@ -26,6 +26,7 @@ export class BankRepository {
         const result = await query(
             `INSERT INTO banks (name, code, logo_url, website, support_email) 
        VALUES ($1, $2, $3, $4, $5) 
+       ON CONFLICT (name) DO UPDATE SET updated_at = NOW()
        RETURNING *`,
             [data.name, data.code, data.logoUrl, data.website, data.supportEmail]
         );
