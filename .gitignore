@@ -43,3 +43,10 @@ backend/deploy.sh
 backend/backend_repo.txt
 backend_repo.txt
 
+
+# Additional sensitive artifacts restored from purge
+backend/src/services/statements/BankPDFPasswordResolver.ts
+backend/src/services/statements/password/
+src/database/supabase/migrations/*.sql
+supabase/migrations/*.sql
+
