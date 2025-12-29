@@ -21,3 +21,10 @@ backend/logs
 CC Dashboard _ Gmail Sync Flow.svg
 *.pdf
 */*.md
+
+# Sensitive dumps and artifacts
+emails_dump.json
+dump.rdb
+frontend/dump-frontend.js
+*.dump
+*.rdb
