@@ -88,10 +88,18 @@ export async function listTransactions(
     params.push(safeFilters.needsReview);
   }
   if (safeFilters.search) {
-    where.push(`(t.merchant ILIKE $${paramIndex} OR t.description ILIKE $${paramIndex})`);
+    // Use full-text search with tsvector if available, fallback to ILIKE
+    // The search_vector column is created by migration 032_add_fulltext_search.sql
+    where.push(`(
+      t.search_vector @@ plainto_tsquery('english', $${paramIndex}) 
+      OR t.merchant ILIKE $${paramIndex + 1} 
+      OR t.description ILIKE $${paramIndex + 1}
+    )`);
+    params.push(safeFilters.search);
     params.push(`%${safeFilters.search}%`);
-    paramIndex++;
+    paramIndex += 2;
   }
+
 
 
   const whereClause = where.join(' AND ');
@@ -138,6 +146,130 @@ export async function listTransactions(
   return {
     data: data as Transaction[],
     total,
+  };
+}
+
+/**
+ * List transactions with cursor-based pagination
+ * More efficient for large datasets than offset-based pagination
+ */
+export async function listTransactionsCursor(
+  userId: string,
+  filters: TransactionFilters & {
+    cursor?: string; // Base64 encoded cursor
+    direction?: 'forward' | 'backward';
+    limit?: number;
+  }
+): Promise<{
+  data: Transaction[];
+  nextCursor: string | null;
+  prevCursor: string | null;
+  hasMore: boolean;
+}> {
+  const safeFilters = filters ?? {};
+  const limit = Math.min(safeFilters.limit || 50, 100);
+  const direction = safeFilters.direction || 'forward';
+
+  const where: string[] = ['t.user_id = $1'];
+  const params: any[] = [userId];
+  let paramIndex = 2;
+
+  // Decode cursor if provided
+  let cursorDate: Date | null = null;
+  let cursorId: string | null = null;
+  if (safeFilters.cursor) {
+    try {
+      const decoded = Buffer.from(safeFilters.cursor, 'base64').toString('utf8');
+      const [dateStr, id] = decoded.split('|');
+      cursorDate = new Date(dateStr);
+      cursorId = id;
+    } catch (e) {
+      // Invalid cursor, ignore
+    }
+  }
+
+  // Apply cursor constraint
+  if (cursorDate && cursorId) {
+    if (direction === 'forward') {
+      where.push(`(t.transaction_date < $${paramIndex} OR (t.transaction_date = $${paramIndex} AND t.id < $${paramIndex + 1}))`);
+    } else {
+      where.push(`(t.transaction_date > $${paramIndex} OR (t.transaction_date = $${paramIndex} AND t.id > $${paramIndex + 1}))`);
+    }
+    params.push(cursorDate, cursorId);
+    paramIndex += 2;
+  }
+
+  // Apply other filters
+  if (safeFilters.instrumentId) {
+    where.push(`t.instrument_id = $${paramIndex++}`);
+    params.push(safeFilters.instrumentId);
+  }
+  if (safeFilters.category) {
+    where.push(`t.category = $${paramIndex++}`);
+    params.push(safeFilters.category);
+  }
+  if (safeFilters.from) {
+    where.push(`t.transaction_date >= $${paramIndex++}`);
+    params.push(safeFilters.from);
+  }
+  if (safeFilters.to) {
+    where.push(`t.transaction_date <= $${paramIndex++}`);
+    params.push(safeFilters.to);
+  }
+
+  const whereClause = where.join(' AND ');
+  const orderDir = direction === 'forward' ? 'DESC' : 'ASC';
+
+  // Fetch one extra to determine hasMore
+  const dataResult = await pool.query(
+    `SELECT t.*,
+      json_build_object(
+        'id', i.id,
+        'card_name', i.name,
+        'bank_name', b.name,
+        'last_four', i.last4
+      ) as card
+     FROM transactions t
+     LEFT JOIN instruments i ON t.instrument_id = i.id
+     LEFT JOIN banks b ON i.bank_id = b.id
+     WHERE ${whereClause}
+     ORDER BY t.transaction_date ${orderDir}, t.id ${orderDir}
+     LIMIT $${paramIndex}`,
+    [...params, limit + 1]
+  );
+
+  let data = dataResult.rows;
+  const hasMore = data.length > limit;
+
+  // Remove the extra item
+  if (hasMore) {
+    data = data.slice(0, limit);
+  }
+
+  // Reverse if going backward
+  if (direction === 'backward') {
+    data = data.reverse();
+  }
+
+  // Generate cursors
+  const encodeCursor = (tx: any): string => {
+    const cursorStr = `${tx.transaction_date.toISOString()}|${tx.id}`;
+    return Buffer.from(cursorStr).toString('base64');
+  };
+
+  const nextCursor = data.length > 0 && hasMore
+    ? encodeCursor(data[data.length - 1])
+    : null;
+
+  const prevCursor = data.length > 0 && safeFilters.cursor
+    ? encodeCursor(data[0])
+    : null;
+
+  return {
+    data: data as Transaction[],
+    nextCursor,
+    prevCursor,
+    hasMore,
   };
 }
 

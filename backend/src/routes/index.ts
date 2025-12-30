@@ -13,6 +13,9 @@ import billsRoutes from './bills.routes';
 import monitoringRoutes from './monitoring.routes';
 import statementsRoutes from './statements.routes';
 import categoriesRoutes from './categories.routes';
+import reportsRoutes from './reports.routes';
+import manualReviewRoutes from './manual-review.routes';
+import recurringRoutes from './recurring.routes';
 
 
 const router = Router();
@@ -36,6 +39,9 @@ router.use('/extraction', extractionRoutes);
 router.use('/bills', billsRoutes);
 router.use('/statements', statementsRoutes);
 router.use('/categories', categoriesRoutes);
+router.use('/reports', reportsRoutes);
+router.use('/manual-review', manualReviewRoutes);
+router.use('/recurring', recurringRoutes);
 
 
 export default router;

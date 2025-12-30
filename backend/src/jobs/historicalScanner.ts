@@ -7,6 +7,7 @@ import { WorkflowLogger } from '../utils/infrastructure/workflowLogger';
 import { universalPipeline } from '../services/transactions/pipeline/UniversalTransactionPipeline';
 import { GptQueueManager } from '../services/transactions/pipeline/GptQueueManager';
 import { SimplifiedEmail } from '../types/transaction.types'; // Use new types
+import { SanitizerService } from '../services/gmail/sanitize/sanitizer';
 import dayjs from 'dayjs';
 import { broadcastProcessingUpdate, broadcastJobComplete } from '../services/alerts/WebSocketState';
 
@@ -67,7 +68,7 @@ export async function runHistoricalScan(
     let totalFetched = 0;
 
     // Stats
-    const stats = { success: 0, failed: 0, needs_review: 0, terminated: 0, duplicate: 0 };
+    const stats = { success: 0, failed: 0, needs_review: 0, terminated: 0, duplicate: 0, billsDetected: 0 };
     // Error Collection
     const jobErrors: string[] = [];
 
@@ -237,7 +238,21 @@ export async function runHistoricalScan(
           }
         }
       }
+
+      // --- Bill Detection ---
+      try {
+        const { BillAutoService } = await import('../services/bills/BillAutoService');
+        const sanitizedEmail = await SanitizerService.sanitize(cleanEmail);
+        const bill = await BillAutoService.processEmailForBill(userId, sanitizedEmail);
+        if (bill) {
+          stats.billsDetected++;
+          // logger.info(`[HistoricalScanner] Auto-created bill ${bill.id}`);
+        }
+      } catch (billErr) {
+        logger.warn(`[HistoricalScanner] Bill auto-creation logic failed for ${cleanEmail.messageId}`, billErr);
+      }
     };
+
 
     const updateJobStats = async (jid: string, total: number, curStats: any) => {
       // Logic for total processed

@@ -20,6 +20,7 @@ interface PatternMatchResult {
     isTransaction: boolean;
     transactionType?: string;
     direction?: 'debit' | 'credit';
+    priority: number;
 }
 
 /**
@@ -89,7 +90,13 @@ export class EnhancedRuleClassifier {
         }
 
         // Sort by score (highest first)
-        matches.sort((a, b) => b.score - a.score);
+        // Sort by score (highest first), then by priority
+        matches.sort((a, b) => {
+            if (Math.abs(b.score - a.score) > 0.0001) {
+                return b.score - a.score;
+            }
+            return b.priority - a.priority;
+        });
 
         // Log match results for debugging
         if (matches.length > 0) {
@@ -216,7 +223,8 @@ export class EnhancedRuleClassifier {
             totalKeywords: pattern.keywords.length,
             isTransaction: pattern.isTransaction,
             transactionType: pattern.transactionType,
-            direction: pattern.direction
+            direction: pattern.direction,
+            priority: pattern.priority
         };
     }
 

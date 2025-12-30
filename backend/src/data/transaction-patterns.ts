@@ -124,6 +124,15 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
             { pattern: /confirm\s+your\s+application/i, weight: 10.0 },
             { pattern: /welcome\s+aboard|welcome\s+to/i, weight: 5.0 }, // Generic welcomes
             { pattern: /survey|feedback|opinion/i, weight: 10.0 },
+        ],
+        excludePatterns: [
+            // Ensure meaningful credits are NOT filtered as noise even if subject says "Account Update"
+            /successfully\s+added\s+to\s+your\s+account/i,
+            /credited\s+with\s+salary/i,
+            /neft\s+cr/i,
+            /fnf\s*settlement/i,
+            /received\s+a\s+credit/i,
+            /salary\s+credit/i
         ]
     },
 
@@ -358,6 +367,33 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
         direction: 'debit',
         keywords: [
             { pattern: /YES\s+BANK\s+-\s+Transaction\s+Alert/i, weight: 1.0 }
+        ]
+    },
+
+    // ============================================
+    // SALARY & INCOME (Priority 30)
+    // ============================================
+    SALARY_CREDIT: {
+        priority: 30,
+        isTransaction: true,
+        transactionType: 'salary',
+        direction: 'credit',
+        keywords: [
+            { pattern: /(?:salary|inward\s+salary|salary\s+credit)/i, weight: 1.0 },
+            { pattern: /credited\s+with\s+salary/i, weight: 1.0 },
+            // "FnFSettlement" - Full and Final Settlement
+            { pattern: /fnf\s*settlement/i, weight: 1.0 },
+            // HDFC Specific: "Rs.INR 25,000.00 has been successfully added to your account"
+            { pattern: /successfully\s+added\s+to\s+your\s+account/i, weight: 1.0 },
+            // Generic Credit "received a credit in your account"
+            { pattern: /received\s+a\s+credit\s+in\s+your\s+account/i, weight: 0.95 },
+            // "NEFT Cr" often used in bank statements/alerts for salary
+            { pattern: /neft\s+cr(?:-|-sb|-current)?/i, weight: 0.95 },
+            // "ACH Cr"
+            { pattern: /ach\s+cr/i, weight: 0.95 },
+        ],
+        excludePatterns: [
+            /reversal|refund/i
         ]
     },
 
@@ -881,7 +917,7 @@ export const FINANCIAL_AUTHORITIES: Record<string, {
     sbi: { domains: ['sbi', 'statebank', 'onlinesbi', 'sbicard'], displayName: 'State Bank of India', type: 'bank' },
     indusind: { domains: ['indusind', 'indusindbank'], displayName: 'IndusInd Bank', type: 'bank' },
     kotak: { domains: ['kotak', 'kotakbank', 'kotak811'], displayName: 'Kotak Mahindra Bank', type: 'bank' },
-    yes: { domains: ['yesbank'], displayName: 'Yes Bank', type: 'bank' },
+    yes: { domains: ['yesbank', 'ybl', 'yes-bank', 'alerts.yesbank', 'yes.bank.in'], displayName: 'Yes Bank', type: 'bank' },
     bob: { domains: ['bankofbaroda', 'bob'], displayName: 'Bank of Baroda', type: 'bank' },
     pnb: { domains: ['pnb', 'pnbindia'], displayName: 'Punjab National Bank', type: 'bank' },
     canara: { domains: ['canarabank'], displayName: 'Canara Bank', type: 'bank' },

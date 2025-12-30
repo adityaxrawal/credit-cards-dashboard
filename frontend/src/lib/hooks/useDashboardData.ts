@@ -10,6 +10,7 @@ import { cardApi } from "@/lib/api/cards";
 import { budgetApi } from "@/lib/api/budget";
 import { rewardsApi } from "@/lib/api/rewards";
 import { billsApi, type Bill } from "@/lib/api/bills";
+import { recurringApi } from "@/lib/api/recurring";
 
 export interface UpcomingBill {
     card_id: string;
@@ -84,6 +85,13 @@ export function useDashboardData() {
         enabled: !!user,
     });
 
+    // 8. Recurring Stats
+    const { data: recurringStats, isLoading: recurringLoading } = useQuery({
+        queryKey: queryKeys.recurring.stats,
+        queryFn: () => recurringApi.getStats(),
+        enabled: !!user,
+    });
+
     // Derived State: totalBalance = Available Credit (credit_limit - current_balance)
     const { totalBalance, totalCards, upcomingBills, totalUpcomingBillAmount } = useMemo(() => {
         if (!cards.length) return { totalBalance: 0, totalCards: 0, upcomingBills: [], totalUpcomingBillAmount: 0 };
@@ -151,7 +159,7 @@ export function useDashboardData() {
     }, [cards, billsData]);
 
     // Combined Loading State
-    const loading = overviewLoading || transactionsLoading || cardsLoading || budgetLoading || trendLoading || rewardsLoading || billsLoading;
+    const loading = overviewLoading || transactionsLoading || cardsLoading || budgetLoading || trendLoading || rewardsLoading || billsLoading || recurringLoading;
 
     // Manual Refresh Function (Invalidate all queries)
     const loadDashboardData = useCallback(async (force = false) => {
@@ -171,7 +179,9 @@ export function useDashboardData() {
                 queryClient.refetchQueries({ queryKey: queryKeys.cards.all }),
                 queryClient.refetchQueries({ queryKey: queryKeys.budget.current }),
                 queryClient.refetchQueries({ queryKey: queryKeys.analytics.trends("6m") }),
+                queryClient.refetchQueries({ queryKey: queryKeys.analytics.trends("6m") }),
                 queryClient.refetchQueries({ queryKey: queryKeys.rewards.summary }),
+                queryClient.refetchQueries({ queryKey: queryKeys.recurring.stats }),
             ]);
         }
     }, [queryClient]);
@@ -186,6 +196,7 @@ export function useDashboardData() {
         totalBalance,
         totalCards,
         totalRewards,
+        recurringStats: recurringStats || { totalMonthly: 0, activeCount: 0 },
         loading,
         loadDashboardData,
         user

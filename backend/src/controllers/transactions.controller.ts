@@ -236,3 +236,77 @@ export async function manuallyClassifyTransaction(req: AuthRequest, res: Respons
     next(error);
   }
 }
+
+/**
+ * Bulk update transactions
+ */
+export async function bulkUpdateTransactions(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user.id;
+    const { transactionIds, updates } = req.body;
+
+    if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'transactionIds must be a non-empty array',
+        },
+      });
+    }
+
+    if (transactionIds.length > 100) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Cannot update more than 100 transactions at once',
+        },
+      });
+    }
+
+    const result = await transactionsService.bulkUpdateTransactions(userId, transactionIds, updates);
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Bulk delete transactions
+ */
+export async function bulkDeleteTransactions(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user.id;
+    const { transactionIds } = req.body;
+
+    if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'transactionIds must be a non-empty array',
+        },
+      });
+    }
+
+    if (transactionIds.length > 100) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Cannot delete more than 100 transactions at once',
+        },
+      });
+    }
+
+    const result = await transactionsService.bulkDeleteTransactions(userId, transactionIds);
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}

@@ -120,12 +120,20 @@ export const analyticsApi = {
     return response as unknown as MonthlyReport[];
   },
 
-  async exportData(format: 'csv' | 'pdf'): Promise<Blob> {
-    const response = await apiClient.getClient().post(
-      `/api/reports/export?format=${format}`,
-      {},
-      { responseType: 'blob' }
-    );
+  async exportData(format: 'csv' | 'monthly_pdf' | 'category_pdf', params?: any): Promise<Blob> {
+    let url = '';
+    if (format === 'csv') {
+      url = `/api/reports/transactions/export/csv`;
+    } else if (format === 'monthly_pdf') {
+      url = `/api/reports/monthly-summary/pdf`;
+    } else if (format === 'category_pdf') {
+      url = `/api/reports/category-breakdown/pdf`;
+    }
+
+    const response = await apiClient.getClient().get(url, {
+      params,
+      responseType: 'blob'
+    });
     return response.data;
   }
 };

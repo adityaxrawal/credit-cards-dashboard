@@ -197,3 +197,97 @@ export async function getStats(req: Request, res: Response, next: NextFunction) 
   }
 }
 
+/**
+ * Reprocess a single email
+ */
+export async function reprocessEmail(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user.id;
+    const { messageId } = req.params;
+
+    if (!messageId) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'messageId is required',
+        },
+      });
+    }
+
+    logger.info('[GmailController] Reprocessing email', { userId, messageId });
+
+    const result = await gmailService.reprocessSingleEmail(userId, messageId);
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    logger.error('[GmailController] Reprocess error:', error);
+    next(error);
+  }
+}
+
+/**
+ * Manual statement upload
+ */
+export async function uploadStatement(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user.id;
+    const { cardId, statementMonth, statementYear, pdfBase64, password } = req.body;
+
+    if (!cardId || !statementMonth || !statementYear || !pdfBase64) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'cardId, statementMonth, statementYear, and pdfBase64 are required',
+        },
+      });
+    }
+
+    logger.info('[GmailController] Uploading statement', {
+      userId,
+      cardId,
+      statementMonth,
+      statementYear,
+    });
+
+    // Process the statement (implementation in GmailService)
+    const result = await gmailService.processManualStatement(userId, {
+      cardId,
+      statementMonth,
+      statementYear,
+      pdfBase64,
+      password,
+    });
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    logger.error('[GmailController] Statement upload error:', error);
+    next(error);
+  }
+}
+
+/**
+ * Incremental sync (new emails only since last sync)
+ */
+export async function incrementalSync(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user.id;
+
+    logger.info('[GmailController] Starting incremental sync', { userId });
+
+    const result = await gmailService.triggerIncrementalSync(userId);
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    logger.error('[GmailController] Incremental sync error:', error);
+    next(error);
+  }
+}

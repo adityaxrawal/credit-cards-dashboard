@@ -14,7 +14,7 @@ export class UniversalAmountExtractor {
         // 1. Explicit Currency Symbols
         // Supports: ₹ 1,23,456.78 | Rs. 500 | INR 500
         // Group 1: The Number
-        const symbolRegex = /(?:₹|INR|Rs\.?)\s*([\d,]+(?:\.\d+)?)/i;
+        const symbolRegex = /(?:₹|Rs\.?\s*INR|INR|Rs\.?)\s*([\d,]+(?:\.\d+)?)/i;
         const symbolMatch = cleanText.match(symbolRegex);
         if (symbolMatch && symbolMatch[1]) {
             const val = CurrencyNormalizer.normalize(symbolMatch[1]);

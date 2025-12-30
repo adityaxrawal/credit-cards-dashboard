@@ -10,17 +10,16 @@ export async function getAllBills(req: Request, res: Response, next: NextFunctio
     try {
         const userId = req.user.id;
         const limit = parseInt(req.query.limit as string) || 50;
-        const offset = parseInt(req.query.offset as string) || 0;
+        const cursor = req.query.cursor as string;
 
-        const bills = await billsService.getAllBills(userId, limit, offset);
+        const result = await billsService.getAllBills(userId, limit, cursor);
 
         res.json({
             success: true,
-            data: bills,
+            data: result.data,
             pagination: {
                 limit,
-                offset,
-                total: bills.length
+                nextCursor: result.nextCursor
             }
         });
     } catch (error) {
@@ -64,17 +63,16 @@ export async function getCardBills(req: Request, res: Response, next: NextFuncti
         const userId = req.user.id;
         const { cardId } = req.params;
         const limit = parseInt(req.query.limit as string) || 50;
-        const offset = parseInt(req.query.offset as string) || 0;
+        const cursor = req.query.cursor as string;
 
-        const bills = await billsService.getCardBills(userId, cardId, limit, offset);
+        const result = await billsService.getCardBills(userId, cardId, limit, cursor);
 
         res.json({
             success: true,
-            data: bills,
+            data: result.data,
             pagination: {
                 limit,
-                offset,
-                total: bills.length
+                nextCursor: result.nextCursor
             }
         });
     } catch (error) {
@@ -183,9 +181,24 @@ export async function updateBill(req: Request, res: Response, next: NextFunction
     try {
         const userId = req.user.id;
         const { billId } = req.params;
-        const updateData = req.body;
+        const LocalUpdateBillSchema = z.object({
+            cardId: z.string().uuid().optional(),
+            billMonth: z.number().min(1).max(12).optional(),
+            billYear: z.number().min(2000).optional(),
+            billAmount: z.number().positive().optional(),
+            billDate: z.string().datetime().or(z.date()).optional(),
+            dueDate: z.string().datetime().or(z.date()).optional(),
+            paymentStatus: z.enum(['paid', 'unpaid', 'partial']).optional(),
+            notes: z.string().optional()
+        });
 
-        const updatedBill = await billsService.updateBill(userId, billId, updateData);
+        const val = await LocalUpdateBillSchema.parseAsync(req.body);
+
+        const updatePayload: any = { ...val };
+        if (val.billDate) updatePayload.billDate = new Date(val.billDate);
+        if (val.dueDate) updatePayload.dueDate = new Date(val.dueDate);
+
+        const updatedBill = await billsService.updateBill(userId, billId, updatePayload);
 
         if (!updatedBill) {
             return res.status(404).json({
@@ -201,6 +214,13 @@ export async function updateBill(req: Request, res: Response, next: NextFunction
             data: updatedBill
         });
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res.status(422).json({
+                success: false,
+                error: 'Validation Error',
+                details: error.errors
+            });
+        }
         logger.error('update_bill_error', { error, userId: req.user?.id, billId: req.params.billId });
         next(error);
     }

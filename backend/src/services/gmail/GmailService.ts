@@ -418,6 +418,103 @@ export class GmailService {
       } : null
     };
   }
+
+  /**
+   * Reprocess a single email by message ID
+   */
+  async reprocessSingleEmail(userId: string, messageId: string) {
+    logger.info('[GmailService] Reprocessing email', { userId, messageId });
+
+    // Get refresh token
+    const { rows } = await this.deps.pool.query(
+      'SELECT google_refresh_token FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (!rows[0]?.google_refresh_token) {
+      throw new Error('Gmail not connected');
+    }
+
+    const rawToken = this.deps.decrypt(rows[0].google_refresh_token);
+    const message = await this.deps.gmailClient.getMessage(rawToken, messageId);
+
+    if (!message) {
+      throw new Error('Message not found');
+    }
+
+    const jobId = randomUUID();
+    const simpleEmail: SimplifiedEmail = {
+      messageId: message.id,
+      threadId: message.threadId,
+      from: message.from,
+      to: message.to,
+      subject: message.subject,
+      body: message.bodyText || message.snippet,
+      internalDate: message.date.getTime(),
+      snippet: message.snippet
+    };
+
+    const fetchAttachment = async (msgId: string, attId: string) =>
+      this.deps.gmailClient.getAttachment(rawToken, msgId, attId);
+
+    const result = await this.deps.universalPipeline.processEmail(userId, simpleEmail, jobId, fetchAttachment);
+
+    return {
+      messageId,
+      result,
+    };
+  }
+
+  /**
+   * Process a manually uploaded statement PDF
+   */
+  async processManualStatement(
+    userId: string,
+    data: {
+      cardId: string;
+      statementMonth: number;
+      statementYear: number;
+      pdfBase64: string;
+      password?: string;
+    }
+  ) {
+    logger.info('[GmailService] Processing manual statement', {
+      userId,
+      cardId: data.cardId,
+      month: data.statementMonth,
+      year: data.statementYear
+    });
+
+    // TODO: Implement PDF parsing using pdf-parse or similar
+    // For now, return a placeholder
+    return {
+      status: 'pending_implementation',
+      message: 'Manual statement processing is under development',
+      cardId: data.cardId,
+      statementMonth: data.statementMonth,
+      statementYear: data.statementYear,
+    };
+  }
+
+  /**
+   * Trigger incremental sync (only new emails since last sync)
+   */
+  async triggerIncrementalSync(userId: string) {
+    logger.info('[GmailService] Triggering incremental sync', { userId });
+
+    // Get last sync time
+    const lastSync = await this.getLastSuccessfulSync(userId);
+
+    if (!lastSync) {
+      // No previous sync, trigger full historical scan from last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      return this.triggerHistoricalScan(userId, thirtyDaysAgo);
+    }
+
+    // Trigger scan from last sync time
+    return this.triggerHistoricalScan(userId, new Date(lastSync));
+  }
 }
 
 // Default Singleton Instance

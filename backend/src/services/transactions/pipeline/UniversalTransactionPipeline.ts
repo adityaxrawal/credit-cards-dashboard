@@ -191,7 +191,27 @@ VALUES($1, $2, $3, $4, $5, NOW())
             const s3Start = Date.now();
             let isBroadFinancial = statementProcessedSuccessfully; // Auto-pass if statement was processed
 
-            if (!statementProcessedSuccessfully) {
+            // NEW: Pre-classification check - trust high-confidence matches from verified banks
+            // This prevents BroadDetector from rejecting valid transactions that the classifier already identified
+            let preClassifyResult = null;
+            if (!isBroadFinancial) {
+                try {
+                    preClassifyResult = this.deps.enhancedClassifier.classify(cleanEmail);
+                    if (preClassifyResult &&
+                        preClassifyResult.confidence >= 0.85 &&
+                        preClassifyResult.type !== 'non_financial' &&
+                        preClassifyResult.type !== 'unclassified' &&
+                        preClassifyResult.metadata?.isFromKnownBank) {
+                        // High confidence match from a verified bank sender - trust the classifier
+                        isBroadFinancial = true;
+                        logger.info(`[Pipeline] Stage 3: Bypassing BroadDetector due to pre-classification match: ${preClassifyResult.type} (${preClassifyResult.confidence.toFixed(2)}) from ${preClassifyResult.metadata?.bankName}`);
+                    }
+                } catch (err) {
+                    // Pre-classify failed, continue with normal flow
+                }
+            }
+
+            if (!isBroadFinancial && !statementProcessedSuccessfully) {
                 const text = cleanEmail.subject + ' ' + cleanEmail.cleanedBody;
                 isBroadFinancial = this.deps.broadDetector.isFinancialEmail(text);
             }

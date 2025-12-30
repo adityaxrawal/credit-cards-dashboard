@@ -202,10 +202,41 @@ async function fetchLabelEmails() {
 
         console.log('\nDone.');
 
-        // 6. Save results
+        // 6. Save results using streaming to avoid memory limits
         const outputPath = path.resolve(process.cwd(), 'emails_dump.json');
-        fs.writeFileSync(outputPath, JSON.stringify(allEmails, null, 2));
-        console.log(`Saved ${allEmails.length} emails to ${outputPath}`);
+        console.log(`Saving ${allEmails.length} emails to ${outputPath}...`);
+
+        // Stream JSON to file to avoid string length limits
+        const writeStream = fs.createWriteStream(outputPath);
+        writeStream.write('[\n');
+
+        for (let i = 0; i < allEmails.length; i++) {
+            const jsonStr = JSON.stringify(allEmails[i], null, 2);
+            // Indent each line of the object for consistent formatting
+            const indented = jsonStr.split('\n').map(line => '  ' + line).join('\n');
+            writeStream.write(indented);
+            if (i < allEmails.length - 1) {
+                writeStream.write(',\n');
+            } else {
+                writeStream.write('\n');
+            }
+
+            // Progress indication for large datasets
+            if (i > 0 && i % 5000 === 0) {
+                process.stdout.write(`\rWriting... ${i}/${allEmails.length}`);
+            }
+        }
+
+        writeStream.write(']\n');
+
+        // Wait for stream to finish
+        await new Promise<void>((resolve, reject) => {
+            writeStream.end();
+            writeStream.on('finish', resolve);
+            writeStream.on('error', reject);
+        });
+
+        console.log(`\nSaved ${allEmails.length} emails to ${outputPath}`);
 
     } catch (error) {
         console.error('Error in script:', error);

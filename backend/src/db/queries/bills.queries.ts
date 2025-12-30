@@ -3,7 +3,20 @@ import pool from '../../lib/db';
 /**
  * Get all bills for a user
  */
-export async function getAllBills(userId: string, limit: number = 50, offset: number = 0) {
+/**
+ * Get all bills for a user with cursor pagination
+ */
+export async function getAllBills(userId: string, limit: number = 50, cursor?: { dueDate: Date, id: string }) {
+  const queryParams: any[] = [userId, limit + 1];
+  let paramCount = 2;
+  let cursorCondition = '';
+
+  if (cursor) {
+    cursorCondition = `AND (bp.due_date, bp.id) < ($${paramCount + 1}, $${paramCount + 2})`;
+    queryParams.push(cursor.dueDate, cursor.id);
+    paramCount += 2;
+  }
+
   const result = await pool.query(
     `SELECT 
       bp.*,
@@ -14,9 +27,10 @@ export async function getAllBills(userId: string, limit: number = 50, offset: nu
     INNER JOIN instruments i ON bp.instrument_id = i.id
     LEFT JOIN banks b ON i.bank_id = b.id
     WHERE i.user_id = $1 AND i.type = 'credit_card'
-    ORDER BY bp.due_date DESC, bp.bill_date DESC
-    LIMIT $2 OFFSET $3`,
-    [userId, limit, offset]
+    ${cursorCondition}
+    ORDER BY bp.due_date DESC, bp.id DESC
+    LIMIT $2`,
+    queryParams
   );
 
   return result.rows;
@@ -45,7 +59,20 @@ export async function getBillById(userId: string, billId: string) {
 /**
  * Get bills for a specific card
  */
-export async function getCardBills(userId: string, cardId: string, limit: number = 50, offset: number = 0) {
+/**
+ * Get bills for a specific card with cursor pagination
+ */
+export async function getCardBills(userId: string, cardId: string, limit: number = 50, cursor?: { dueDate: Date, id: string }) {
+  const queryParams: any[] = [cardId, userId, limit + 1];
+  let paramCount = 3;
+  let cursorCondition = '';
+
+  if (cursor) {
+    cursorCondition = `AND (bp.due_date, bp.id) < ($${paramCount + 1}, $${paramCount + 2})`;
+    queryParams.push(cursor.dueDate, cursor.id);
+    paramCount += 2;
+  }
+
   const result = await pool.query(
     `SELECT 
       bp.*,
@@ -56,9 +83,10 @@ export async function getCardBills(userId: string, cardId: string, limit: number
     INNER JOIN instruments i ON bp.instrument_id = i.id
     LEFT JOIN banks b ON i.bank_id = b.id
     WHERE bp.instrument_id = $1 AND i.user_id = $2
-    ORDER BY bp.due_date DESC, bp.bill_date DESC
-    LIMIT $3 OFFSET $4`,
-    [cardId, userId, limit, offset]
+    ${cursorCondition}
+    ORDER BY bp.due_date DESC, bp.id DESC
+    LIMIT $3`,
+    queryParams
   );
 
   return result.rows;

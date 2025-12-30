@@ -48,10 +48,10 @@ export class BroadFinancialDetector {
                 score += 40;
                 reasons.push(`Verified Authority: ${authCheck.bankName}`);
             } else {
-                // C. UNKNOWN SENDER PENALTY
+                // C. UNKNOWN SENDER PENALTY (reduced to prevent false rejections)
                 // If it's not a known bank/wallet, we treat it with suspicion.
-                // It needs VERY strong signals (Verb + Amount + RefID) to pass.
-                score -= 20;
+                // It needs strong signals (Verb + Amount + RefID) to pass.
+                score -= 10;
                 reasons.push('Unknown Sender Penalty');
             }
         }
@@ -123,14 +123,15 @@ export class BroadFinancialDetector {
         const negativeSignals = /offer\s+valid|voucher|pre[- ]?approved|upgrade\s+program|newsletter|digest|market\s+highlights|upcoming\s+bill|generated\s+on|check\s+eligibility|book\s+now|register(?!\s+for\s+banking)|apply\s+now|webinar|certification|course|syllabus|training\s+session|masterclass|unsubscribe/i;
 
         // --- STRONG TRANSACTION CONFIRMATION ---
-        // Words that confirm money MOVED (to override negative signals)
-        const strongConfirmation = /debited|credited|payment\s+successful|txn\s+id|ref\s+no|transaction\s+id|authorization\s+code/i;
+        // Words that confirm money MOVED or financial action completed (to override negative signals)
+        const strongConfirmation = /debited|credited|payment\s+successful|txn\s+id|ref\s+no|transaction\s+id|authorization\s+code|e-?mandate|registration\s+success|mandate\s+(?:set|registered|approved|cancelled)|debit\s+approval/i;
 
         const hasNegative = negativeSignals.test(lowerText);
         const hasConfirmation = strongConfirmation.test(lowerText);
 
+        // Reduced penalty - many legitimate e-mandate/registration emails have mixed content
         if (hasNegative && !hasConfirmation) {
-            score -= 50;
+            score -= 30;
             reasons.push('Negative Signal Detected');
         }
 

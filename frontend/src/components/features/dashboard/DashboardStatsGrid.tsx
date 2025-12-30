@@ -1,5 +1,5 @@
 import { formatCurrency, cn } from "@/lib/utils";
-import { CreditCard, TrendingUp, Calendar, Award } from "lucide-react";
+import { CreditCard, TrendingUp, Calendar, Award, AlertCircle } from "lucide-react";
 
 interface DashboardStatsGridProps {
   totalBalance: number;
@@ -10,6 +10,7 @@ interface DashboardStatsGridProps {
   totalUpcomingBillAmount: number;
   upcomingBills: { days_until_due: number }[];
   totalRewards: number;
+  pendingReviewCount?: number;
 }
 
 export function DashboardStatsGrid({
@@ -21,6 +22,7 @@ export function DashboardStatsGrid({
   totalUpcomingBillAmount,
   upcomingBills,
   totalRewards,
+  pendingReviewCount = 0,
 }: DashboardStatsGridProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

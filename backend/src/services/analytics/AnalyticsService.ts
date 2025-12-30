@@ -206,4 +206,77 @@ export class AnalyticsService {
   static async invalidateCache(userId: string, pattern?: string) {
     await analyticsQueries.invalidateCachedAnalytics(userId, pattern);
   }
+
+  /**
+   * Year-over-Year Comparison
+   */
+  static async getYoYComparison(userId: string, year?: number) {
+    const targetYear = year || dayjs().year();
+    const prevYear = targetYear - 1;
+
+    const cacheKey = `yoy_comparison_${targetYear}`;
+    const cached = await analyticsQueries.getCachedAnalytics(userId, cacheKey);
+    if (cached) return cached;
+
+    // Get both years' data
+    const currentYearData = await this.getMonthlyCategorySpend(userId, targetYear);
+    const prevYearData = await this.getMonthlyCategorySpend(userId, prevYear);
+
+    // Calculate totals
+    const currentTotal = (currentYearData as any[]).reduce((sum: number, m: any) => sum + (m.total || 0), 0);
+    const prevTotal = (prevYearData as any[]).reduce((sum: number, m: any) => sum + (m.total || 0), 0);
+
+    const result = {
+      targetYear,
+      prevYear,
+      currentYearTotal: currentTotal,
+      prevYearTotal: prevTotal,
+      difference: currentTotal - prevTotal,
+      percentageChange: prevTotal > 0 ? ((currentTotal - prevTotal) / prevTotal) * 100 : 0,
+      currentYearMonthly: currentYearData,
+      prevYearMonthly: prevYearData,
+    };
+
+    // Cache for 24 hours if historical, 1 hour if current
+    const isCurrentYear = dayjs().year() === targetYear;
+    const expiresAt = dayjs().add(isCurrentYear ? 1 : 24, 'hour').toDate();
+    await analyticsQueries.setCachedAnalytics(userId, cacheKey, result, undefined, undefined, expiresAt);
+
+    return result;
+  }
+
+  /**
+   * Custom Date Range Analytics
+   */
+  static async getCustomRangeAnalytics(
+    userId: string,
+    startDate: Date,
+    endDate: Date
+  ) {
+    const from = dayjs(startDate).startOf('day').toDate();
+    const to = dayjs(endDate).endOf('day').toDate();
+
+    // Get aggregations for the custom range
+    const aggregations = await transactionsQueries.getSpendingAggregations(userId, {
+      from,
+      to,
+    });
+
+    // Calculate daily average
+    const days = dayjs(to).diff(dayjs(from), 'day') + 1;
+    const dailyAverage = days > 0 ? aggregations.totalSpent / days : 0;
+
+    return {
+      dateRange: {
+        start: from,
+        end: to,
+        days,
+      },
+      totalSpent: aggregations.totalSpent,
+      totalTransactions: aggregations.totalTransactions,
+      dailyAverage,
+      byCategory: aggregations.byCategory,
+    };
+  }
 }
+

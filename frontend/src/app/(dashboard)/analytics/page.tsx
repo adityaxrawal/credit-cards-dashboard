@@ -28,6 +28,7 @@ import { formatCurrency } from "@/lib/utils";
 import { analyticsApi, TopMerchant } from "@/lib/api/analytics";
 import { SpendingTrendChart } from "@/components/features/analytics/SpendingTrendChart";
 import { CategoryPieChart } from "@/components/features/analytics/CategoryPieChart";
+import { CategoryDrillDown } from "@/components/features/analytics/CategoryDrillDown";
 import { queryKeys } from "@/lib/react-query/keys";
 
 interface KPI {
@@ -216,7 +217,7 @@ export default function AnalyticsPage() {
              {/* Period selection could be added here if backend supports arbitrary ranges for overview */}
             <Button variant="secondary" onClick={async () => {
               try {
-                const blob = await analyticsApi.exportData('pdf');
+                const blob = await analyticsApi.exportData('monthly_pdf');
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -297,33 +298,29 @@ export default function AnalyticsPage() {
             </div>
 
             <TabsContent value="categories">
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="border-b border-muted-text/10">
-                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-text uppercase tracking-wider">Category</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-text uppercase tracking-wider">Total Spent</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-secondary-text uppercase tracking-wider">% of Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-muted-text/10">
-                    {pieData.map((cat) => (
-                      <tr key={cat.name}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary-text">{cat.name}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-text">{formatCurrency(cat.value)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-text">
-                            {categoryData?.totalSpent ? ((cat.value / categoryData.totalSpent) * 100).toFixed(1) : 0}%
-                        </td>
-                      </tr>
-                    ))}
-                    {pieData.length === 0 && (
-                        <tr>
-                            <td colSpan={3} className="px-6 py-4 text-center text-secondary-text">No category data available</td>
-                        </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <CategoryDrillDown 
+                categories={pieData.map(cat => ({
+                    name: cat.name,
+                    total: cat.value,
+                    count: 0 // Count not available in aggregate data yet
+                }))}
+                onExport={async () => {
+                    try {
+                        const blob = await analyticsApi.exportData('category_pdf');
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        // Use current month/year for filename if possible, otherwise generic
+                        a.download = `category_report.html`;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                    } catch (e) {
+                         console.error("Category export failed", e);
+                    }
+                }}
+              />
             </TabsContent>
             
             <TabsContent value="merchants">

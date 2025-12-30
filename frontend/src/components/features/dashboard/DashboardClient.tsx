@@ -13,6 +13,7 @@ import { DashboardUpcomingBills } from "./DashboardUpcomingBills";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/utils";
+import { DashboardSubscriptionCard } from "./DashboardSubscriptionCard";
 
 /**
  * Dashboard Page
@@ -31,7 +32,8 @@ export default function DashboardPage() {
     totalRewards,
     loading,
     loadDashboardData,
-    user
+    user,
+    recurringStats
   } = useDashboardData();
 
   const [autoSyncChecked, setAutoSyncChecked] = useState(false);
@@ -120,10 +122,13 @@ export default function DashboardPage() {
           {/* Spending Trend */}
           <div className="lg:col-span-2 bg-card-bg rounded-xl p-6 border border-muted-text/10 shadow-sm">
             <SpendingTrendChart data={spendingTrend} />
+
+
           </div>
 
           {/* Reminders / Recent Activity */}
             <div className="space-y-6">
+            <DashboardSubscriptionCard stats={recurringStats || { totalMonthly: 0, activeCount: 0 }} />
             <RemindersWidget />
             
             <DashboardRecentTransactions transactions={recentTransactions} />

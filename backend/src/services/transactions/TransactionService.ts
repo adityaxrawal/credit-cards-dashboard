@@ -382,3 +382,72 @@ export async function insertFromEmailBulk(
 }
 
 
+/**
+ * Bulk update transactions
+ */
+export async function bulkUpdateTransactions(
+  userId: string,
+  transactionIds: string[],
+  updates: Partial<{
+    merchant: string;
+    category: string;
+  }>
+): Promise<{ updated: number; failed: number }> {
+  console.log(`[TransactionService] Bulk updating ${transactionIds.length} transactions for user ${userId}`);
+
+  let updated = 0;
+  let failed = 0;
+
+  for (const id of transactionIds) {
+    try {
+      const result = await transactionsQueries.updateTransaction(userId, id, updates);
+      if (result) {
+        updated++;
+      } else {
+        failed++;
+      }
+    } catch (error) {
+      console.error(`Failed to update transaction ${id}:`, error);
+      failed++;
+    }
+  }
+
+  if (updated > 0) {
+    await invalidateTransactionCache(userId);
+  }
+
+  return { updated, failed };
+}
+
+/**
+ * Bulk delete transactions
+ */
+export async function bulkDeleteTransactions(
+  userId: string,
+  transactionIds: string[]
+): Promise<{ deleted: number; failed: number }> {
+  console.log(`[TransactionService] Bulk deleting ${transactionIds.length} transactions for user ${userId}`);
+
+  let deleted = 0;
+  let failed = 0;
+
+  for (const id of transactionIds) {
+    try {
+      const result = await transactionsQueries.deleteTransaction(userId, id);
+      if (result) {
+        deleted++;
+      } else {
+        failed++;
+      }
+    } catch (error) {
+      console.error(`Failed to delete transaction ${id}:`, error);
+      failed++;
+    }
+  }
+
+  if (deleted > 0) {
+    await invalidateTransactionCache(userId);
+  }
+
+  return { deleted, failed };
+}

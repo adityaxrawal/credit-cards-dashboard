@@ -158,3 +158,118 @@ export async function createRewardTransaction(req: AuthRequest, res: Response, n
     next(error);
   }
 }
+
+// Import RewardCalculationService for rules management
+import { RewardCalculationService } from '../services/rewards/RewardCalculationService';
+
+/**
+ * Get reward rules for the authenticated user
+ */
+export async function getRewardRules(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user.id;
+    const rules = await RewardCalculationService.getRules(userId);
+    res.json({ data: rules });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Create a new reward rule
+ */
+export async function createRewardRule(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user.id;
+
+    const RuleSchema = z.object({
+      ruleName: z.string().min(1, 'Rule name is required'),
+      category: z.string().optional(),
+      merchantPattern: z.string().optional(),
+      cardId: z.string().uuid().optional(),
+      rewardType: z.enum(['points', 'cashback', 'miles']),
+      rate: z.number().positive('Rate must be positive'),
+      rateType: z.enum(['percentage', 'fixed', 'multiplier']),
+      minAmount: z.number().optional(),
+      maxAmount: z.number().optional(),
+      capPerTransaction: z.number().optional(),
+      capPerMonth: z.number().optional(),
+    });
+
+    const validated = await RuleSchema.parseAsync(req.body);
+    const rule = await RewardCalculationService.createRule(userId, validated);
+
+    res.status(201).json({ data: rule });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(422).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid rule data',
+          details: error.errors
+        }
+      });
+    }
+    next(error);
+  }
+}
+
+/**
+ * Delete a reward rule
+ */
+export async function deleteRewardRule(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user.id;
+    const { ruleId } = req.params;
+
+    const deleted = await RewardCalculationService.deleteRule(userId, ruleId);
+
+    if (!deleted) {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Rule not found',
+        },
+      });
+    }
+
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Toggle a reward rule's active status
+ */
+export async function toggleRewardRule(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user.id;
+    const { ruleId } = req.params;
+    const { isActive } = req.body;
+
+    if (typeof isActive !== 'boolean') {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'isActive must be a boolean',
+        },
+      });
+    }
+
+    const rule = await RewardCalculationService.toggleRule(userId, ruleId, isActive);
+
+    if (!rule) {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Rule not found',
+        },
+      });
+    }
+
+    res.json({ data: rule });
+  } catch (error) {
+    next(error);
+  }
+}

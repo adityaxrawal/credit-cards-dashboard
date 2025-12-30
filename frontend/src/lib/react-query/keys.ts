@@ -25,4 +25,8 @@ export const queryKeys = {
     rewards: {
         summary: ["rewards", "summary"] as const,
     },
+    recurring: {
+        all: ["recurring"] as const,
+        stats: ["recurring", "stats"] as const,
+    },
 };

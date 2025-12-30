@@ -23,10 +23,19 @@ export class BankRepository {
     }
 
     static async create(data: Partial<Bank>): Promise<Bank> {
+        // Check for existing bank by name OR code to avoid unique constraint violations
+        const existing = await query(
+            'SELECT * FROM banks WHERE name = $1 OR code = $2',
+            [data.name, data.code]
+        );
+
+        if (existing.rows.length > 0) {
+            return existing.rows[0];
+        }
+
         const result = await query(
             `INSERT INTO banks (name, code, logo_url, website, support_email) 
        VALUES ($1, $2, $3, $4, $5) 
-       ON CONFLICT (name) DO UPDATE SET updated_at = NOW()
        RETURNING *`,
             [data.name, data.code, data.logoUrl, data.website, data.supportEmail]
         );

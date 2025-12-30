@@ -15,26 +15,31 @@ import { apiClient } from "@/lib/api-client";
 
 interface RecurringTransaction {
   id: string;
-  merchant_name: string;
-  amount: number;
-  frequency:
+  merchant: string;
+  merchantNormalized?: string;
+  typicalAmount: number;
+  frequencyType:
     | "daily"
     | "weekly"
     | "biweekly"
     | "monthly"
     | "quarterly"
-    | "annually";
+    | "yearly"
+    | "custom";
   category?: string;
-  next_execution: string;
-  last_execution?: string;
+  categoryId?: string;
+  nextExpected: string | null;
+  lastOccurrence?: string;
   status: "active" | "paused" | "completed" | "cancelled";
-  execution_count: number;
-  auto_execute: boolean;
-  notification_enabled: boolean;
-  cards?: {
-    card_name: string;
-    bank_name: string;
-  };
+  occurrenceCount: number;
+  confidenceScore: number;
+  isSubscription: boolean;
+  subscriptionType?: string;
+  userConfirmed: boolean;
+  transactionType?: string;
+  instrumentType?: string;
+  instrumentId?: string;
+  createdAt: string;
 }
 
 export default function RecurringTransactionsList() {
@@ -58,10 +63,10 @@ export default function RecurringTransactionsList() {
       setLoading(true);
       const statusParam = filter !== "all" ? `?status=${filter}` : "";
 
-      const data = await apiClient.get<RecurringTransaction[]>(
-        `/api/recurring-transactions${statusParam}`
+      const response = await apiClient.get<{success: boolean; data: RecurringTransaction[]; pagination?: any}>(
+        `/api/recurring${statusParam}`
       );
-      setTransactions(data.data || []);
+      setTransactions(response.data?.data || []);
     } catch (error) {
       console.error("Error fetching recurring transactions:", error);
     } finally {
@@ -77,7 +82,7 @@ export default function RecurringTransactionsList() {
   const handlePause = async (id: string) => {
     try {
       setActionLoading(id);
-      await apiClient.post(`/api/recurring-transactions/${id}/pause`, {});
+      await apiClient.put(`/api/recurring/${id}/pause`, {});
       showNotification("success", "Transaction paused successfully");
       fetchRecurringTransactions();
     } catch (error) {
@@ -91,7 +96,7 @@ export default function RecurringTransactionsList() {
   const handleResume = async (id: string) => {
     try {
       setActionLoading(id);
-      await apiClient.post(`/api/recurring-transactions/${id}/resume`, {});
+      await apiClient.put(`/api/recurring/${id}/resume`, {});
       showNotification("success", "Transaction resumed successfully");
       fetchRecurringTransactions();
     } catch (error) {
@@ -105,17 +110,17 @@ export default function RecurringTransactionsList() {
   const handleCancel = async (id: string, merchantName: string) => {
     if (
       !confirm(
-        `Are you sure you want to cancel recurring payment for ${merchantName}?`
+        `Are you sure you want to delete recurring pattern for ${merchantName}?`
       )
     ) {
       return;
     }
 
     try {
-      await apiClient.post(`/api/recurring-transactions/${id}/cancel`, {});
+      await apiClient.delete(`/api/recurring/${id}`);
       fetchRecurringTransactions();
     } catch (error) {
-      console.error("Error cancelling transaction:", error);
+      console.error("Error deleting pattern:", error);
     }
   };
 
@@ -126,7 +131,8 @@ export default function RecurringTransactionsList() {
       biweekly: "Bi-weekly",
       monthly: "Monthly",
       quarterly: "Quarterly",
-      annually: "Annually",
+      yearly: "Yearly",
+      custom: "Custom",
     };
     return labels[frequency] || frequency;
   };
@@ -153,7 +159,8 @@ export default function RecurringTransactionsList() {
       biweekly: 2.17,
       monthly: 1,
       quarterly: 0.33,
-      annually: 0.083,
+      yearly: 0.083,
+      custom: 1,
     };
     return amount * (multipliers[frequency] || 1);
   };
@@ -163,7 +170,7 @@ export default function RecurringTransactionsList() {
     return transactions
       .filter((t) => t.status === "active")
       .reduce(
-        (sum, t) => sum + calculateMonthlyAmount(t.amount, t.frequency),
+        (sum, t) => sum + calculateMonthlyAmount(t.typicalAmount, t.frequencyType),
         0
       );
   }, [transactions]);
@@ -173,7 +180,7 @@ export default function RecurringTransactionsList() {
   }, [transactions]);
 
   const totalExecutions = useMemo(() => {
-    return transactions.reduce((sum, t) => sum + t.execution_count, 0);
+    return transactions.reduce((sum, t) => sum + t.occurrenceCount, 0);
   }, [transactions]);
 
   if (loading) {
@@ -333,7 +340,7 @@ export default function RecurringTransactionsList() {
                         id={`transaction-name-${transaction.id}`}
                         className="text-lg font-semibold text-gray-900"
                       >
-                        {transaction.merchant_name}
+                        {transaction.merchant}
                       </h3>
                       <span
                         className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(
@@ -344,12 +351,12 @@ export default function RecurringTransactionsList() {
                       >
                         {transaction.status}
                       </span>
-                      {transaction.auto_execute && (
+                      {transaction.isSubscription && (
                         <span
                           className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800"
-                          aria-label="Automatically executes"
+                          aria-label="Subscription"
                         >
-                          Auto
+                          Subscription
                         </span>
                       )}
                     </div>
@@ -357,34 +364,40 @@ export default function RecurringTransactionsList() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
                       <div>
                         <p className="font-medium text-gray-900">Amount</p>
-                        <p>₹{transaction.amount.toFixed(2)}</p>
+                        <p>₹{transaction.typicalAmount.toFixed(2)}</p>
                       </div>
                       <div>
                         <p className="font-medium text-gray-900">Frequency</p>
-                        <p>{getFrequencyLabel(transaction.frequency)}</p>
+                        <p>{getFrequencyLabel(transaction.frequencyType)}</p>
                       </div>
                       <div>
                         <p className="font-medium text-gray-900">
-                          Next Payment
+                          Next Expected
                         </p>
                         <p>
-                          {format(
-                            new Date(transaction.next_execution),
-                            "MMM dd, yyyy"
-                          )}
+                          {transaction.nextExpected
+                            ? format(
+                                new Date(transaction.nextExpected),
+                                "MMM dd, yyyy"
+                              )
+                            : "N/A"}
                         </p>
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900">Executions</p>
-                        <p>{transaction.execution_count}</p>
+                        <p className="font-medium text-gray-900">Occurrences</p>
+                        <p>{transaction.occurrenceCount}</p>
                       </div>
                     </div>
 
-                    {transaction.cards && (
+                    {transaction.category && (
                       <div className="mt-2 text-sm text-gray-600">
-                        <span className="font-medium">Card:</span>{" "}
-                        {transaction.cards.card_name} (
-                        {transaction.cards.bank_name})
+                        <span className="font-medium">Category:</span>{" "}
+                        {transaction.category}
+                        {transaction.confidenceScore && (
+                          <span className="ml-2 text-gray-400">
+                            ({Math.round(transaction.confidenceScore * 100)}% confidence)
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -396,7 +409,7 @@ export default function RecurringTransactionsList() {
                         disabled={actionLoading === transaction.id}
                         className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Pause"
-                        aria-label={`Pause recurring payment for ${transaction.merchant_name}`}
+                        aria-label={`Pause recurring payment for ${transaction.merchant}`}
                       >
                         {actionLoading === transaction.id ? (
                           <div
@@ -414,7 +427,7 @@ export default function RecurringTransactionsList() {
                         disabled={actionLoading === transaction.id}
                         className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Resume"
-                        aria-label={`Resume recurring payment for ${transaction.merchant_name}`}
+                        aria-label={`Resume recurring payment for ${transaction.merchant}`}
                       >
                         {actionLoading === transaction.id ? (
                           <div
@@ -428,11 +441,11 @@ export default function RecurringTransactionsList() {
                     )}
                     <button
                       onClick={() =>
-                        handleCancel(transaction.id, transaction.merchant_name)
+                        handleCancel(transaction.id, transaction.merchant)
                       }
                       className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Cancel"
-                      aria-label={`Cancel recurring payment for ${transaction.merchant_name}`}
+                      title="Delete"
+                      aria-label={`Delete recurring pattern for ${transaction.merchant}`}
                     >
                       <X className="w-5 h-5" aria-hidden="true" />
                     </button>
