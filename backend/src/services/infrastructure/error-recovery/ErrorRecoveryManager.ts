@@ -8,7 +8,7 @@ export type ErrorType =
     | 'DB_CONNECTION'
     | 'TIMEOUT'
     | 'VALIDATION'
-    | 'GPT_FAILURE'
+    // GPT_FAILURE removed
     | 'EXTRACTION_FAILED'
     | 'CLASSIFICATION_FAILED'
     | 'UNKNOWN';
@@ -98,15 +98,7 @@ export class ErrorRecoveryManager {
             return 'VALIDATION';
         }
 
-        // GPT/OpenAI errors
-        if (
-            msg.includes('gpt') ||
-            msg.includes('openai') ||
-            msg.includes('rate limit') ||
-            msg.includes('api')
-        ) {
-            return 'GPT_FAILURE';
-        }
+        // GPT/OpenAI errors removed
 
         // Extraction errors
         if (msg.includes('extract') || msg.includes('extractor')) {
@@ -146,12 +138,7 @@ export class ErrorRecoveryManager {
                     reason: `Max retries (${this.MAX_RETRIES}) exceeded for ${errorType}`
                 };
 
-            case 'GPT_FAILURE':
-                // Try fallback to rule-based classification
-                return {
-                    action: 'FALLBACK',
-                    reason: 'GPT failed, attempting rule-based fallback'
-                };
+            // GPT_FAILURE case removed
 
             case 'VALIDATION':
             case 'EXTRACTION_FAILED':

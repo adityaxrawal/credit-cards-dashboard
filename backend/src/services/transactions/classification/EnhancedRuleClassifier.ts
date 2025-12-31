@@ -263,38 +263,36 @@ export class EnhancedRuleClassifier {
         return typeMap[category] || 'unclassified';
     }
 
+    // Precompiled regexes for isLikelyFinancial
+    private static readonly QUICK_REJECTION_PATTERNS = [
+        /unsubscribe|email\s+preferences/i,
+        /newsletter|blog|news\s+update/i,
+        /password\s+reset|confirm.*(?:email|account)/i,
+    ];
+
+    private static readonly FINANCIAL_INDICATORS_PATTERNS = [
+        /[₹Rs.INR]\s*[\d,]+/i,  // Currency amounts
+        /(?:debited|credited|withdrawn|deposited)/i,
+        /(?:payment|transaction|transfer)\s+(?:of|for|successful)/i,
+        /(?:credit|debit)\s+card.*(?:used|charged|ended)/i,
+        /upi|neft|imps|rtgs/i,
+        /(?:bank|savings|current)\s+(?:account|a\/c)/i,
+    ];
+
     /**
      * Quick check if email is likely financial (for use in broad detection)
      */
     static isLikelyFinancial(text: string): { isFinancial: boolean; confidence: number; reason?: string } {
         const lowerText = text.toLowerCase();
 
-        // Quick rejection patterns
-        const rejectionPatterns = [
-            /unsubscribe|email\s+preferences/i,
-            /newsletter|blog|news\s+update/i,
-            // /otp|verification\s+code|one[- ]?time\s+password/i, // Removed: Causes false negatives when found in footers
-            /password\s+reset|confirm.*(?:email|account)/i,
-        ];
-
-        for (const pattern of rejectionPatterns) {
+        for (const pattern of this.QUICK_REJECTION_PATTERNS) {
             if (pattern.test(lowerText)) {
                 return { isFinancial: false, confidence: 0.9, reason: 'Matched rejection pattern' };
             }
         }
 
-        // Check for financial indicators
-        const financialIndicators = [
-            /[₹Rs.INR]\s*[\d,]+/i,  // Currency amounts
-            /(?:debited|credited|withdrawn|deposited)/i,
-            /(?:payment|transaction|transfer)\s+(?:of|for|successful)/i,
-            /(?:credit|debit)\s+card.*(?:used|charged|ended)/i,
-            /upi|neft|imps|rtgs/i,
-            /(?:bank|savings|current)\s+(?:account|a\/c)/i,
-        ];
-
         let matchCount = 0;
-        for (const pattern of financialIndicators) {
+        for (const pattern of this.FINANCIAL_INDICATORS_PATTERNS) {
             if (pattern.test(lowerText)) {
                 matchCount++;
             }

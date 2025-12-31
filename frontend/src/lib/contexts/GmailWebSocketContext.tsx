@@ -123,6 +123,8 @@ export function GmailWebSocketProvider({ children }: { children: React.ReactNode
           fetched: payload.totalEmails ?? payload.fetched ?? prev.fetched,
           processed: payload.totalProcessed ?? payload.processed ?? prev.processed,
           errors: payload.totalErrors ?? payload.errors ?? prev.errors,
+          // Pass through queueStatus for frontend visualization
+          queueStatus: payload.queueStatus ?? prev.queueStatus,
           
           isSyncing: payload.status !== 'COMPLETED' && payload.status !== 'FAILED',
           status: payload.status || prev.status,

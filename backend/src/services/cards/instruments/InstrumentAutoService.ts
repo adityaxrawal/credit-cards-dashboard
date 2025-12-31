@@ -155,6 +155,28 @@ export class InstrumentAutoService {
 
         if (existingCard) {
             logger.debug(`[InstrumentAutoService] Found existing ${type}: ${existingCard.id} (ending ${normalizedLast4})`);
+
+            // Check if we can "upgrade" a generic card to a specific bank card
+            const bank = await this.detectBankFromEmail(email);
+            if (bank && !existingCard.bankId) {
+                logger.info(`[InstrumentAutoService] Upgrading generic card ${existingCard.id} to ${bank.name}`);
+
+                const updatedCard = await InstrumentRepository.update(existingCard.id, {
+                    bankId: bank.id,
+                    name: `${bank.name} ${type === 'credit_card' ? 'Credit Card' : 'Debit Card'}`,
+                    // Preserve original metadata but unmark generic if set
+                    metadata: {
+                        ...existingCard.metadata,
+                        isGeneric: false,
+                        bankDetectedAt: new Date().toISOString()
+                    }
+                });
+
+                // Clear cache
+                InstrumentRegistry.clearCache(userId);
+                return updatedCard;
+            }
+
             return existingCard;
         }
 

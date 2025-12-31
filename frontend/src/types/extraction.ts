@@ -1,6 +1,6 @@
 export interface TransactionExtractionMetadata {
-    extractedBy: 'RULE_BASED' | 'GPT';
-    detectionMethod: 'rule-based' | 'gpt';
+    extractedBy: 'RULE_BASED';
+    detectionMethod: 'rule-based';
     detectionConfidence: number;
     confidenceScore: number; // 0-1
     emailmessageid: string;

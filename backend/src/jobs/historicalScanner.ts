@@ -5,11 +5,14 @@ import { GmailFetcherService } from '../services/gmail/fetcher';
 import logger from '../utils/infrastructure/logger';
 import { WorkflowLogger } from '../utils/infrastructure/workflowLogger';
 import { universalPipeline } from '../services/transactions/pipeline/UniversalTransactionPipeline';
-import { GptQueueManager } from '../services/transactions/pipeline/GptQueueManager';
-import { SimplifiedEmail } from '../types/transaction.types'; // Use new types
+// GptQueueManager removed
+import { SimplifiedEmail } from '../types/transaction.types';
 import { SanitizerService } from '../services/gmail/sanitize/sanitizer';
 import dayjs from 'dayjs';
 import { broadcastProcessingUpdate, broadcastJobComplete } from '../services/alerts/WebSocketState';
+import { dbWriteQueueManager } from '../services/infrastructure/DbWriteQueueManager';
+import { ProcessingWorkerPool } from '../services/infrastructure/ProcessingWorkerPool';
+import { circuitBreakerManager } from '../services/infrastructure/CircuitBreakerManager';
 
 /**
  * Historical Email Scanner (Optimized for 200/sec Throughput)
@@ -76,10 +79,17 @@ export async function runHistoricalScan(
     const FETCH_BATCH_SIZE = 100;  // Increased for throughput
     const HIGH_WATER_MARK = 500;  // Run ahead aggressively
     const LOW_WATER_MARK = 100;   // Resume sooner
+    const WORKER_CONCURRENCY = 50; // Fixed concurrency workers
 
-    // --- GPT QUEUE ---
-    const gptQueueManager = new GptQueueManager();
-    gptQueueManager.start();
+    // Rate tracking
+    let fetchStartTime = Date.now();
+    let processStartTime = Date.now();
+    let lastRateCalc = Date.now();
+    let processedSinceLastCalc = 0;
+    let fetchRate = 0;
+    let processRate = 0;
+
+    // GptQueueManager removed
 
     // --- PRODUCER LOOP (FETCH) ---
     const fetchLoop = async () => {
@@ -102,13 +112,23 @@ export async function runHistoricalScan(
           WorkflowLogger.log('FETCH', `Listing batch...`, { jobId });
 
           const fetchStart = Date.now();
-          const { messages, nextPageToken } = await GmailFetcherService.fetchBatch(refreshToken, userId, query, FETCH_BATCH_SIZE, pageToken);
+
+          // Circuit Breaker for Gmail API
+          const { messages, nextPageToken } = await circuitBreakerManager.withGmail(
+            () => GmailFetcherService.fetchBatch(refreshToken, userId, query, FETCH_BATCH_SIZE, pageToken)
+          );
+
           pageToken = nextPageToken;
           console.log(`[PHASE: FETCH] Fetched ${messages.length} messages in ${Date.now() - fetchStart}ms`);
 
           if (messages.length > 0) {
             totalFetched += messages.length;
             processingQueue.push(...messages as any[]);
+
+            // Get real-time queue depths
+            const dbDepths = dbWriteQueueManager.getQueueDepths();
+            const totalDbQueue = Object.values(dbDepths).reduce((sum, d) => sum + d, 0);
+
             WorkflowLogger.log('FETCH', `Pushed ${messages.length} to queue. Total Fetched: ${totalFetched}`, { jobId, queueSize: processingQueue.length });
 
             // Broadcast fetch progress immediately
@@ -120,7 +140,11 @@ export async function runHistoricalScan(
               totalProcessed: stats.success + stats.failed + stats.terminated + stats.duplicate + stats.needs_review,
               ...(stats.success > 0 && { totalTransactions: stats.success }),
               totalErrors: stats.failed,
-              queueStatus: { queue1: processingQueue.length, queue2: 0, queue3: 0 }
+              queueStatus: {
+                queue1: processingQueue.length,
+                queue2: totalDbQueue, // DB Writes
+
+              }
             });
           }
 
@@ -143,59 +167,95 @@ export async function runHistoricalScan(
       }
     };
 
-    // --- CONSUMER LOOP (PROCESS) ---
+    // --- CONSUMER LOOP (PROCESS) - Using Worker Pool ---
     const processLoop = async () => {
       logger.info(`[PROCESS] Starting consumer loop for job ${jobId}`);
-      console.log(`\nStarting Parallel Process Loop (Concurrency: 10)`);
+      console.log(`\nStarting Worker Pool Process Loop (Concurrency: ${WORKER_CONCURRENCY})`);
+      processStartTime = Date.now();
 
       let consecutiveErrors = 0;
       const MAX_CONSECUTIVE_ERRORS = 50;
 
+      // Create worker pool for processing
+      const workerPool = new ProcessingWorkerPool<SimplifiedEmail, void>(
+        { concurrency: WORKER_CONCURRENCY, name: `EmailProcessor-${jobId}` },
+        async (email) => {
+          await processSingleEmail(email);
+          processedSinceLastCalc++;
+        },
+        () => {
+          consecutiveErrors = 0; // Reset on success
+        },
+        (email, error) => {
+          console.error(`Error processing email ${email.messageId}`, error);
+          stats.failed++;
+          consecutiveErrors++;
+        }
+      );
+      workerPool.start();
+
+      // Feed emails to worker pool
       while (isFetching || processingQueue.length > 0) {
         // Circuit Breaker
         if (consecutiveErrors > MAX_CONSECUTIVE_ERRORS) {
           logger.error(`[PROCESS] Circuit breaker tripped! Over ${MAX_CONSECUTIVE_ERRORS} consecutive errors. Aborting job.`);
           console.error(`[JOB FAIL] Circuit breaker tripped! Aborting job ${jobId}`);
-          isFetching = false; // Stop producer
-          processingQueue.length = 0; // Clear queue
+          isFetching = false;
+          processingQueue.length = 0;
           break;
         }
 
         if (processingQueue.length === 0) {
-          // Wait briefly for producer
           await new Promise(r => setTimeout(r, 50));
           continue;
         }
 
-        // Take a chunk off the queue
-        // With semaphore=30, process 15 emails at a time for maximum throughput
-        const batchSize = 15;
-        const batch = processingQueue.splice(0, batchSize);
-        const batchStartTime = Date.now();
-        console.log(`\n[PROCESS] Batch Start. Size: ${batch.length}. Queue Rem: ${processingQueue.length}`);
+        // Submit items to worker pool (it handles concurrency internally)
+        const batch = processingQueue.splice(0, Math.min(WORKER_CONCURRENCY, processingQueue.length));
+        workerPool.submitBatch(batch);
 
-        // Process this batch in parallel
-        await Promise.all(batch.map(async (email) => {
-          try {
-            await processSingleEmail(email);
-            consecutiveErrors = 0; // Reset on success
-          } catch (e) {
-            console.error(`Error processing email ${email.messageId}`, e);
-            stats.failed++;
-            consecutiveErrors++;
-          }
-        }));
-
-        const batchDuration = Date.now() - batchStartTime;
-        console.log(`[PHASE: PROCESS] Processed ${batch.length} emails in ${batchDuration}ms (${Math.round(batch.length / (batchDuration / 1000))} emails/sec)`);
-
-        // Update DB/WS more frequently - every batch (approx 15 items)
-        const processed = stats.success + stats.failed + stats.terminated + stats.duplicate + stats.needs_review;
-        if (true) { // Always update after a batch
-          await updateJobStats(jobId, totalFetched, stats);
+        // Calculate rates periodically
+        const now = Date.now();
+        if (now - lastRateCalc >= 1000) {
+          processRate = Math.round(processedSinceLastCalc / ((now - lastRateCalc) / 1000));
+          processedSinceLastCalc = 0;
+          lastRateCalc = now;
         }
+
+        // Update DB/WS asynchronously - FIRE AND FORGET (non-blocking)
+        const processed = stats.success + stats.failed + stats.terminated + stats.duplicate + stats.needs_review;
+        void updateJobStats(jobId, totalFetched, stats);
+
+        // Calculate total DB queue depth
+        const dbDepths = dbWriteQueueManager.getQueueDepths();
+        const totalDbQueue = Object.values(dbDepths).reduce((sum, d) => sum + d, 0);
+
+        // Enhanced WebSocket update with queue depths and rates
+        broadcastProcessingUpdate(jobId, {
+          jobId,
+          status: 'PROCESSING',
+          currentStep: 'PROCESSING_AND_FETCHING',
+          totalEmails: totalFetched,
+          totalProcessed: processed,
+          totalTransactions: stats.success,
+          totalErrors: stats.failed,
+          queueStatus: {
+            queue1: processingQueue.length + workerPool.getQueueDepth(), // Total processing backlog
+            queue2: totalDbQueue, // DB Writes
+
+          }
+        });
+
+        // Small delay to prevent tight loop
+        await new Promise(r => setTimeout(r, 10));
       }
-      logger.info(`[PROCESS] Consumer loop finished. Queue empty and fetch complete.`);
+
+      // Wait for worker pool to drain
+      await workerPool.drain();
+      workerPool.stop();
+
+      const poolStats = workerPool.getStats();
+      logger.info(`[PROCESS] Consumer loop finished. Pool stats: processed=${poolStats.totalProcessed}, failed=${poolStats.totalFailed}`);
     };
 
     // --- PROCESS SINGLE EMAIL ---
@@ -204,30 +264,15 @@ export async function runHistoricalScan(
         return gmailClient.getAttachment(refreshToken, msgId, attId);
       };
 
-      // Delegate to Universal Pipeline with skipGpt option
-      // We pass skipGpt: true to offload low-confidence items to the background workers
-      const result = await universalPipeline.processEmailInternal(userId, cleanEmail, jobId, fetchAttachment, { skipGpt: true });
+      // Delegate to Universal Pipeline
+      const result = await universalPipeline.processEmailInternal(userId, cleanEmail, jobId, fetchAttachment);
 
       // Update Stats based on result
       if (result.status === 'success') stats.success++;
       else if (result.status === 'terminated') stats.terminated++;
       else if (result.status === 'duplicate') stats.duplicate++;
       else if (result.status === 'needs_review') stats.needs_review++;
-      else if (result.status === 'queued_for_gpt') {
-        // Enqueue to GPT Manager
-        gptQueueManager.enqueue({
-          userId,
-          cleanEmail: result.cleanEmail!, // Assert existing because status is queued_for_gpt
-          rawEmail: cleanEmail,
-          jobId,
-          rawEmailId: result.rawEmailId || '',
-          onComplete: () => {
-            // We can update a separate counter if needed, or rely on job stats polling
-          }
-        });
-        // We count this as "queued" for now, not success or failure yet.
-        // Effectively "pending"
-      }
+
       else if (result.status === 'failed') {
         stats.failed++;
         // Capture error
@@ -256,44 +301,39 @@ export async function runHistoricalScan(
 
     const updateJobStats = async (jid: string, total: number, curStats: any) => {
       // Logic for total processed
-      // Map old columns to new metrics roughly
-      // rule_based_success -> success (approx)
-      // terminated_count -> terminated
-      // queued_for_gpt -> 0 (handled mostly internally, or map needs_review here?)
-      // Let's map 'needs_review' to a field or just count it as success but flagged
-
       const processed = curStats.success + curStats.failed + curStats.terminated + curStats.duplicate + curStats.needs_review;
       const progress = total > 0 ? Math.floor((processed / total) * 100) : 0;
 
       // Persist partial errors if any
       const errorsJson = jobErrors.length > 0 ? JSON.stringify(jobErrors) : '[]';
 
-      await safeQuery(
-        `UPDATE gmail_sync_jobs 
-             SET total_messages = $1, 
-                 emails_fetched = $1,
-                 processed_count = $2,
-                 progress = $3,
-                 rule_based_success = $4, 
-                 rule_based_failure = $5, -- Map failed here
-                 queued_for_gpt = $6, -- Map needs_review here for visibility? Or just use metadata
-                 terminated_count = $7, 
-                 errors = $8::jsonb,
-                 last_update_at = NOW()
-             WHERE id = $9`,
-        [total, processed, progress, curStats.success, curStats.failed, curStats.needs_review, curStats.terminated, errorsJson, jid]
-      );
+      // Queue DB write instead of awaiting - FIRE AND FORGET
+      dbWriteQueueManager.enqueue('job_stats', {
+        jobId: jid,
+        total,
+        processed,
+        progress,
+        success: curStats.success,
+        failed: curStats.failed,
+        needsReview: curStats.needs_review,
+        terminated: curStats.terminated,
+        errors: jobErrors
+      });
 
-      // Broadcast real-time update via WebSocket
+      // Broadcast real-time update via WebSocket with enhanced data
       broadcastProcessingUpdate(jid, {
         jobId: jid,
         status: 'PROCESSING',
-        currentStep: 'PROCESSING_AND_FETCHING', // Unified step name to avoid flickering
+        currentStep: 'PROCESSING_AND_FETCHING',
         totalEmails: total,
         totalProcessed: processed,
         totalTransactions: curStats.success,
         totalErrors: curStats.failed,
-        queueStatus: { queue1: processingQueue.length, queue2: 0, queue3: 0 }
+        queueStatus: {
+          queue1: processingQueue.length,
+          queue2: dbWriteQueueManager.getQueueDepths().transactions || 0,
+
+        }
       });
     };
 
@@ -308,19 +348,17 @@ export async function runHistoricalScan(
     ]);
 
     const duration = (Date.now() - start) / 1000;
-    const fetchRate = Math.round(totalFetched / duration);
-    const processRate = Math.round((stats.success + stats.failed + stats.terminated + stats.needs_review) / duration);
+    fetchRate = Math.round(totalFetched / duration);
+    processRate = Math.round((stats.success + stats.failed + stats.terminated + stats.needs_review) / duration);
 
-    // Wait for GPT Queue to drain
-    logger.info(`[HistoricalScanner] Fetch/Rule pipeline done. Waiting for GPT Queue to drain...`);
-    await gptQueueManager.drain();
-    gptQueueManager.stop();
+    // GPT Queue draining removed
 
-    // Merge GPT stats
-    stats.success += gptQueueManager.stats.success;
-    stats.failed += gptQueueManager.stats.failed;
-    stats.terminated += gptQueueManager.stats.nonFinancial;
-    // stats.queued is purely internal
+    // Wait for DB Write Queue to drain
+    logger.info(`[HistoricalScanner] Waiting for DB Write Queue to drain...`);
+    await dbWriteQueueManager.drain();
+    logger.info(`[HistoricalScanner] All queues drained.`);
+
+    // GPT stats merging removed
 
     // Log completion metrics at INFO level representing new pipeline stats
     logger.info(`[HistoricalScanner] Scan ${jobId} completed`, {
@@ -328,8 +366,7 @@ export async function runHistoricalScan(
       totalFetched,
       fetchRate: `${fetchRate}/sec`,
       processRate: `${processRate}/sec`,
-      stats,
-      gptStats: gptQueueManager.stats
+      stats
     });
     WorkflowLogger.log('COMPLETED', `Scan finished in ${duration}s. Rate: ${fetchRate}/sec`, { jobId, stats });
 

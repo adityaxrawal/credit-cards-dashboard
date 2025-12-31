@@ -1,4 +1,6 @@
 import pool, { safeQuery } from '../../../lib/db';
+import { dbWriteQueueManager } from '../../infrastructure/DbWriteQueueManager';
+import * as crypto from 'crypto';
 import logger from '../../../utils/infrastructure/logger';
 import { SimplifiedEmail, CleanEmail, PipelineResult, TransactionType, TransactionDirection, InstrumentType } from '../../../types/transaction.types';
 import { InstrumentAutoService } from '../../cards/instruments/InstrumentAutoService';
@@ -8,8 +10,9 @@ import { SanitizerService } from '../../gmail/sanitize/sanitizer';
 import { BroadFinancialDetector } from '../detection/BroadFinancialDetector';
 import { TerminatorService } from '../../infrastructure/termination/TerminatorService';
 import { ClassifierRegistry } from '../classification/ClassifierRegistry';
-import { GPTClassifier } from '../classification/GPTClassifier';
+// classifierRegistry: typeof ClassifierRegistry; (Previous line)
 import { EnhancedRuleClassifier } from '../classification/EnhancedRuleClassifier';
+
 import { TransactionExtractorFactory } from '../extraction/TransactionExtractorFactory';
 import { InstrumentService } from '../../cards/instruments/InstrumentService';
 import { ManualReviewService } from '../../infrastructure/error-recovery/ManualReviewService';
@@ -28,7 +31,7 @@ export interface IPipelineDependencies {
     broadDetector: typeof BroadFinancialDetector;
     terminator: typeof TerminatorService;
     classifierRegistry: typeof ClassifierRegistry;
-    gptClassifier: typeof GPTClassifier;
+    // gptClassifier removed
     enhancedClassifier: typeof EnhancedRuleClassifier;
     extractorFactory: typeof TransactionExtractorFactory;
     instrumentService: typeof InstrumentService;
@@ -57,7 +60,7 @@ export class UniversalTransactionPipeline {
         rawEmail: SimplifiedEmail,
         jobId: string,
         fetchAttachmentFn: (msgId: string, attId: string) => Promise<Buffer | null>,
-        options: { skipGpt?: boolean } = {}
+
     ): Promise<PipelineResult> {
         let rawEmailId: string = '';
         const startTime = Date.now();
@@ -68,20 +71,20 @@ export class UniversalTransactionPipeline {
             console.log(`[PIPELINE] Processing: ${rawEmail.subject.substring(0, 50)}...[${rawEmail.messageId}]`);
 
             // ========================================
-            // STAGE 1: SAVE RAW (Audit Trail)
+            // STAGE 1: SAVE RAW (Audit Trail) - QUEUED, NON-BLOCKING
             // ========================================
             const s1Start = Date.now();
-            // Note: Keeping pool call direct for now as it wasn't in the plan to abstract DB connection
-            const rawInsert = await safeQuery(
-                `INSERT INTO gmail_scanned_emails
-    (user_id, message_id, internal_date, raw_snippet, scan_job_id, scanned_at)
-VALUES($1, $2, $3, $4, $5, NOW())
-         ON CONFLICT(user_id, message_id) DO UPDATE SET scan_job_id = EXCLUDED.scan_job_id
-         RETURNING id`,
-                [userId, rawEmail.messageId, rawEmail.internalDate, rawEmail.snippet || '', jobId]
-            );
-            rawEmailId = rawInsert.rows[0].id;
-            logger.debug(`[Pipeline] Stage 1(Audit) took ${Date.now() - s1Start} ms`);
+            // Generate UUID client-side for immediate use, queue the DB write
+            rawEmailId = crypto.randomUUID();
+            dbWriteQueueManager.enqueue('scanned_emails', {
+                id: rawEmailId,
+                userId,
+                messageId: rawEmail.messageId,
+                internalDate: rawEmail.internalDate,
+                snippet: rawEmail.snippet || '',
+                jobId
+            });
+            logger.debug(`[Pipeline] Stage 1(Audit) queued in ${Date.now() - s1Start}ms`);
 
             // ========================================
             // STAGE 2: SANITIZE (Extract & Clean Text)
@@ -312,23 +315,26 @@ VALUES($1, $2, $3, $4, $5, NOW())
             // If verification failed or confidence is low, set needs_review
             if (!classificationResult || classificationResult.confidence < 0.75) {
                 logger.warn(`[Pipeline] Low confidence(${classificationResult?.confidence || 0}), marking for review`);
-                await this.deps.terminator.terminate(
-                    userId,
-                    cleanEmail.id,
-                    `Low confidence classification: ${classificationResult?.confidence || 0} `,
-                    classificationStage,
-                    'LOW_CONFIDENCE',
-                    jobId,
-                    rawEmailId
-                );
 
-                // Save as unclassified transaction for review
-                await this.deps.transactionsQueries.createTransaction({
+                // Queue termination record (non-blocking)
+                dbWriteQueueManager.enqueue('terminations', {
+                    userId,
+                    emailId: cleanEmail.id,
+                    reason: `Low confidence classification: ${classificationResult?.confidence || 0}`,
+                    stage: classificationStage,
+                    type: 'LOW_CONFIDENCE',
+                    scanJobId: jobId,
+                    rawEmailId
+                });
+
+                // Queue unclassified transaction for review (non-blocking)
+                dbWriteQueueManager.enqueue('transactions', {
+                    id: crypto.randomUUID(),
                     userId,
                     transactionDate: new Date(rawEmail.internalDate),
-                    merchant: cleanEmail.subject, // Fallback merchant
+                    merchant: cleanEmail.subject,
                     category: 'Unclassified',
-                    amount: 0.01, // Mock amount for unclassified
+                    amount: 0.01,
                     transactionType: 'unclassified',
                     emailMessageId: cleanEmail.id,
                     emailSubject: cleanEmail.subject,
@@ -342,7 +348,7 @@ VALUES($1, $2, $3, $4, $5, NOW())
                     rawExtraction: classificationResult
                 });
 
-                logger.info(`<< <[PIPELINE END] ${rawEmail.messageId} - Needs Review`);
+                logger.info(`<<<[PIPELINE END] ${rawEmail.messageId} - Needs Review`);
                 return { status: 'needs_review', reason: 'low_confidence' };
             }
 
@@ -431,7 +437,10 @@ VALUES($1, $2, $3, $4, $5, NOW())
         // If classification is 'unclassified', skip extraction and mark for review
         if (classificationResult.type === 'unclassified') {
             logger.info(`[Pipeline] Skipping extraction for unclassified type, marking for review`);
-            await this.deps.transactionsQueries.createTransaction({
+
+            // Queue transaction write (non-blocking)
+            dbWriteQueueManager.enqueue('transactions', {
+                id: crypto.randomUUID(),
                 userId,
                 transactionDate: new Date(internalDate),
                 merchant: subject,
@@ -450,10 +459,10 @@ VALUES($1, $2, $3, $4, $5, NOW())
                 rawExtraction: classificationResult
             });
 
-            // NEW: Add to Manual Review Repository
-            await UnclassifiedRepository.add(cleanEmail, 'Unclassified');
+            // Add to Manual Review Repository (keep sync for now - file operation is fast)
+            void UnclassifiedRepository.add(cleanEmail, 'Unclassified');
 
-            logger.info(`<< <[PIPELINE END] ${messageId} - Marked for Review(Unclassified)`);
+            logger.info(`<<<[PIPELINE END] ${messageId} - Marked for Review(Unclassified)`);
             return { status: 'needs_review', reason: 'unclassified' };
         }
 
@@ -487,8 +496,9 @@ VALUES($1, $2, $3, $4, $5, NOW())
         } catch (error) {
             logger.warn(`[Pipeline] Extraction failed via rules(${error instanceof Error ? error.message : String(error)}). Marking as Unclassified for Review.`);
 
-            // NEW: Instead of AI Fallback, we strictly fail to Manual Review
-            await this.deps.transactionsQueries.createTransaction({
+            // Queue transaction write (non-blocking)
+            dbWriteQueueManager.enqueue('transactions', {
+                id: crypto.randomUUID(),
                 userId,
                 transactionDate: new Date(internalDate),
                 merchant: subject,
@@ -507,21 +517,27 @@ VALUES($1, $2, $3, $4, $5, NOW())
                 rawExtraction: classificationResult
             });
 
-            // Add to Manual Review Repository
-            await UnclassifiedRepository.add(cleanEmail, `Extraction Failed: ${classificationResult.type}`);
+            // Add to Manual Review Repository (fire-and-forget)
+            void UnclassifiedRepository.add(cleanEmail, `Extraction Failed: ${classificationResult.type}`);
 
-            logger.info(`<< <[PIPELINE END] ${messageId} - Marked for Review(Extraction Failed)`);
+            logger.info(`<<<[PIPELINE END] ${messageId} - Marked for Review(Extraction Failed)`);
             return { status: 'needs_review', reason: 'extraction_failed', error: String(error) };
         }
 
         // ========================================
-        // STAGE 6: PERSIST (Save to DB)
+        // STAGE 6: PERSIST (Save to DB) - QUEUED, NON-BLOCKING
         // ========================================
         const s6Start = Date.now();
-        const txnResult = await this.deps.transactionsQueries.createTransaction({
+
+        // Generate transaction ID client-side for immediate return
+        const transactionId = crypto.randomUUID();
+
+        // Queue transaction write
+        dbWriteQueueManager.enqueue('transactions', {
+            id: transactionId,
             userId,
             instrumentType: extracted.instrumentType,
-            instrumentId: extracted.instrumentId || undefined,
+            instrumentId: extracted.instrumentId || null,
             transactionDate: new Date(internalDate),
             merchant: extracted.merchant || 'Unknown Merchant',
             category: extracted.category || 'Others',
@@ -543,123 +559,23 @@ VALUES($1, $2, $3, $4, $5, NOW())
             metadata: extracted.metadata || {}
         });
 
-        if (!txnResult) {
-            logger.warn(`[Pipeline] Duplicate transaction detected`);
-            await this.deps.terminator.terminate(
-                userId,
-                cleanEmail.id,
-                'Duplicate transaction',
-                'stage_6_persist',
-                'DUPLICATE',
-                jobId,
-                rawEmailId
-            );
-            logger.info(`<< <[PIPELINE END] ${messageId} - Is Duplicate`);
-            return { status: 'duplicate' };
-        }
+        // Queue scanned email update
+        dbWriteQueueManager.enqueue('scanned_email_updates', {
+            userId,
+            messageId: cleanEmail.id,
+            transactionId
+        });
 
-        const transactionId = txnResult.id;
-        logger.info(`[Pipeline] Transaction created successfully: ${transactionId} `);
-
-        // Mark scanned email as processed
-        await this.deps.scannedEmailsQueries.updateScannedEmailProcessed(userId, cleanEmail.id, transactionId);
-
-        logger.debug(`[Pipeline] Stage 6(Persist) took ${Date.now() - s6Start} ms`);
-        logger.info(`<< <[PIPELINE END] ${messageId} - Total: ${Date.now() - startTime}ms Transaction: ${transactionId} `);
-        console.log(`✅[PIPELINE SUCCESS] ${messageId} -> Transaction: ${transactionId} `);
+        logger.debug(`[Pipeline] Stage 6(Persist) queued in ${Date.now() - s6Start}ms`);
+        logger.info(`<<<[PIPELINE END] ${messageId} - Total: ${Date.now() - startTime}ms Transaction: ${transactionId}`);
+        console.log(`✅[PIPELINE SUCCESS] ${messageId} -> Transaction: ${transactionId}`);
         return { status: 'success', transactionId };
     }
 
-    public async processGptOnly(
-        userId: string,
-        cleanEmail: CleanEmail,
-        jobId: string,
-        rawEmailId: string
-    ): Promise<PipelineResult> {
-        const startTime = Date.now();
-        logger.info(`[Pipeline - GPT] Starting GPT - only processing for ${cleanEmail.id}`);
+    // processGptOnly method removed
 
-        try {
-            const gptResult = await this.classifyWithGPT(userId, cleanEmail);
-            let classificationResult = gptResult;
-            let classificationMethod = 'gpt';
 
-            // CHECK: If GPT returned non_financial, terminate immediately
-            if (classificationResult && (classificationResult as any).type === 'non_financial') {
-                await this.deps.terminator.terminate(
-                    userId,
-                    cleanEmail.id,
-                    `GPT classification: non - financial(${classificationResult.metadata?.reason || 'No reason'})`,
-                    'stage_4_gpt_fallback',
-                    'NON_FINANCIAL',
-                    jobId,
-                    rawEmailId
-                );
-                logger.info(`<< <[PIPELINE-GPT END] ${cleanEmail.id} - Terminated(GPT Non - Financial)`);
-                return { status: 'terminated', reason: 'non_financial' };
-            }
-
-            // If confidence is still low, maybe fallback to Unclassified?
-            if (!classificationResult || classificationResult.confidence < 0.75) {
-                // ... termination logic copied or reused ...
-                logger.warn(`[Pipeline - GPT] Low confidence(${classificationResult?.confidence || 0}), marking for review`);
-                // Just proceed to extractAndPersist which handles unclassified if we set type='unclassified'
-                // OR we can manually do what the main flow does.
-                // Main flow sets needsReview=true.
-                // Let's rely on extractAndPersist handling 'unclassified' if we coerced it,
-                // BUT extractAndPersist logic for 'unclassified' is specific.
-
-                // Simpler: Just reconstruct the 'Unclassified' result object if confidence is low
-                // and pass it to extractAndPersist?
-                // Wait, extractAndPersist has specific check: if (classificationResult.type === 'unclassified')
-
-                // So if low confidence:
-                await this.deps.terminator.terminate(
-                    userId,
-                    cleanEmail.id,
-                    `Low confidence classification: ${classificationResult?.confidence || 0} `,
-                    'stage_4_gpt_fallback_low_conf',
-                    'LOW_CONFIDENCE',
-                    jobId,
-                    rawEmailId
-                );
-
-                // We fake a result so extractAndPersist logs it as review needed
-                classificationResult = {
-                    type: 'unclassified',
-                    confidence: classificationResult?.confidence || 0,
-                    metadata: {}
-                } as any;
-            }
-
-            return this.extractAndPersist(
-                userId,
-                cleanEmail,
-                classificationResult,
-                classificationMethod,
-                jobId,
-                rawEmailId,
-                new Date(cleanEmail.internalDate),
-                cleanEmail.id, // messageId
-                cleanEmail.subject,
-                cleanEmail.from,
-                startTime
-            );
-
-        } catch (err) {
-            logger.error(`[Pipeline - GPT] Error: `, err);
-            return { status: 'failed', reason: 'gpt_error', error: String(err) };
-        }
-    }
-
-    private async classifyWithGPT(userId: string, cleanEmail: CleanEmail) {
-        // Fetch user instruments for context
-        const instruments = await this.deps.instrumentService.getUserInstruments(userId);
-
-        // Call GPT Classifier (will batch if needed)
-        const result = await this.deps.gptClassifier.classify(userId, cleanEmail, instruments);
-        return result;
-    }
+    // classifyWithGPT method removed
 }
 
 // Default Singleton Instance
@@ -668,7 +584,7 @@ export const universalPipeline = new UniversalTransactionPipeline({
     broadDetector: BroadFinancialDetector,
     terminator: TerminatorService,
     classifierRegistry: ClassifierRegistry,
-    gptClassifier: GPTClassifier,
+    // gptClassifier removed
     enhancedClassifier: EnhancedRuleClassifier,
     extractorFactory: TransactionExtractorFactory,
     instrumentService: InstrumentService,

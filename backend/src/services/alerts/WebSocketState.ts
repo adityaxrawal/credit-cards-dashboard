@@ -9,15 +9,39 @@ export interface ScanJob {
     totalTransactions: number;
     totalErrors: number;
     queueStatus: {
-        queue1: number;
-        queue2: number;
-        queue3: number;
+        queue1: number;  // Processing queue
+        queue2: number;  // DB write queue / worker pool queue
+
     };
     status?: string;
     currentStep?: string;
     postProcessingStats?: {
         billsCreated?: number;
         instrumentsCreated?: number;
+    };
+
+    // NEW: Rate metrics
+    fetchRate?: number;      // emails/sec
+    processRate?: number;    // emails/sec
+    dbFlushRate?: number;    // batches/sec
+
+    // NEW: Detailed queue depths
+    queueDepths?: {
+        processing: number;
+        dbScannedEmails: number;
+        dbTransactions: number;
+        dbTerminations: number;
+
+    };
+
+
+
+    // NEW: Error breakdown
+    errorBreakdown?: {
+        gmail429s: number;
+        dbRetries: number;
+        skippedEmails: number;
+        processingErrors: number;
     };
 }
 
@@ -55,7 +79,7 @@ export function broadcastProcessingUpdate(
         totalProcessed: 0,
         totalTransactions: 0,
         totalErrors: 0,
-        queueStatus: { queue1: 0, queue2: 0, queue3: 0 }
+        queueStatus: { queue1: 0, queue2: 0 }
     };
 
     const job = activeJobs.get(jobId) || defaultJob;

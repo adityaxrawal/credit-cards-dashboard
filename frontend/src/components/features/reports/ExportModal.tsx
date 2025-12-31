@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import { Button, Modal, Input, Label } from '@/components/ui';
-import { toast } from '@/components/ui/feedback/Toast';
+import { toast } from 'react-hot-toast';
 
 interface ExportModalProps {
   isOpen: boolean;

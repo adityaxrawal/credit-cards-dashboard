@@ -45,7 +45,7 @@ export async function getLastScannedDate(userId: string): Promise<Date | null> {
 export async function insertScannedEmail(data: ScannedEmailData): Promise<void> {
   await pool.query(
     `INSERT INTO gmail_scanned_emails (
-      user_id, message_id, internal_date, subject, sender, snippet,
+      user_id, message_id, internal_date, subject, sender, raw_snippet,
       is_transaction, detection_confidence, detection_reason, scan_job_id
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     ON CONFLICT (user_id, message_id) 
@@ -106,7 +106,7 @@ export async function insertScannedEmailsBulk(dataList: ScannedEmailData[]): Pro
 
     const query = `
       INSERT INTO gmail_scanned_emails (
-        user_id, message_id, internal_date, subject, sender, snippet,
+        user_id, message_id, internal_date, subject, sender, raw_snippet,
         is_transaction, detection_confidence, detection_reason, scan_job_id
       ) VALUES ${placeholders.join(', ')}
       ON CONFLICT (user_id, message_id) 

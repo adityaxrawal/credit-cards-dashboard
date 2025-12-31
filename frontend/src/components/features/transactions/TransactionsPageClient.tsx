@@ -7,7 +7,6 @@ import {
   X,
   Upload,
   AlertTriangle,
-  Brain,
   Zap,
   Search,
 } from "lucide-react";
@@ -370,11 +369,7 @@ export default function TransactionsPage() {
                    <AlertTriangle className="w-4 h-4" />
                 </div>
             )}
-            {tx.detection_method === 'gpt' && (
-                <div title="AI Extracted" className="text-primary-green">
-                   <Brain className="w-4 h-4" />
-                </div>
-            )}
+
             {tx.detection_method === 'regex' && (
                 <div title="Extracted by Pattern" className="text-secondary-text">
                    <Zap className="w-4 h-4" />

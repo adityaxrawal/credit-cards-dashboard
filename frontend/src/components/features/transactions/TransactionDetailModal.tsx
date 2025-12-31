@@ -171,7 +171,7 @@ export function TransactionDetailModal({
               {transaction.detection_method && (
                 <DetailRow label="Detection Method">
                   <Badge 
-                    label={transaction.detection_method === 'gpt' ? 'AI-Powered (GPT)' : 'Rule-based Pattern'}
+                    label={transaction.detection_method === 'rule-based' ? 'Rule-based Pattern' : 'System Extracted'}
                     variant="secondary"
                   />
                 </DetailRow>

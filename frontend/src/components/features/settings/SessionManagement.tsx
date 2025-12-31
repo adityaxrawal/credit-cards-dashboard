@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { Monitor, Smartphone, Tablet, Globe, MapPin, Clock, Trash2, LogOut, Shield } from "lucide-react";
-import { cn, formatDistanceToNow } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { formatDistanceToNow } from "date-fns";
 
 interface Session {
   id: string;

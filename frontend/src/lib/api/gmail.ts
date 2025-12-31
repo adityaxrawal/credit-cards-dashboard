@@ -32,6 +32,18 @@ export interface ScanStatus {
   totalEmails?: number;
   totalProcessed?: number;
   totalErrors?: number;
+
+  // NEW: Queue status (from backend)
+  queueStatus?: {
+    queue1: number;  // Processing queue
+    queue2: number;  // DB/worker pool queue
+  };
+
+  // NEW: Rate metrics
+  fetchRate?: number;
+  processRate?: number;
+
+
 }
 
 export const gmailApi = {

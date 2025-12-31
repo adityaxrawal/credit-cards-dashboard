@@ -310,6 +310,39 @@ export function GmailSyncModal({
                     </div>
                   </div>
 
+                  {/* Queue Depth Indicators - NEW */}
+                  {state.queueStatus && (state.queueStatus.queue1 > 0 || state.queueStatus.queue2 > 0) && (
+                    <div className="bg-hover-bg rounded-lg p-3 space-y-2">
+                      <p className="text-xs font-medium text-secondary-text">Pipeline Queues</p>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="w-20 text-secondary-text">Processing</span>
+                          <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
+                            <div 
+                              className="bg-blue-500 h-2 transition-all"
+                              style={{ width: `${Math.min((state.queueStatus.queue1 / 100) * 100, 100)}%` }}
+                            />
+                          </div>
+                          <span className="w-8 text-right text-secondary-text">{state.queueStatus.queue1}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="w-20 text-secondary-text">DB Writes</span>
+                          <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
+                            <div 
+                              className="bg-green-500 h-2 transition-all"
+                              style={{ width: `${Math.min((state.queueStatus.queue2 / 50) * 100, 100)}%` }}
+                            />
+                          </div>
+                          <span className="w-8 text-right text-secondary-text">{state.queueStatus.queue2}</span>
+                        </div>
+
+                      </div>
+                      <p className="text-[10px] text-muted-text mt-1">
+                        {state.queueStatus.queue2 > 0 ? "DB writes are queued and will complete after processing" : "All DB writes flushed"}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <div className="flex items-start gap-2">
                       <AlertCircle className="text-blue-600 flex-shrink-0 mt-0.5" size={16} />

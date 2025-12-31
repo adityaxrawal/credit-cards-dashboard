@@ -1,5 +1,6 @@
 import pool, { safeQuery } from '../../../lib/db';
 import logger from '../../../utils/infrastructure/logger';
+import { DbWriteQueueManager } from '../DbWriteQueueManager';
 
 export class TerminatorService {
     /**
@@ -16,32 +17,31 @@ export class TerminatorService {
         markProcessed: boolean = true
     ): Promise<void> {
         try {
-            await safeQuery(
-                `INSERT INTO email_processing_log 
-         (user_id, email_message_id, reason, stage, status_category, 
-          processing_status, scan_job_id, raw_email_id, processed_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-         ON CONFLICT (email_message_id) DO UPDATE SET 
-            scan_job_id = EXCLUDED.scan_job_id,
-            reason = EXCLUDED.reason,
-            processed_at = NOW()`,
-                [userId, emailId, reason, stage, statusCategory, 'terminated', jobId, rawEmailId]
-            );
+            // Use Queue Manager to handle writes asynchronously and with retries
+            // This prevents FK race conditions vs scanned_emails insert which is also queued
+            const queueManager = DbWriteQueueManager.getInstance();
 
-            // Also mark as processed in gmail_scanned_emails if terminated?
-            // Guide says "processed_at" usually implies success, but for queue management
-            // we might want to mark it so it doesn't get picked up again unless reprocessing.
-            // But typically "Terminated" means done for this cycle.
+            queueManager.enqueue('processing_logs', {
+                userId,
+                emailMessageId: emailId,
+                reason,
+                stage,
+                statusCategory,
+                processingStatus: 'terminated',
+                scanJobId: jobId,
+                rawEmailId
+            });
+
             if (markProcessed) {
-                await safeQuery(
-                    `UPDATE gmail_scanned_emails SET processed = true, processed_at = NOW() WHERE id = $1`,
-                    [rawEmailId]
-                );
+                queueManager.enqueue('scanned_email_updates', {
+                    userId,
+                    messageId: emailId // flushScannedEmailUpdates expects messageId to find by (user_id, message_id)
+                });
             }
 
         } catch (error) {
             logger.error('Failed to log termination', error);
-            // Swallow error to avoid crashing pipeline, but log it
+            // Swallow error to avoid crashing pipeline
         }
     }
 

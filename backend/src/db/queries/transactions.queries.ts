@@ -416,8 +416,8 @@ export async function createTransaction(data: {
 }
 
 /**
- * Bulk create transactions - optimized for high performance
- * Inserts multiple transactions in a single query
+ * Bulk create transactions - optimized for high performance using UNNEST
+ * Inserts multiple transactions in a single query with minimal parameter overhead
  */
 export async function createTransactionsBulk(dataList: Array<{
   userId: string;
@@ -455,6 +455,7 @@ export async function createTransactionsBulk(dataList: Array<{
   rawExtraction?: any;
   scanJobId?: string;
   rawEmailId?: string;
+  id?: string; // Optional pre-generated ID
 }>): Promise<Transaction[]> {
   if (dataList.length === 0) return [];
 
@@ -462,66 +463,103 @@ export async function createTransactionsBulk(dataList: Array<{
   try {
     await client.query('BEGIN');
 
-    const values: any[] = [];
-    const placeholders: string[] = [];
-    let paramIndex = 1;
+    // Prepare arrays for UNNEST
+    const ids: string[] = [];
+    const userIds: string[] = [];
+    const instrumentTypes: (string | null)[] = [];
+    const instrumentIds: (string | null)[] = [];
+    const transactionDates: Date[] = [];
+    const merchants: string[] = [];
+    const categories: string[] = [];
+    const amounts: number[] = [];
+    const transactionTypes: string[] = [];
+    const directions: (string | null)[] = [];
+    const counterpartyNames: (string | null)[] = [];
+    const counterpartyIdentifiers: (string | null)[] = [];
+    const referenceNumbers: (string | null)[] = [];
+    const descriptions: (string | null)[] = [];
+    const billMonths: (number | null)[] = [];
+    const billYears: (number | null)[] = [];
+    const emailMessageIds: (string | null)[] = [];
+    const emailSubjects: (string | null)[] = [];
+    const emailSenders: (string | null)[] = [];
+    const txnFingerprints: (string | null)[] = [];
+    const isManuallyAddeds: boolean[] = [];
+    const metadatas: (string | null)[] = [];
+    const rawExtractions: (string | null)[] = [];
+    const classificationMethods: (string | null)[] = [];
+    const confidenceScores: (number | null)[] = [];
+    const needsReviews: boolean[] = [];
+    const reviewReasons: (string | null)[] = [];
+    const exactTimestamps: (Date | null)[] = [];
+    const gmailThreadIds: (string | null)[] = [];
+    const gmailAccountIndices: number[] = [];
+    const currencyCodes: (string | null)[] = [];
+    const originalAmounts: (number | null)[] = [];
+    const transactionSubtypes: (string | null)[] = [];
+    const scanJobIds: (string | null)[] = [];
+    const rawEmailIds: (string | null)[] = [];
+
+    // Import randomUUID dynamically or fallback (using crypto provided in module scope usually, but let's assume it's available or use client-side generation)
+    // Actually, best to just let postgres generate if null, but UNNEST needs parallel arrays.
+    // We'll require ID or generate it.
+    const { randomUUID } = require('crypto');
 
     for (const data of dataList) {
-      // Truncate fields to match database VARCHAR limits
-      const truncatedMerchant = data.merchant?.substring(0, 255) || data.merchant;
-      const truncatedCategory = data.category?.substring(0, 100) || data.category;
-      const truncatedEmailMessageId = data.emailMessageId?.substring(0, 255) || data.emailMessageId;
-      const truncatedEmailSubject = data.emailSubject?.substring(0, 500) || data.emailSubject;
-      const truncatedReferenceNumber = data.referenceNumber?.substring(0, 100) || data.referenceNumber;
+      ids.push(data.id || randomUUID());
+      userIds.push(data.userId);
 
-      const instrumentId = data.instrumentId || data.cardId;
-      const instrumentType = data.instrumentType || (data.cardId ? 'credit_card' : undefined);
+      const iType = data.instrumentType || (data.cardId ? 'credit_card' : undefined) || null;
+      instrumentTypes.push(iType);
 
-      placeholders.push(
-        `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13}, $${paramIndex + 14}, $${paramIndex + 15}, $${paramIndex + 16}, $${paramIndex + 17}, $${paramIndex + 18}, $${paramIndex + 19}, $${paramIndex + 20}, $${paramIndex + 21}, $${paramIndex + 22}, $${paramIndex + 23}, $${paramIndex + 24}, $${paramIndex + 25}, $${paramIndex + 26}, $${paramIndex + 27}, $${paramIndex + 28}, $${paramIndex + 29}, $${paramIndex + 30}, $${paramIndex + 31}, $${paramIndex + 32}, $${paramIndex + 33})`
-      );
-      values.push(
-        data.userId,
-        instrumentType || null,
-        instrumentId || null,
-        data.transactionDate,
-        truncatedMerchant,
-        truncatedCategory,
-        data.amount,
-        data.transactionType,
-        data.direction || null,
-        data.counterpartyName || null,
-        data.counterpartyIdentifier || null,
-        truncatedReferenceNumber || null,
-        data.description || null,
-        data.billMonth || null,
-        data.billYear || null,
-        truncatedEmailMessageId,
-        truncatedEmailSubject || null,
-        data.emailSender || null,
-        data.txnFingerprint || null,
-        data.isManuallyAdded || false,
-        data.metadata || null,
-        data.rawExtraction || null,
-        data.classificationMethod || null,
-        data.confidenceScore || null,
-        data.needsReview || false,
-        data.reviewReason || null,
-        data.exactTimestamp || null,
-        data.gmailThreadId || null,
-        data.gmailAccountIndex || 1,
-        data.currencyCode || null,
-        data.originalAmount || null,
-        data.transactionSubtype || null,
-        data.scanJobId || null,
-        data.rawEmailId || null
-      );
-      paramIndex += 34;
+      const iId = data.instrumentId || data.cardId || null;
+      instrumentIds.push(iId);
+
+      transactionDates.push(data.transactionDate);
+      merchants.push(data.merchant?.substring(0, 255) || data.merchant);
+      categories.push(data.category?.substring(0, 100) || data.category);
+      amounts.push(data.amount);
+      transactionTypes.push(data.transactionType);
+
+      directions.push(data.direction || null);
+      counterpartyNames.push(data.counterpartyName || null);
+      counterpartyIdentifiers.push(data.counterpartyIdentifier || null);
+      referenceNumbers.push(data.referenceNumber?.substring(0, 100) || null);
+      descriptions.push(data.description || null);
+
+      billMonths.push(data.billMonth || null);
+      billYears.push(data.billYear || null);
+
+      emailMessageIds.push(data.emailMessageId?.substring(0, 255) || null);
+      emailSubjects.push(data.emailSubject?.substring(0, 500) || null);
+      emailSenders.push(data.emailSender || null);
+      txnFingerprints.push(data.txnFingerprint || null);
+
+      isManuallyAddeds.push(data.isManuallyAdded || false);
+
+      // JSONB fields must be stringified for string[] -> jsonb[] casting or passing as objects
+      // Node-postgres handles array of objects, but for UNNEST with explicit casting, passing strings is safer
+      metadatas.push(data.metadata ? JSON.stringify(data.metadata) : null);
+      rawExtractions.push(data.rawExtraction ? JSON.stringify(data.rawExtraction) : null);
+
+      classificationMethods.push(data.classificationMethod || null);
+      confidenceScores.push(data.confidenceScore || null);
+      needsReviews.push(data.needsReview || false);
+      reviewReasons.push(data.reviewReason || null);
+      exactTimestamps.push(data.exactTimestamp || null);
+
+      gmailThreadIds.push(data.gmailThreadId || null);
+      gmailAccountIndices.push(data.gmailAccountIndex || 1);
+      currencyCodes.push(data.currencyCode || null);
+      originalAmounts.push(data.originalAmount || null);
+      transactionSubtypes.push(data.transactionSubtype || null);
+      scanJobIds.push(data.scanJobId || null);
+      rawEmailIds.push(data.rawEmailId || null);
     }
 
     const query = `
       INSERT INTO transactions (
-        user_id, instrument_type, instrument_id, transaction_date, merchant, category,
+        id, user_id, instrument_type, instrument_id, transaction_date, merchant, category,
         amount, transaction_type, direction, counterparty_name, counterparty_identifier,
         reference_number, description, bill_month, bill_year,
         email_message_id, email_subject, email_sender, txn_fingerprint,
@@ -530,14 +568,35 @@ export async function createTransactionsBulk(dataList: Array<{
         gmail_thread_id, gmail_account_index,
         currency_code, original_amount, transaction_subtype,
         scan_job_id, raw_email_id
-      ) VALUES ${placeholders.join(', ')}
+      )
+      SELECT * FROM UNNEST(
+        $1::uuid[], $2::uuid[], $3::text[], $4::uuid[], $5::timestamptz[], $6::text[], $7::text[],
+        $8::numeric[], $9::text[], $10::text[], $11::text[], $12::text[],
+        $13::text[], $14::text[], $15::int[], $16::int[],
+        $17::text[], $18::text[], $19::text[], $20::text[],
+        $21::boolean[], $22::jsonb[], $23::jsonb[], $24::text[],
+        $25::numeric[], $26::boolean[], $27::text[], $28::timestamptz[],
+        $29::text[], $30::int[],
+        $31::text[], $32::numeric[], $33::text[],
+        $34::uuid[], $35::uuid[]
+      )
       ON CONFLICT (email_message_id, txn_fingerprint) DO NOTHING
       RETURNING *
     `;
 
-    const result = await client.query(query, values);
-    await client.query('COMMIT');
+    const result = await client.query(query, [
+      ids, userIds, instrumentTypes, instrumentIds, transactionDates, merchants, categories,
+      amounts, transactionTypes, directions, counterpartyNames, counterpartyIdentifiers,
+      referenceNumbers, descriptions, billMonths, billYears,
+      emailMessageIds, emailSubjects, emailSenders, txnFingerprints,
+      isManuallyAddeds, metadatas, rawExtractions, classificationMethods,
+      confidenceScores, needsReviews, reviewReasons, exactTimestamps,
+      gmailThreadIds, gmailAccountIndices,
+      currencyCodes, originalAmounts, transactionSubtypes,
+      scanJobIds, rawEmailIds
+    ]);
 
+    await client.query('COMMIT');
     return result.rows;
   } catch (error) {
     await client.query('ROLLBACK');

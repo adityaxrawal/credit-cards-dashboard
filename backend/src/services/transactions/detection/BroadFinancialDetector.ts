@@ -9,6 +9,19 @@ export interface DetectionResult {
 }
 
 export class BroadFinancialDetector {
+    // PRECOMPILED REGEXES for performance (compiled once at class load)
+    private static readonly VERBS_REGEX = /spent|purchase[d]?|bought|charged|debited|payment|paid|deducted|credited|received|deposited|refund|withdrawal|transfer|sent/i;
+    private static readonly RECEIVING_EMAIL_REGEX = /receiving\s+this\s+email|received\s+this\s+email/i;
+    private static readonly ALERT_PATTERN_REGEX = /transaction\s+(?:alert|notification|update)|alert\s+from\s+.*card/i;
+    private static readonly INSTRUMENTS_REGEX = /credit\s+card|debit\s+card|bank\s+account|savings\s+a\/c|current\s+a\/c|rupay|visa|mastercard|amex|upi|neft|rtgs|imps|wallet/i;
+    private static readonly REF_IDS_REGEX = /txn|ref(?:erence)?\s*(?:no|id)|payment\s+id|transaction\s+id/i;
+    private static readonly CONTEXT_REGEX = /avail\.\s+bal|available\s+balance|outstanding|bill\s+due|statement\s+for/i;
+    private static readonly ACKNOWLEDGMENT_REGEX = /received\s+your\s+payment|payment\s+received|acknowledgement/i;
+    private static readonly NEGATIVE_SIGNALS_REGEX = /offer\s+valid|voucher|pre[- ]?approved|upgrade\s+program|newsletter|digest|market\s+highlights|upcoming\s+bill|generated\s+on|check\s+eligibility|book\s+now|register(?!\s+for\s+banking)|apply\s+now|webinar|certification|course|syllabus|training\s+session|masterclass|unsubscribe/i;
+    private static readonly STRONG_CONFIRMATION_REGEX = /debited|credited|payment\s+successful|txn\s+id|ref\s+no|transaction\s+id|authorization\s+code|e-?mandate|registration\s+success|mandate\s+(?:set|registered|approved|cancelled)|debit\s+approval/i;
+    private static readonly MARKETING_REGEX = /marketing|promotional|discount\s+(?:offer|code)|coupon|limited\s+offer|enjoy\s+benefits|exclusive\s+privilege/i;
+    private static readonly OTP_REGEX = /otp|verification\s+code|one[- ]?time\s+password|login\s+alert/i;
+
     /**
      * Determine if email represents any financial activity
      * High precision, rejects noise: marketing, OTPs, newsletters
@@ -65,52 +78,40 @@ export class BroadFinancialDetector {
         }
 
         // 2. TRANSACTION VERBS (Strong Signal) (+20 points)
-        const verbs = /spent|purchase[d]?|bought|charged|debited|payment|paid|deducted|credited|received|deposited|refund|withdrawal|transfer|sent/i;
-        if (verbs.test(lowerText)) {
+        if (this.VERBS_REGEX.test(lowerText)) {
             // IGNORE "receiving this email" context
-            if (!/receiving\s+this\s+email|received\s+this\s+email/i.test(lowerText)) {
+            if (!this.RECEIVING_EMAIL_REGEX.test(lowerText)) {
                 score += 20;
                 reasons.push('Transaction Verb');
             }
         }
 
         // 2a. TRANSACTION ALERTS (New Pattern) (+15 points)
-        // Explicitly catch "Transaction Alert" which might miss verbs or be generic
-        const alertPattern = /transaction\s+(?:alert|notification|update)|alert\s+from\s+.*card/i;
-        if (alertPattern.test(lowerText)) {
+        if (this.ALERT_PATTERN_REGEX.test(lowerText)) {
             score += 15;
             reasons.push('Transaction Alert Pattern');
         }
 
         // 3. FINANCIAL ACCOUNT/INSTRUMENT (+20 points)
-        const instruments = /credit\s+card|debit\s+card|bank\s+account|savings\s+a\/c|current\s+a\/c|rupay|visa|mastercard|amex|upi|neft|rtgs|imps|wallet/i;
-        if (instruments.test(lowerText)) {
+        if (this.INSTRUMENTS_REGEX.test(lowerText)) {
             score += 20;
             reasons.push('Instrument Keyword');
         }
 
         // 4. TRANSACTION ID / REF NO (+15 points)
-        const refIds = /txn|ref(?:erence)?\s*(?:no|id)|payment\s+id|transaction\s+id/i;
-        if (refIds.test(lowerText)) {
+        if (this.REF_IDS_REGEX.test(lowerText)) {
             score += 15;
             reasons.push('Reference ID');
         }
 
         // 5. BALANCE/STATEMENT CONTEXT (+10 points)
-        const context = /avail\.\s+bal|available\s+balance|outstanding|bill\s+due|statement\s+for/i;
-        if (context.test(lowerText)) {
+        if (this.CONTEXT_REGEX.test(lowerText)) {
             score += 10;
             reasons.push('Balance/Statement Context');
         }
 
         // --- RECEIPT / ACKNOWLEDGMENT PENALTY ---
-        // "We have received your payment" is usually a merchant/insurer receipt, not a bank debit.
-        // We want to track the BANK debit, not the merchant receipt.
-        const acknowledgment = /received\s+your\s+payment|payment\s+received|acknowledgement/i;
-        if (acknowledgment.test(lowerText)) {
-            // But be careful: "Payment received" on a Credit Card statement IS a transaction (repayment).
-            // So we check if "credit card" or "account" is mentioned nearby? 
-            // BroadDetector is heuristic. Let's penalize, and rely on "Instrument Keyword" to boost it back up if it's a bank.
+        if (this.ACKNOWLEDGMENT_REGEX.test(lowerText)) {
             score -= 25;
             reasons.push('Acknowledgment Penalty');
         }
@@ -118,44 +119,28 @@ export class BroadFinancialDetector {
         // 6. BANK SENDER / BRANDING (We verify sender in Classifier, but text might have it)
         // Hard to detect generically without list, skip for now or rely on pattern matching
 
-        // --- NEGATIVE EVIDENCE RULES (Strong Filter) ---
-        // Words that strongly suggest this is NOT a transaction
-        const negativeSignals = /offer\s+valid|voucher|pre[- ]?approved|upgrade\s+program|newsletter|digest|market\s+highlights|upcoming\s+bill|generated\s+on|check\s+eligibility|book\s+now|register(?!\s+for\s+banking)|apply\s+now|webinar|certification|course|syllabus|training\s+session|masterclass|unsubscribe/i;
+        // --- NEGATIVE EVIDENCE RULES ---
+        const hasNegative = this.NEGATIVE_SIGNALS_REGEX.test(lowerText);
+        const hasConfirmation = this.STRONG_CONFIRMATION_REGEX.test(lowerText);
 
-        // --- STRONG TRANSACTION CONFIRMATION ---
-        // Words that confirm money MOVED or financial action completed (to override negative signals)
-        const strongConfirmation = /debited|credited|payment\s+successful|txn\s+id|ref\s+no|transaction\s+id|authorization\s+code|e-?mandate|registration\s+success|mandate\s+(?:set|registered|approved|cancelled)|debit\s+approval/i;
-
-        const hasNegative = negativeSignals.test(lowerText);
-        const hasConfirmation = strongConfirmation.test(lowerText);
-
-        // Reduced penalty - many legitimate e-mandate/registration emails have mixed content
         if (hasNegative && !hasConfirmation) {
             score -= 30;
             reasons.push('Negative Signal Detected');
         }
 
         // --- PROMOTIONAL PENALTIES ---
-        // If it looks like marketing, we deduct heavily unless strong financial signals exist
-        const marketing = /marketing|promotional|discount\s+(?:offer|code)|coupon|limited\s+offer|enjoy\s+benefits|exclusive\s+privilege/i;
-        if (marketing.test(lowerText)) {
+        if (this.MARKETING_REGEX.test(lowerText)) {
             if (!hasConfirmation) {
-                // If no EXPLICIT transaction confirmation, penalize heavily even if amount exists
-                // (e.g. "Get ₹500 voucher" is NOT a transaction)
                 score -= 40;
                 reasons.push('Marketing Penalty');
             } else {
-                // Real transaction but maybe with a coupon mentioned
                 score -= 5;
                 reasons.push('Minor Marketing Noise');
             }
         }
 
         // OTP / SECURITY PENALTY
-        // We typically exclude these unless they are "Transaction OTPs" which might be relevant (but usually we want confirmed txns)
-        // For now, penalize OTPs as we want only FINAL transactions
-        const otp = /otp|verification\s+code|one[- ]?time\s+password|login\s+alert/i;
-        if (otp.test(lowerText)) {
+        if (this.OTP_REGEX.test(lowerText)) {
             score -= 50;
             reasons.push('OTP/Security Penalty');
         }
