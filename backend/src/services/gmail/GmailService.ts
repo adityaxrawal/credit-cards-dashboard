@@ -515,6 +515,69 @@ export class GmailService {
     // Trigger scan from last sync time
     return this.triggerHistoricalScan(userId, new Date(lastSync));
   }
+
+  /**
+   * Get Ingestion Logs with pagination and filters
+   */
+  async getIngestionLogs(userId: string, filters: {
+    page: number;
+    limit: number;
+    status?: string;
+    search?: string;
+  }) {
+    const page = filters.page || 1;
+    const limit = filters.limit || 50;
+    const offset = (page - 1) * limit;
+
+    const where: string[] = ['l.user_id = $1'];
+    const params: any[] = [userId];
+    let paramIndex = 2;
+
+    if (filters.status) {
+      where.push(`l.status_category = $${paramIndex++}`);
+      params.push(filters.status);
+    }
+
+    if (filters.search) {
+      where.push(`(l.subject ILIKE $${paramIndex} OR l.from_email ILIKE $${paramIndex})`);
+      params.push(`%${filters.search}%`);
+      paramIndex++;
+    }
+
+    const whereClause = where.join(' AND ');
+
+    // Get total count
+    const countResult = await this.deps.pool.query(
+      `SELECT COUNT(*) as total FROM email_processing_log l WHERE ${whereClause}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0].total);
+
+    // Get Data
+    const { rows } = await this.deps.pool.query(
+      `SELECT l.*, 
+              t.id as transaction_id,
+              t.amount as transaction_amount, 
+              t.merchant as transaction_merchant,
+              t.category as transaction_category
+       FROM email_processing_log l
+       LEFT JOIN transactions t ON l.transaction_id = t.id
+       WHERE ${whereClause}
+       ORDER BY l.received_date DESC
+       LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+      [...params, limit, offset]
+    );
+
+    return {
+      data: rows,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  }
 }
 
 // Default Singleton Instance

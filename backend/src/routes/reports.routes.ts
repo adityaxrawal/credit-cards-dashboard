@@ -53,4 +53,8 @@ router.get('/monthly-summary/pdf', reportsController.generateMonthlySummaryPDF);
  */
 router.get('/category-breakdown/pdf', reportsController.generateCategoryBreakdownPDF);
 
+router.get('/year-in-review', reportsController.getYearInReview);
+router.get('/insights', reportsController.getSpendingInsights);
+
+
 export default router;

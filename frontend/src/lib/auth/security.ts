@@ -39,13 +39,13 @@ export const ROUTE_SECURITY_MAP: Record<string, SecurityLevel> = {
   "/profile": "authenticated",
 
   // Gmail-connected routes (requires Gmail connection)
-  "/transactions": "authenticated",
-  "/analytics": "authenticated",
-  "/budget": "authenticated",
-  "/bills": "authenticated",
-  "/reports": "authenticated",
-  "/rewards": "authenticated",
-  "/recurring": "authenticated",
+  "/transactions": "gmailConnected",
+  "/analytics": "gmailConnected",
+  "/budget": "gmailConnected",
+  "/bills": "gmailConnected",
+  "/reports": "gmailConnected",
+  "/rewards": "gmailConnected",
+  "/recurring": "gmailConnected",
   "/notifications": "authenticated",
 
   // Admin routes

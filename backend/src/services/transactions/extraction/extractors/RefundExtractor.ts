@@ -55,6 +55,10 @@ export class RefundExtractor {
         const reverseMatch = text.match(strictReverse);
         if (reverseMatch) return parseFloat(reverseMatch[1].replace(/,/g, ''));
 
+        // Contextual: "sent a refund of Rs 500", "refund credited Rs 500"
+        const contextMatch = text.match(/(?:refund|reversal|credit).{0,30}(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d{2})?)/i);
+        if (contextMatch) return parseFloat(contextMatch[1].replace(/,/g, ''));
+
         // Fallback (only if matched as REFUND type initially)
         const match = text.match(/[₹](?:\s+)?([\d,]+(?:\.\d{2})?)/);
         if (match) return parseFloat(match[1].replace(/,/g, ''));

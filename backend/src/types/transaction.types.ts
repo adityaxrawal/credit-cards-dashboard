@@ -237,6 +237,7 @@ export interface Transaction {
     direction?: string;
     instrument_type?: string;
     instrument_id?: string;
+    parent_transaction_id?: string | null;
     classification_method?: string;
     confidence_score?: number;
     needs_review?: boolean;

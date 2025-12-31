@@ -1,75 +1,55 @@
-import { apiGet } from "./client";
-import { Transaction } from "@/types";
+import { apiGet, makeRequest } from './client';
+
+export interface StatementUploadResponse {
+  statement: any;
+  stats: {
+    totalProcessed: number;
+    matched: number;
+    newInserted: number;
+    skipped: number;
+  };
+}
 
 export interface StatementSummary {
+  id: string;
+  bill_year: number;
+  bill_month: number;
   card_id: string;
   card_name: string;
   bank_name: string;
   card_number_last4: string;
-  bill_year: number;
-  bill_month: number;
-  transaction_count: number;
   total_debits: number;
   total_credits: number;
   net_amount: number;
-}
-
-export interface StatementDetails {
-  card: {
-    id: string;
-    card_name: string;
-    bank_name: string;
-    card_number_last4: string;
-    bill_date: number;
-    due_date: number;
-    credit_limit: number;
-  };
-  billingPeriod: {
-    month: number;
-    year: number;
-  };
-  transactions: Transaction[];
-  summary: {
-    totalDebits: number;
-    totalCredits: number;
-    netAmount: number;
-    transactionCount: number;
-  };
-  billPayment?: {
-    id: string;
-    bill_amount: number;
-    payment_amount?: number;
-    payment_status: string;
-    bill_date: string;
-    due_date: string;
-  };
+  transaction_count: number;
 }
 
 export const statementsApi = {
-  /**
-   * Get all statements (monthly summaries)
-   */
-  getAll: async (): Promise<StatementSummary[]> => {
-    return apiGet<{ data: StatementSummary[] }>("/api/statements").then((res) => res.data);
+  getAll: async () => {
+    return apiGet<StatementSummary[]>('/api/statements');
   },
 
-  /**
-   * Get statement details for a specific card and billing period
-   */
-  getDetails: async (cardId: string, month: number, year: number): Promise<StatementDetails> => {
-    return apiGet<{ data: StatementDetails }>(
-      `/api/statements/${cardId}/${month}/${year}`
-    ).then((res) => res.data);
+  getDetails: async (cardId: string, month: number, year: number) => {
+    return apiGet<any>(`/api/statements/${cardId}/${month}/${year}`);
   },
 
-  /**
-   * Get all statements for a specific card
-   */
-  getCardStatements: async (cardId: string): Promise<StatementSummary[]> => {
-    return apiGet<{ data: StatementSummary[] }>(
-      `/api/statements/card/${cardId}`
-    ).then((res) => res.data);
-  },
+  upload: async (file: File, bankName: string, password?: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('bankName', bankName);
+    if (password) formData.append('password', password);
+
+    // Use makeRequest with explicit body (FormData) and NO Content-Type header (let browser set it)
+    // We need to CAST makeRequest as it is internal? Check if I can export it.
+    // I will try to import it. If fails, I will use a direct fetch or modify client.ts.
+    // Assuming I will modify client.ts to export makeRequest.
+    return makeRequest<StatementUploadResponse>('/api/statements/upload', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        // Overwriting Content-Type to undefined/null is tricky in JS if the base object has it.
+        // But if I change client.ts to check if body is FormData, that works best.
+      }
+    });
+  }
 };
-
-

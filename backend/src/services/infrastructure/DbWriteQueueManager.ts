@@ -216,17 +216,46 @@ export class DbWriteQueueManager {
     }
 
     /**
-     * Flush all queues
+     * Flush all queues (respects FK dependency order)
      */
     async flushAll(): Promise<void> {
-        await Promise.all(Array.from(this.queues.values()).map(q => q.flush()));
+        // Flush parent first
+        const scannedEmailsQueue = this.queues.get('scanned_emails');
+        if (scannedEmailsQueue) {
+            await scannedEmailsQueue.flush();
+        }
+
+        // Then flush dependents in parallel
+        const dependentQueues: DbWriteTable[] = ['transactions', 'processing_logs', 'terminations', 'scanned_email_updates', 'job_stats'];
+        await Promise.all(
+            dependentQueues
+                .map(name => this.queues.get(name))
+                .filter((q): q is DbWriteQueue => q !== undefined)
+                .map(q => q.flush())
+        );
     }
 
     /**
      * Wait for all queues to drain
+     * NOTE: Drains in FK dependency order to prevent constraint violations:
+     * - Phase 1: scanned_emails (parent table)
+     * - Phase 2: All dependent tables in parallel (transactions, processing_logs, terminations, etc.)
      */
     async drain(): Promise<void> {
-        await Promise.all(Array.from(this.queues.values()).map(q => q.drain()));
+        // Phase 1: Drain parent tables first (scanned_emails must commit before children)
+        const scannedEmailsQueue = this.queues.get('scanned_emails');
+        if (scannedEmailsQueue) {
+            await scannedEmailsQueue.drain();
+        }
+
+        // Phase 2: Drain dependent queues in parallel
+        const dependentQueues: DbWriteTable[] = ['transactions', 'processing_logs', 'terminations', 'scanned_email_updates', 'job_stats'];
+        await Promise.all(
+            dependentQueues
+                .map(name => this.queues.get(name))
+                .filter((q): q is DbWriteQueue => q !== undefined)
+                .map(q => q.drain())
+        );
     }
 
     /**

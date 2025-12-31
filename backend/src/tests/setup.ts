@@ -5,7 +5,7 @@ import { jest } from '@jest/globals';
 
 // Mock the database pool
 jest.mock('../lib/db', () => ({
-    query: jest.fn(),
+    query: jest.fn().mockImplementation(() => Promise.resolve({ rows: [], rowCount: 0 })),
     connect: jest.fn(),
 }));
 

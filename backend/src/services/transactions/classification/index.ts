@@ -10,6 +10,9 @@ import { BankAccountCreditDetector } from './detectors/BankAccountCreditDetector
 import { BankAccountUPIDebitDetector } from './detectors/BankAccountUPIDebitDetector';
 import { BankAccountUPICreditDetector } from './detectors/BankAccountUPICreditDetector';
 import { RefundReversalDetector } from './detectors/RefundReversalDetector';
+import { UpiClassifier } from './detectors/UpiClassifier';
+import { InternationalClassifier } from './detectors/InternationalClassifier';
+
 
 // Extractors
 import { CreditCardSpendExtractor } from '../extraction/extractors/CreditCardSpendExtractor';
@@ -28,7 +31,12 @@ export function registerAll() {
     ClassifierRegistry.register(new BankAccountCreditDetector());
     ClassifierRegistry.register(new BankAccountUPIDebitDetector());
     ClassifierRegistry.register(new BankAccountUPICreditDetector());
+    ClassifierRegistry.register(new BankAccountUPICreditDetector());
     ClassifierRegistry.register(new RefundReversalDetector());
+    // New Classifiers
+    ClassifierRegistry.register(new UpiClassifier());
+    ClassifierRegistry.register(new InternationalClassifier());
+
 
     // Register Extractors
     TransactionExtractorFactory.register(TransactionType.CREDIT_CARD_SPEND, CreditCardSpendExtractor);

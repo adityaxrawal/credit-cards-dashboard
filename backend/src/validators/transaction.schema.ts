@@ -11,7 +11,8 @@ export const CreateTransactionSchema = z.object({
     instrumentId: z.string().uuid().optional(),
     instrumentType: z.string().optional(),
     description: z.string().optional(),
-    direction: z.enum(['debit', 'credit']).optional()
+    direction: z.enum(['debit', 'credit']).optional(),
+    parentTransactionId: z.string().uuid().optional()
 }).refine(data => data.instrumentId || data.cardId, {
     message: "Either instrumentId or cardId is required",
     path: ["instrumentId"]

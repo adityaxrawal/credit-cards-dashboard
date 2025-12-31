@@ -11,18 +11,32 @@ import {
   BarChart3,
   Settings,
   User,
+  Landmark,
+  PiggyBank,
+  Target,
+  Users,
+  Upload,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigationItems = [
   { icon: LayoutDashboard, href: "/dashboard", label: "Dashboard" },
-
+  { icon: Landmark, href: "/accounts", label: "Accounts" },
   { icon: CreditCard, href: "/cards", label: "Cards" },
   { icon: ArrowRightLeft, href: "/transactions", label: "Transactions" },
+  { icon: PiggyBank, href: "/loans", label: "Loans" },
+  { icon: Zap, href: "/rules", label: "Rules" },
+  { icon: FileText, href: "/ingestion", label: "Ingestion" }, // Added Ingestion item
+  { icon: Target, href: "/goals", label: "Goals" },
   { icon: Receipt, href: "/bills", label: "Bills" },
   { icon: FileText, href: "/statements", label: "Statements" },
+  { icon: PiggyBank, href: "/budget", label: "Budget" },
+  { icon: BarChart3, href: "/reports", label: "Reports" },
   { icon: Gift, href: "/rewards", label: "Rewards" },
   { icon: BarChart3, href: "/analytics", label: "Analytics" },
+  { icon: Users, href: "/shared", label: "Shared" },
+  { icon: Upload, href: "/import", label: "Import" },
   { icon: Settings, href: "/settings", label: "Settings" },
 ];
 

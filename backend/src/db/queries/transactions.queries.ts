@@ -291,7 +291,7 @@ export async function getTransactionById(
  * Find transaction by fingerprint (Date + Amount + Merchant Hash)
  * Used for deduplication across different sources (Email vs Statement)
  */
-export async function findTransactionByFingerprint(
+export async function getTransactionByFingerprint(
   userId: string,
   fingerprint: string
 ): Promise<Transaction | null> {
@@ -302,6 +302,26 @@ export async function findTransactionByFingerprint(
     [userId, fingerprint]
   );
   return rows[0] || null;
+}
+
+/**
+ * Get existing fingerprints for bulk check
+ */
+export async function getExistingFingerprints(
+  userId: string,
+  fingerprints: (string | undefined | null)[]
+): Promise<string[]> {
+  if (!fingerprints || fingerprints.length === 0) return [];
+
+  const validFingerprints = fingerprints.filter((f): f is string => !!f);
+  if (validFingerprints.length === 0) return [];
+
+  const { rows } = await pool.query(
+    `SELECT txn_fingerprint FROM transactions 
+         WHERE user_id = $1 AND txn_fingerprint = ANY($2)`,
+    [userId, validFingerprints]
+  );
+  return rows.map(r => r.txn_fingerprint);
 }
 
 /**
@@ -343,6 +363,7 @@ export async function createTransaction(data: {
   rawExtraction?: any;
   scanJobId?: string;
   rawEmailId?: string;
+  parentTransactionId?: string;
 }): Promise<Transaction | null> {
   // Truncate fields to match database VARCHAR limits
   const truncatedMerchant = data.merchant?.substring(0, 255) || data.merchant;
@@ -365,8 +386,8 @@ export async function createTransaction(data: {
       confidence_score, needs_review, review_reason, exact_timestamp,
       gmail_thread_id, gmail_account_index,
       currency_code, original_amount, transaction_subtype,
-      scan_job_id, raw_email_id
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
+      scan_job_id, raw_email_id, parent_transaction_id
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
     ON CONFLICT (email_message_id, txn_fingerprint) DO NOTHING
     RETURNING *`,
     [
@@ -403,7 +424,8 @@ export async function createTransaction(data: {
       data.originalAmount || null,
       data.transactionSubtype || null,
       data.scanJobId || null,
-      data.rawEmailId || null
+      data.rawEmailId || null,
+      data.parentTransactionId || null
     ]
   ).catch(err => {
     // 23505 is Unique Violation (for logical_fingerprint)

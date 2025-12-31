@@ -106,3 +106,19 @@ export async function invalidateBudgetCache(userId: string): Promise<void> {
         logger.error('cache_invalidation_failed', { userId, error });
     }
 }
+
+/**
+ * Invalidate accounts/instruments cache
+ */
+export async function invalidateAccountsCache(userId: string): Promise<void> {
+    try {
+        await Promise.all([
+            clearCache(userId, 'accounts'),
+            clearCache(userId, 'cards'),
+            clearCache(userId, 'analytics')
+        ]);
+        logger.debug('cache_invalidated', { userId, scope: 'accounts' });
+    } catch (error) {
+        logger.error('cache_invalidation_failed', { userId, error });
+    }
+}

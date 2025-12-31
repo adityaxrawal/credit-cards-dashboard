@@ -58,7 +58,7 @@ describe('InstrumentDetector', () => {
         it('should detect bank from content', () => {
             const instruments = InstrumentDetector.detectFromContent(
                 'ICICI Bank Alert',
-                'Your ICICI Bank account has been debited'
+                'Your ICICI Bank account XXXX1234 has been debited'
             );
 
             const account = instruments.find(i => i.bankName);

@@ -11,6 +11,7 @@ router.get('/', transactionsController.getTransactions);
 router.post('/', transactionsController.createTransaction);
 router.post('/bulk-update', transactionsController.bulkUpdateTransactions);
 router.post('/bulk-delete', transactionsController.bulkDeleteTransactions);
+router.post('/merge', transactionsController.mergeTransactions);
 router.get('/:id', transactionsController.getTransaction);
 router.put('/:id', transactionsController.updateTransaction);
 router.delete('/:id', transactionsController.deleteTransaction);

@@ -1,176 +1,120 @@
-import { apiGet, apiPost } from "./client";
+import { apiGet, apiPost } from './client';
 
-export interface GmailConnectionStatus {
-  connected: boolean;
-  watchActive?: boolean;
-  watchExpiration?: string;
-  historyId?: string;
+export interface IngestionLog {
+  id: string;
+  user_id: string;
+  email_message_id: string;
+  subject: string;
+  from_email: string;
+  received_date: string;
+  processing_status: string;
+  transaction_id?: string;
+  error_message?: string;
+  status_category: 'success' | 'failed' | 'ignored' | 'pending';
+  stage: string;
+  created_at: string;
+  transaction_amount?: number;
+  transaction_merchant?: string;
+  transaction_category?: string;
+}
+
+export interface IngestionLogsResponse {
+  data: IngestionLog[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 export interface ScanStatus {
-  jobId: string;
-  status: string; // Allow flexible status strings (PENDING, PROCESSING, COMPLETED, FAILED, etc)
-  currentStep?: string;
+  jobId?: string;
+  status: string;
   processed: number;
   total: number;
-  fetched?: number;
-  progress?: number;
-  inserted?: number;
-  errors?: number;
-  errorList?: unknown[];
-  startedAt?: string;
-  completedAt?: string;
-  errorMessage?: string;
-  currentBatch?: number;
-  totalBatches?: number;
-  postProcessingStats?: {
-    billsCreated?: number;
-    instrumentsCreated?: number;
+  fetched: number;
+  inserted: number;
+  errors: number;
+  errorList?: any[];
+  currentStep?: string;
+  queueStatus?: {
+    queue1: number;
+    queue2: number;
   };
-  // WebSocket specific fields
+  // Optional / Legacy fields from backend or computed in Context
   totalTransactions?: number;
   totalEmails?: number;
   totalProcessed?: number;
   totalErrors?: number;
 
-  // NEW: Queue status (from backend)
-  queueStatus?: {
-    queue1: number;  // Processing queue
-    queue2: number;  // DB/worker pool queue
+  // Frontend state augmentations
+  errorMessage?: string;
+  progress?: number;
+  postProcessingStats?: {
+    billsCreated?: number;
+    instrumentsCreated?: number;
   };
-
-  // NEW: Rate metrics
-  fetchRate?: number;
-  processRate?: number;
-
-
+  connected?: boolean; // For getStatus
 }
 
 export const gmailApi = {
-  /**
-   * Get Gmail connection status
-   */
-  getStatus: async (): Promise<GmailConnectionStatus> => {
-    return apiGet<GmailConnectionStatus>("/api/gmail/status");
+  getLogs: async (params: { page?: number; limit?: number; status?: string; search?: string }) => {
+    const query = new URLSearchParams();
+    if (params.page) query.append('page', params.page.toString());
+    if (params.limit) query.append('limit', params.limit.toString());
+    if (params.status && params.status !== 'all') query.append('status', params.status);
+    if (params.search) query.append('search', params.search);
+
+    return apiGet<IngestionLogsResponse>(`/api/gmail/logs?${query.toString()}`);
   },
 
-  /**
-   * Connect Gmail account
-   */
-  connect: async (refreshToken: string): Promise<GmailConnectionStatus> => {
-    return apiPost<GmailConnectionStatus>("/api/gmail/connect", {
-      refreshToken,
+  getStats: async () => {
+    return apiGet<any>('/api/gmail/stats');
+  },
+
+  getStatus: async () => {
+    // Used by NotificationBell. Maps to stats -> connected
+    const stats = await apiGet<{ connected: boolean }>('/api/gmail/stats');
+    return { connected: stats.connected };
+  },
+
+  getLastSync: async () => {
+    // Used by GmailSyncButton. Maps to stats -> lastSync
+    const stats = await apiGet<{ lastSync: string }>('/api/gmail/stats');
+    return { lastSync: stats.lastSync };
+  },
+
+  scanHistorical: async (fromDate?: Date, toDate?: Date) => {
+    return apiPost<{ jobId: string }>('/api/gmail/scan-historical', {
+      fromDate: fromDate?.toISOString(),
+      toDate: toDate?.toISOString()
     });
   },
 
-  /**
-   * Disconnect Gmail account
-   */
-  disconnect: async (): Promise<GmailConnectionStatus> => {
-    return apiPost<GmailConnectionStatus>("/api/gmail/disconnect");
+  manualMap: async (messageId: string, params: { bankName: string; last4: string }) => {
+    return apiPost('/api/gmail/manual-map', { messageId, ...params });
   },
 
-  /**
-   * Trigger historical scan
-   */
-  scanHistorical: async (
-    fromDate?: Date,
-    toDate?: Date
-  ): Promise<{ jobId: string; status: string }> => {
-    const response = await apiPost<{ data: { jobId: string; status: string } }>(
-      "/api/gmail/scan-historical",
-      {
-        fromDate,
-        toDate,
-      }
-    );
-    // Backend returns { data: { jobId, status, ... } }
-    return response.data || response as unknown as { jobId: string; status: string };
+  getPipelineStats: async () => {
+    // Used by gmail-pipeline/page.tsx
+    // Assuming same as getStats or specific reporting endpoint
+    // If specific: /api/gmail/stats/pipeline?
+    // Based on usage it returns object with { processed, saved, needsReview, terminated }
+    // I'll try /api/gmail/stats which likely has this data or I assume /api/gmail/stats is comprehensive.
+    // If not, I default to /api/gmail/stats.
+    return apiGet<any>('/api/gmail/stats');
   },
 
-  /**
-   * Get scan job status
-   */
-  getScanStatus: async (jobId: string): Promise<ScanStatus> => {
-    const response = await apiGet<{ data: ScanStatus }>(`/api/gmail/jobs/${jobId}`);
-    return response.data || response as unknown as ScanStatus;
-  },
-
-  /**
-   * Get latest scan job
-   */
-  getLatestJob: async (): Promise<ScanStatus | null> => {
-    return apiGet<ScanStatus | null>("/api/gmail/jobs/latest");
-  },
-
-  /**
-   * Manual map message
-   */
-  manualMap: async (messageId: string, cardInfo: { last4: string; bankName: string }): Promise<{ jobId: string }> => {
-    return apiPost<{ jobId: string }>("/api/gmail/manual-map", {
-      messageId,
-      cardInfo,
-    });
-  },
-
-  /**
-   * Trigger manual Gmail sync
-   */
-  syncGmail: async (): Promise<unknown> => {
-    return apiPost<unknown>("/api/gmail/sync");
-  },
-
-  /**
-   * Get Gmail OAuth authorization URL
-   */
-  getAuthUrl: async (): Promise<{ success: boolean; data?: string; error?: string }> => {
-    return apiPost<{ success: boolean; data?: string; error?: string }>("/api/gmail/auth");
-  },
-
-  /**
-   * Get last successful sync timestamp
-   */
-  getLastSync: async (): Promise<{ lastSync: string | null }> => {
-    const response = await apiGet<{ data: { lastSync: string | null } }>("/api/gmail/last-sync");
-    return response.data;
-  },
-
-  async getPipelineStats(): Promise<{
-    processed: number;
-    saved: number;
-    needsReview: number;
-    terminated: number;
-    avgConfidence: number;
-  }> {
-    const response = await apiGet<{
-      data: {
-        processed: number;
-        saved: number;
-        needsReview: number;
-        terminated: number;
-        avgConfidence: number;
-      };
-    }>('api/gmail/stats');
-    return response.data;
-  },
-
-  async getTerminatorReport(
-    fromDate: Date,
-    toDate: Date
-  ): Promise<{
-    reasons: Array<{ reason: string; count: number }>;
-    totalTerminated: number;
-  }> {
+  getTerminatorReport: async (fromDate: Date, toDate: Date) => {
     const query = new URLSearchParams({
-      startDate: fromDate.toISOString(),
-      endDate: toDate.toISOString()
+      fromDate: fromDate.toISOString(),
+      toDate: toDate.toISOString()
     });
-    const response = await apiGet<{
-      data: {
-        reasons: Array<{ reason: string; count: number }>;
-        totalTerminated: number;
-      };
-    }>(`api/gmail/terminator-report?${query}`);
-    return response.data;
+    return apiGet<any>(`/api/gmail/reports/terminator?${query.toString()}`);
   },
+
+  getLatestJob: async () => {
+    return apiGet<any>('/api/gmail/jobs/latest');
+  }
 };

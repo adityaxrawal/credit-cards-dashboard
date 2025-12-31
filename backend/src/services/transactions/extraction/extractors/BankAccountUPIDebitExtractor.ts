@@ -235,6 +235,8 @@ export class BankAccountUPIDebitExtractor {
         const patterns = [
             BankParserPatterns.REF_NUMBER_1,
             BankParserPatterns.REF_NUMBER_2,
+            /(?:UPI\s*Ref(?:\s*No)?|Ref\s*No|Reference\s*Number)[\s:-]*(\d{12})/i, // 12-digit UPI Ref
+            /(\d{12})/ // Capture any standalone 12-digit number (aggressive, check context?) - Keep it safe with label
         ];
         for (const pattern of patterns) {
             const match = text.match(pattern);

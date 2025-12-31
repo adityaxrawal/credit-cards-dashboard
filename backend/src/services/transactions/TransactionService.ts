@@ -101,6 +101,7 @@ export async function createManualTransaction(data: {
   direction: 'credit' | 'debit';
   description?: string;
   metadata?: TransactionMetadata;
+  parentTransactionId?: string;
 }) {
   console.log(`[TransactionService] Creating manual transaction for user ${data.userId}`, data);
   // Calculate bill month/year (simplified for manual)
@@ -123,7 +124,8 @@ export async function createManualTransaction(data: {
     billYear,
     isManuallyAdded: true,
     metadata: data.metadata,
-    classificationMethod: 'manual'
+    classificationMethod: 'manual',
+    parentTransactionId: data.parentTransactionId
   });
 
   if (result) {
@@ -230,6 +232,13 @@ export async function insertFromEmail(
   const txDate = dayjs(data.transactionDate);
   const billMonth = txDate.month() + 1;
   const billYear = txDate.year();
+
+  // Check for duplicate fingerprint
+  const existing = await transactionsQueries.getTransactionByFingerprint(userId, txnFingerprint);
+  if (existing) {
+    console.log(`[TransactionService] Skipping duplicate transaction ${txnFingerprint}`);
+    return existing;
+  }
 
   const result = await transactionsQueries.createTransaction({
     userId,
@@ -372,7 +381,17 @@ export async function insertFromEmailBulk(
     };
   });
 
-  const result = await transactionsQueries.createTransactionsBulk(transactionsToCreate);
+  // Filter out duplicates
+  const fingerprints = transactionsToCreate.map(t => t.txnFingerprint);
+  const existingFingerprints = await transactionsQueries.getExistingFingerprints(userId, fingerprints);
+  const newTransactions = transactionsToCreate.filter(t => !existingFingerprints.includes(t.txnFingerprint));
+
+  if (newTransactions.length === 0) {
+    console.log('[TransactionService] No new transactions to insert (all duplicates)');
+    return [];
+  }
+
+  const result = await transactionsQueries.createTransactionsBulk(newTransactions);
 
   if (result.length > 0) {
     await invalidateTransactionCache(userId);
@@ -451,3 +470,131 @@ export async function bulkDeleteTransactions(
 
   return { deleted, failed };
 }
+
+/**
+ * Split a transaction into multiple child transactions
+ */
+export async function splitTransaction(
+  userId: string,
+  transactionId: string,
+  splits: Array<{ amount: number; category: string; description?: string; merchant?: string }>
+) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get original transaction
+    const originalRes = await client.query(
+      'SELECT * FROM transactions WHERE id = $1 AND user_id = $2',
+      [transactionId, userId]
+    );
+
+    if (originalRes.rows.length === 0) throw new Error('Transaction not found');
+    const original = originalRes.rows[0];
+
+    // Verify amounts
+    const totalSplit = splits.reduce((sum, s) => sum + s.amount, 0);
+    // Use epsilon for float comparison
+    if (Math.abs(totalSplit - Number(original.amount)) > 0.01) {
+      throw new Error(`Split amounts (${totalSplit}) do not sum to total (${original.amount})`);
+    }
+
+    // Mark original as split
+    await client.query(
+      'UPDATE transactions SET is_split = true WHERE id = $1',
+      [transactionId]
+    );
+
+    // Create children
+    for (let i = 0; i < splits.length; i++) {
+      const split = splits[i];
+      await client.query(
+        `INSERT INTO transactions (
+                user_id, instrument_id, instrument_type, transaction_date, 
+                amount, currency_code, direction, 
+                merchant, category, description, 
+                parent_transaction_id, split_index,
+                bill_month, bill_year,
+                is_manually_added
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true)`,
+        [
+          userId, original.instrument_id, original.instrument_type, original.transaction_date,
+          split.amount, original.currency_code, original.direction,
+          split.merchant || original.merchant, split.category, split.description || original.description,
+          transactionId, i,
+          original.bill_month, original.bill_year
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+    await invalidateTransactionCache(userId);
+    return true;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Resolve a duplicate transaction
+ */
+export async function resolveDuplicate(
+  userId: string,
+  keepTransactionId: string,
+  duplicateTransactionId: string
+) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Delete the duplicate
+    await client.query(
+      'DELETE FROM transactions WHERE id = $1 AND user_id = $2',
+      [duplicateTransactionId, userId]
+    );
+
+    // Update the keepTransaction
+    await client.query(
+      'UPDATE transactions SET needs_review = false, review_reason = NULL WHERE id = $1',
+      [keepTransactionId]
+    );
+
+    await client.query('COMMIT');
+    await invalidateTransactionCache(userId);
+    return true;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Link a refund to an original transaction
+ */
+export async function linkRefund(
+  userId: string,
+  refundTransactionId: string,
+  originalTransactionId: string
+) {
+  const result = await pool.query(
+    `UPDATE transactions 
+         SET linked_transaction_id = $1, 
+             link_type = 'refund',
+             is_reversal = true
+         WHERE id = $2 AND user_id = $3
+         RETURNING id`,
+    [originalTransactionId, refundTransactionId, userId]
+  );
+
+  if (result.rowCount && result.rowCount > 0) {
+    await invalidateTransactionCache(userId);
+    return true;
+  }
+  return false;
+}
+

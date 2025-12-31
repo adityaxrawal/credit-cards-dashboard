@@ -140,10 +140,16 @@ export class CreditCardSpendExtractor {
     }
 
     private static extractCurrency(text: string): string {
-        if (BankParserPatterns.CURRENCY_USD.test(text)) return 'USD';
-        if (BankParserPatterns.CURRENCY_EUR.test(text)) return 'EUR';
-        if (BankParserPatterns.CURRENCY_GBP.test(text)) return 'GBP';
-        return 'INR';
+        if (/(?:USD|\$)\s*\d+/.test(text)) return 'USD';
+        if (/(?:EUR|€)\s*\d+/.test(text)) return 'EUR';
+        if (/(?:GBP|£)\s*\d+/.test(text)) return 'GBP';
+        if (/(?:SGD|S\$)\s*\d+/.test(text)) return 'SGD';
+        if (/(?:AED)\s*\d+/.test(text)) return 'AED';
+
+        // Fallback to INR if strictly INR keywords found, else default
+        if (BankParserPatterns.CURRENCY_INR && BankParserPatterns.CURRENCY_INR.test(text)) return 'INR';
+
+        return 'INR'; // Default assumption
     }
 
     private static async extractSBI(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {

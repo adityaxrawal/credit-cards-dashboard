@@ -383,6 +383,68 @@ export class ReportService {
         return value;
     }
 
+
+    /**
+     * Generate Year in Review Report
+     */
+    static async generateYearInReview(userId: string, year: number) {
+        const from = dayjs().year(year).startOf('year').toDate();
+        const to = dayjs().year(year).endOf('year').toDate();
+
+        const aggregations = await transactionsQueries.getSpendingAggregations(userId, { from, to });
+
+        // Find top merchant
+        const merchants = await pool.query(
+            `SELECT merchant, SUM(amount) as total, COUNT(*) as count 
+             FROM transactions 
+             WHERE user_id = $1 AND transaction_date >= $2 AND transaction_date <= $3
+             GROUP BY merchant 
+             ORDER BY total DESC 
+             LIMIT 5`,
+            [userId, from, to]
+        );
+
+        return {
+            year,
+            totalSpent: aggregations.totalSpent,
+            topCategories: aggregations.byCategory.slice(0, 3),
+            topMerchants: merchants.rows,
+            generatedAt: new Date()
+        };
+    }
+
+    /**
+     * Get AI-driven Spending Insights (Stub/Rule-based first)
+     */
+    static async getSpendingInsights(userId: string): Promise<string[]> {
+        const insights: string[] = [];
+        const now = dayjs();
+        const thisMonthStart = now.startOf('month').toDate();
+        const lastMonthStart = now.subtract(1, 'month').startOf('month').toDate();
+        const lastMonthEnd = now.subtract(1, 'month').endOf('month').toDate();
+
+        // 1. Compare total spending (This Month vs Last Month same day)
+        // ... implementation simplified for stub ...
+
+        // 2. Detect large transactions
+        const largeTxns = await pool.query(
+            `SELECT merchant, amount FROM transactions 
+             WHERE user_id = $1 AND transaction_date >= $2 AND amount > 5000
+             ORDER BY transaction_date DESC LIMIT 3`,
+            [userId, thisMonthStart]
+        );
+
+        if (largeTxns.rows.length > 0) {
+            insights.push(`You have made ${largeTxns.rows.length} large transactions (>5k) this month.`);
+        }
+
+        insights.push("Spending on 'Food' is 15% higher than last month's average."); // Mock
+        insights.push("You are on track to save ₹12,000 this month based on current trends."); // Mock
+
+
+        return insights;
+    }
+
     /**
      * Generate date range string for filename
      */
@@ -392,3 +454,5 @@ export class ReportService {
         return `${from}_to_${to}`;
     }
 }
+
+

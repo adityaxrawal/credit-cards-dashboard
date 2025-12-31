@@ -25,6 +25,8 @@ export interface User {
     email: string;
     created_at?: Date;
     updated_at?: Date;
+    google_refresh_token?: string;
+    monthly_budget?: string;
 }
 
 /**

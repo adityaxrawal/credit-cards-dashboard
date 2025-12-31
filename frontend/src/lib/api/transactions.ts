@@ -91,6 +91,7 @@ export interface TransactionFormData {
   amount: number;
   transactionType: "debit" | "credit" | "refund" | "bill_payment";
   description?: string;
+  parentTransactionId?: string;
 }
 
 export interface TransactionFilters {
@@ -187,7 +188,43 @@ export const transactionApi = {
   /**
    * Delete a transaction
    */
+  /**
+   * Delete a transaction
+   */
   deleteTransaction: async (transactionId: string): Promise<void> => {
     await apiDelete<void>(`/api/transactions/${transactionId}`);
+  },
+
+  /**
+   * Bulk update transactions
+   */
+  bulkUpdate: async (
+    transactionIds: string[],
+    data: Partial<TransactionFormData>
+  ): Promise<{ updated: number; failed: number }> => {
+    return apiPost<{ updated: number; failed: number }>(
+      "/api/transactions/bulk-update", // Updated endpoint to match backend convention if needed, or use /bulk
+      { transactionIds, ...data }
+    ).then((res) => res);
+  },
+
+  /**
+   * Bulk delete transactions
+   */
+  bulkDelete: async (transactionIds: string[]): Promise<{ deleted: number; failed: number }> => {
+    return apiPost<{ deleted: number; failed: number }>(
+      "/api/transactions/bulk-delete",
+      { transactionIds }
+    ).then((res) => res);
+  },
+
+  /**
+   * Merge duplicate transactions
+   */
+  merge: async (keepTransactionId: string, duplicateTransactionId: string): Promise<void> => {
+    await apiPost<void>("/api/transactions/merge", {
+      keepTransactionId,
+      duplicateTransactionId,
+    });
   },
 };

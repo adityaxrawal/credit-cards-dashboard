@@ -74,3 +74,44 @@ export async function getCardStatements(req: AuthRequest, res: Response, next: N
         next(error);
     }
 }
+
+import { StatementService } from '../services/statements/StatementService';
+
+/**
+ * Upload and process a statement
+ */
+export async function uploadStatement(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: 'No file uploaded'
+            });
+        }
+
+        const userId = req.user.id;
+        const { bankName, password } = req.body;
+
+        if (!bankName) {
+            return res.status(400).json({
+                success: false,
+                error: 'Bank name is required'
+            });
+        }
+
+        const result = await StatementService.processStatement(
+            userId,
+            req.file.buffer,
+            req.file.originalname,
+            bankName,
+            password
+        );
+
+        res.json({
+            success: true,
+            data: result
+        });
+    } catch (error) {
+        next(error);
+    }
+}

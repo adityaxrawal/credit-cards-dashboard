@@ -21,7 +21,7 @@ export async function getCurrentBudgetStatus(userId: string) {
     throw new Error('User not found');
   }
 
-  const monthlyBudget = parseFloat(userResult.rows[0].monthly_budget || '30000');
+  const monthlyBudget = parseFloat(userResult.rows[0].monthly_budget || '0');
 
   // Get current month spending
   const spent = await budgetQueries.getCurrentMonthSpending(userId, month, year);
@@ -85,11 +85,72 @@ export async function getBudgetHistory(userId: string, limit: number = 12) {
   }));
 }
 
-/**
- * Mark alert as sent
- */
+
 export async function markAlertSent(userId: string, month: number, year: number) {
   await budgetQueries.updateBudgetTracking(userId, month, year, {
     alertSent: true,
   });
 }
+
+/**
+ * Link Savings Goal to Budget
+ * (Simple implementation: Stores goal ID in user settings or rules)
+ */
+export async function linkBudgetToSavings(userId: string, categoryId: string, goalId: string) {
+  // This would typically involve a junction table "budget_savings_link"
+  // For now, we simulate by checking existence and logging/storing as rule.
+  await pool.query(
+    `INSERT INTO budget_rules (user_id, name, type, config, is_enabled)
+         VALUES ($1, 'Savings Link', 'SAVINGS_LINK', $2, true)
+         ON CONFLICT (id) DO NOTHING`, // Simplification: In real app, upsert based on unique constraint
+    [userId, JSON.stringify({ categoryId, goalId })]
+  );
+  return true;
+}
+
+/**
+ * Get active budget alerts
+ */
+export async function getBudgetAlerts(userId: string) {
+  const status = await getCurrentBudgetStatus(userId);
+  const alerts: string[] = [];
+
+  if (status.ratio >= 1.0) {
+    alerts.push(`You have exceeded your monthly budget by ₹${status.spent - status.monthlyBudget}`);
+  } else if (status.ratio >= 0.9) {
+    alerts.push(`Warning: You have used ${Math.round(status.ratio * 100)}% of your budget.`);
+  }
+
+  return alerts;
+}
+
+
+// --- VSCODE-SPECIFIC EXPORTS FOR NEW SERVICES ---
+import { EnvelopeBudgetingService } from './EnvelopeBudgeting';
+import { BudgetRulesService } from './BudgetRulesService';
+
+export async function getCategoryBudgets(userId: string, month: number, year: number) {
+  return EnvelopeBudgetingService.getEnvelopes(userId, month, year);
+}
+
+export async function setCategoryBudget(userId: string, categoryId: string, amount: number) {
+  const now = dayjs();
+  // Default to current month if not specified, but typically UI passes it. 
+  // For this signature let's assume current month or explicit params needed.
+  // Actually, better to take month/year as params.
+  // We'll update the signature to match common usage.
+  return EnvelopeBudgetingService.setEnvelope(userId, now.month() + 1, now.year(), categoryId, amount);
+}
+
+export async function setCategoryBudgetForMonth(userId: string, categoryId: string, amount: number, month: number, year: number) {
+  return EnvelopeBudgetingService.setEnvelope(userId, month, year, categoryId, amount);
+}
+
+export async function getRolloverStatus(userId: string) {
+  return BudgetRulesService.isRolloverEnabled(userId);
+}
+
+export async function setRolloverRule(userId: string, enabled: boolean) {
+  return BudgetRulesService.setRolloverRule(userId, enabled);
+}
+

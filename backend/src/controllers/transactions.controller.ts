@@ -80,6 +80,7 @@ export async function createTransaction(req: AuthRequest, res: Response, next: N
       transactionType: validatedData.transactionType,
       direction: validatedData.direction || (validatedData.transactionType === 'debit' ? 'debit' : 'credit'),
       description: validatedData.description,
+      parentTransactionId: validatedData.parentTransactionId
     });
 
     res.status(201).json({ data: transaction });
@@ -305,6 +306,34 @@ export async function bulkDeleteTransactions(req: AuthRequest, res: Response, ne
     res.json({
       success: true,
       data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Merge duplicate transactions
+ */
+export async function mergeTransactions(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user.id;
+    const { keepTransactionId, duplicateTransactionId } = req.body;
+
+    if (!keepTransactionId || !duplicateTransactionId) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'keepTransactionId and duplicateTransactionId are required',
+        },
+      });
+    }
+
+    await transactionsService.resolveDuplicate(userId, keepTransactionId, duplicateTransactionId);
+
+    res.json({
+      success: true,
+      message: 'Transactions merged successfully',
     });
   } catch (error) {
     next(error);

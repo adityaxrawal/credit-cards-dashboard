@@ -170,3 +170,31 @@ function parseExportFilters(query: any): ExportFilters {
         merchant: query.merchant as string,
     };
 }
+
+/**
+ * Get Year in Review
+ */
+export async function getYearInReview(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const userId = req.user.id;
+        const year = parseInt(req.query.year as string) || new Date().getFullYear();
+        const data = await ReportService.generateYearInReview(userId, year);
+        res.json({ success: true, data });
+    } catch (error) {
+        next(error);
+    }
+}
+
+/**
+ * Get Spending Insights
+ */
+export async function getSpendingInsights(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+        const userId = req.user.id;
+        const insights = await ReportService.getSpendingInsights(userId);
+        res.json({ success: true, data: insights });
+    } catch (error) {
+        next(error);
+    }
+}
+

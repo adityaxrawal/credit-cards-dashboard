@@ -244,10 +244,52 @@ export class PdfParser {
     return text.replace(/\s+/g, ' ').trim();
   }
 
+
   /**
    * Clear failure tracking (for testing or periodic cleanup)
    */
   static clearFailureCache(): void {
     this.failedPdfs.clear();
   }
+
+  // --- EXTRACTION LOGIC ---
+
+  /**
+   * Extract potential transactions from PDF text using generic regex patterns.
+   * This is a heuristic approach for "Partially Implemented" status.
+   */
+  static extractTransactionsFromText(text: string): any[] {
+    const transactions: any[] = [];
+    const lines = text.split('\n');
+
+    // Generic Date Pattern: DD/MM/YYYY or DD-MM-YYYY
+    const dateRegex = /\d{2}[\/\-]\d{2}[\/\-]\d{4}/;
+
+    // Generic Amount Pattern: Number with decimals or commas
+    // e.g. 1,234.56 or 1234.56
+    const amountRegex = /(?:Rs\.?|INR)?\s*[\d,]+\.\d{2}/i;
+
+    for (const line of lines) {
+      // Simple heuristic: Line must have a date and an amount
+      const dateMatch = line.match(dateRegex);
+      const amountMatch = line.match(amountRegex);
+
+      if (dateMatch && amountMatch) {
+        // It's a candidate
+        const date = dateMatch[0];
+        const amountStr = amountMatch[0].replace(/[^0-9.]/g, ''); // strip currency symbols
+        const description = line.replace(dateMatch[0], '').replace(amountMatch[0], '').trim();
+
+        transactions.push({
+          date,
+          amount: parseFloat(amountStr),
+          description: this.cleanText(description),
+          originalLine: line
+        });
+      }
+    }
+
+    return transactions;
+  }
 }
+

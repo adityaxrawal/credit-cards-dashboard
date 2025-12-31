@@ -110,6 +110,7 @@ export class BankParserPatterns {
   static readonly CURRENCY_USD = RegexCache.get('USD|\\$|Dollar', 'i');
   static readonly CURRENCY_EUR = RegexCache.get('EUR|€|Euro', 'i');
   static readonly CURRENCY_GBP = RegexCache.get('GBP|£|Pound', 'i');
+  static readonly CURRENCY_INR = RegexCache.get('INR|Rs|₹|Rupee', 'i');
   static readonly FOREIGN_AMOUNT = RegexCache.get('(?:USD|EUR|GBP)\\s*([0-9,]+\\.?[0-9]*)', 'i');
 
   // Transaction type keywords

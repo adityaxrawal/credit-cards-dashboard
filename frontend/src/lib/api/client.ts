@@ -60,10 +60,9 @@ async function refreshAccessToken(): Promise<boolean> {
 
 /**
  * Make an API request
- * Uses httpOnly cookies for authentication (no tokens in JS)
  * Automatically refreshes token on 401 and retries once
  */
-async function makeRequest<T>(
+export async function makeRequest<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
@@ -72,7 +71,8 @@ async function makeRequest<T>(
   const url = `${API_URL}${endpoint}`;
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    // Only set Content-Type to JSON if not FormData
+    ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
   };
 
   // Merge any custom headers

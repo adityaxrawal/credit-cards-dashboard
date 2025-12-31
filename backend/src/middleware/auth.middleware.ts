@@ -98,3 +98,14 @@ export const authenticate: RequestHandler = async (req, res, next) => {
     });
   }
 };
+
+export const requireGmailConnection: RequestHandler = async (req, res, next) => {
+  const user = (req as AuthRequest).user;
+  if (!user || !user.google_refresh_token) {
+    return res.status(403).json({
+      error: 'GMAIL_NOT_CONNECTED',
+      message: 'Gmail connection required for this action'
+    });
+  }
+  next();
+};

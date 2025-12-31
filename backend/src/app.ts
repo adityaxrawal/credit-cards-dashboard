@@ -18,6 +18,9 @@ import * as Sentry from '@sentry/node';
 
 // Initialize background services
 CleanupService.startCleanupCron();
+import { SchedulerService } from './services/reports/SchedulerService';
+SchedulerService.getInstance().init();
+
 
 // Initialize Sentry
 if (env.SENTRY_DSN) {
@@ -126,7 +129,14 @@ app.get('/health/detailed', async (req, res) => {
 // API Routes
 app.use('/api', routes);
 
-// Error Handling
+// 404 Catch-All for API routes
+app.use('/api/*', (req, res) => {
+  res.status(404).json({
+    error: 'NOT_FOUND',
+    message: 'The requested API endpoint does not exist'
+  });
+});
+
 // Error Handling
 app.use(csrfErrorHandler);
 if (env.SENTRY_DSN) {

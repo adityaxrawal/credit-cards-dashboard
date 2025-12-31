@@ -14,6 +14,10 @@ import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/utils";
 import { DashboardSubscriptionCard } from "./DashboardSubscriptionCard";
+import { AccountHealthSummary } from "./AccountHealthSummary";
+import { CashflowChart } from "./CashflowChart";
+import { GoalProgressBars } from "./GoalProgressBars";
+import { AlertsPanel } from "./AlertsPanel";
 
 /**
  * Dashboard Page
@@ -106,6 +110,9 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Account Health Summary - New Component */}
+        <AccountHealthSummary />
+
         {/* KPI Cards */}
         <DashboardStatsGrid
           totalBalance={totalBalance}
@@ -118,16 +125,27 @@ export default function DashboardPage() {
           totalRewards={totalRewards}
         />
 
+        {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Spending Trend */}
-          <div className="lg:col-span-2 bg-card-bg rounded-xl p-6 border border-muted-text/10 shadow-sm">
-            <SpendingTrendChart data={spendingTrend} />
+          {/* Left Column - Charts */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Cashflow Chart - New Component */}
+            <CashflowChart />
 
-
+            {/* Spending Trend */}
+            <div className="bg-card-bg rounded-xl p-6 border border-muted-text/10 shadow-sm">
+              <SpendingTrendChart data={spendingTrend} />
+            </div>
           </div>
 
-          {/* Reminders / Recent Activity */}
-            <div className="space-y-6">
+          {/* Right Column - Widgets */}
+          <div className="space-y-6">
+            {/* Alerts Panel - New Component */}
+            <AlertsPanel />
+
+            {/* Goal Progress - New Component */}
+            <GoalProgressBars />
+
             <DashboardSubscriptionCard stats={recurringStats || { totalMonthly: 0, activeCount: 0 }} />
             <RemindersWidget />
             

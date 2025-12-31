@@ -32,7 +32,13 @@ import { useToast } from "@/components/ui/feedback/Toast";
 import { BulkImportModal } from "@/components/features/transactions/BulkImportModal";
 import { TransactionDetailModal } from "@/components/features/transactions/TransactionDetailModal";
 import { TransactionActions } from "@/components/features/transactions/TransactionActions";
+import { BulkActionToolbar } from "@/components/features/transactions/BulkActionToolbar";
+import { BulkCategoryModal } from "@/components/features/transactions/BulkCategoryModal";
+import { Checkbox } from "@/components/ui/primitives/checkbox";
+import { InlineEditCell } from "@/components/features/transactions/InlineEditCell";
 import { GmailUtils } from "@/lib/utils/gmailUtils";
+import { RuleSuggestionsPanel } from "@/components/features/rules/RuleSuggestionPanel";
+import { MergeTransactionsModal } from "@/components/features/transactions/MergeTransactionsModal";
 
 interface TransactionModalData {
   id?: string;
@@ -57,11 +63,20 @@ export default function TransactionsPage() {
   const [showModal, setShowModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState<Set<string>>(new Set());
+  const [showBulkCategoryModal, setShowBulkCategoryModal] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+  
   const [editingTransaction, setEditingTransaction] =
     useState<TransactionModalData | null>(null);
   const [selectedTransaction, setSelectedTransaction] = 
     useState<Transaction | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  
+  // Split transaction state
+  const [isSplitMode, setIsSplitMode] = useState(false);
+  const [splits, setSplits] = useState<Array<{category: string, amount: number, description: string}>>([{ category: "", amount: 0, description: "" }]);
 
   // Filters state
   const [selectedCard, setSelectedCard] = useState<string>("");
@@ -210,7 +225,40 @@ export default function TransactionsPage() {
     if (editingTransaction?.id) {
       updateMutation.mutate({ id: editingTransaction.id, data });
     } else {
-      createMutation.mutate(data);
+      if (isSplitMode) {
+         // Handle Split Transaction Creation
+         const parentAmount = data.amount;
+         const splitTotal = splits.reduce((sum, s) => sum + Number(s.amount), 0);
+         
+         if (Math.abs(parentAmount - splitTotal) > 0.01) {
+             errorToast(`Split total (${splitTotal}) must match transaction amount (${parentAmount})`);
+             return;
+         }
+
+         // 1. Create Parent
+         createMutation.mutateAsync({
+             ...data,
+             description: data.description || "Split Transaction Parent"
+         }).then((parentTx) => {
+             // 2. Create Children
+             const childPromises = splits.map(split => 
+                 createMutation.mutateAsync({
+                     ...data,
+                     category: split.category,
+                     amount: Number(split.amount),
+                     description: split.description,
+                     parentTransactionId: parentTx.id
+                 })
+             );
+             
+             return Promise.all(childPromises);
+         }).catch(err => {
+             console.error("Failed to create split transactions", err);
+         });
+
+      } else {
+         createMutation.mutate(data);
+      }
     }
   };
 
@@ -238,6 +286,76 @@ export default function TransactionsPage() {
     setEditingTransaction(null);
     setShowModal(true);
   };
+
+  // Inline Edit Handler
+  const handleInlineUpdate = async (id: string, field: keyof TransactionFormData, value: string | number) => {
+    try {
+      await updateMutation.mutateAsync({
+        id,
+        data: { [field]: value },
+      });
+    } catch (error) {
+       // Error handled by mutation
+    }
+  };
+
+  // Bulk Actions
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const ids = new Set(transactions.map((t) => t.id));
+      setSelectedTransactionIds(ids);
+    } else {
+      setSelectedTransactionIds(new Set());
+    }
+  };
+
+  const handleSelectRow = (id: string, checked: boolean) => {
+    const newSelected = new Set(selectedTransactionIds);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedTransactionIds(newSelected);
+  };
+
+  const handleBulkDelete = async () => {
+     if (!confirm(`Are you sure you want to delete ${selectedTransactionIds.size} transactions?`)) return;
+     
+     setIsBulkProcessing(true);
+     try {
+       await transactionApi.bulkDelete(Array.from(selectedTransactionIds));
+       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all });
+       queryClient.invalidateQueries({ queryKey: queryKeys.cards.all });
+       success(`Deleted ${selectedTransactionIds.size} transactions`);
+       setSelectedTransactionIds(new Set());
+     } catch (error) {
+       errorToast("Failed to delete transactions");
+     } finally {
+       setIsBulkProcessing(false);
+     }
+  };
+
+  const handleBulkCategorize = async (category: string) => {
+    setIsBulkProcessing(true);
+    try {
+      await transactionApi.bulkUpdate(Array.from(selectedTransactionIds), { category });
+      queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all });
+      success(`Updated ${selectedTransactionIds.size} transactions`);
+      setSelectedTransactionIds(new Set());
+      setShowBulkCategoryModal(false);
+    } catch (error) {
+      errorToast("Failed to update transactions");
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
+
+  const uniqueCategories = useMemo(() => {
+    const cats = new Set(transactions.map(t => t.category).filter(Boolean));
+    return Array.from(cats).sort();
+  }, [transactions]);
+
 
   const applyFilters = () => {
     setCurrentPage(1);
@@ -297,11 +415,29 @@ export default function TransactionsPage() {
   // Data table columns
   const columns: Column[] = [
     {
+      key: "select",
+      header: (
+        <Checkbox
+          checked={transactions.length > 0 && selectedTransactionIds.size === transactions.length}
+          onChange={(e) => handleSelectAll(e.target.checked)}
+          className="translate-y-[2px]"
+        />
+      ),
+      render: (_: unknown, row: unknown) => (
+        <Checkbox
+          checked={selectedTransactionIds.has((row as Transaction).id)}
+          onChange={(e) => handleSelectRow((row as Transaction).id, e.target.checked)}
+          onClick={(e) => e.stopPropagation()}
+          className="translate-y-[2px]"
+        />
+      ),
+    },
+    {
       key: "transaction_date",
       header: "Date",
       sortable: true,
       render: (value: unknown) => (
-         <span className="text-secondary-text text-sm">
+         <span className="text-secondary-text text-sm whitespace-nowrap">
             {formatDate(value as string, "short")}
          </span>
       ),
@@ -312,22 +448,28 @@ export default function TransactionsPage() {
       render: (value: unknown, row: unknown) => {
         const tx = row as Transaction;
         return (
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3 min-w-[200px]" onClick={e => e.stopPropagation()}>
             <div className="w-10 h-10 bg-primary-green/10 rounded-full flex items-center justify-center flex-shrink-0">
                 <span className="text-sm font-semibold text-primary-green">
                 {(value as string)?.charAt(0)?.toUpperCase()}
                 </span>
             </div>
-            <div className="flex flex-col">
+            <div className="flex flex-col flex-1">
                 <span className="font-semibold text-primary-text">
                    {value as string}
                 </span>
-                <div className="flex items-center gap-2 text-xs text-secondary-text">
-                   <span>{tx.category || "Uncategorized"}</span>
+                <div className="flex items-center gap-2 text-xs text-secondary-text mt-1">
+                   <div className="w-32">
+                     <InlineEditCell 
+                        value={tx.category || "Uncategorized"} 
+                        onSave={(val) => handleInlineUpdate(tx.id, 'category', val)}
+                        className="text-xs py-0 px-1 hover:bg-hover-bg rounded border border-transparent hover:border-border"
+                     />
+                   </div>
                    {tx.description && (
                      <>
                        <span>•</span>
-                       <span className="max-w-[200px] truncate" title={tx.description}>
+                       <span className="max-w-[150px] truncate" title={tx.description}>
                          {tx.description}
                        </span>
                      </>
@@ -478,6 +620,40 @@ export default function TransactionsPage() {
              </div>
 
              <div className="flex gap-2">
+                <Button 
+                    variant="secondary"
+                    onClick={() => {
+                        // Export Logic
+                        const headers = ["Date", "Merchant", "Amount", "Type", "Category", "Card", "Description"];
+                        const rows = transactions.map(t => [
+                            t.transaction_date.split('T')[0],
+                            `"${t.merchant.replace(/"/g, '""')}"`, // Escape quotes
+                            t.transaction_type === 'debit' ? -Math.abs(t.amount) : Math.abs(t.amount),
+                            t.transaction_type,
+                            `"${t.category.replace(/"/g, '""')}"`,
+                            `"${(t.card?.card_name || 'Unknown').replace(/"/g, '""')}"`,
+                            `"${(t.description || '').replace(/"/g, '""')}"`
+                        ]);
+                        
+                        const csvContent = [
+                            headers.join(','),
+                            ...rows.map(r => r.join(','))
+                        ].join('\n');
+                        
+                        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                        const link = document.createElement('a');
+                        const url = URL.createObjectURL(blob);
+                        link.setAttribute('href', url);
+                        link.setAttribute('download', `transactions_export_${new Date().toISOString().split('T')[0]}.csv`);
+                        link.style.visibility = 'hidden';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    }}
+                >
+                    <Upload className="w-4 h-4 mr-2 rotate-180" /> {/* Re-using upload icon rotated for download look */}
+                    Export
+                </Button>
                 <Button onClick={handleAddNew}>
                   <Plus className="w-4 h-4 mr-2" />
                   Add Transaction
@@ -638,7 +814,9 @@ export default function TransactionsPage() {
         {/* Transactions Table */}
         {!isLoading && !fetchError && (
           <>
-            <DataTable
+            <div className="overflow-x-auto -mx-6 px-6 pb-4">
+              <RuleSuggestionsPanel />
+              <DataTable
               columns={columns}
               data={sortedTransactions as unknown as Record<string, unknown>[]}
               onRowClick={(row) => handleRowClick(row as unknown as Transaction)}
@@ -646,6 +824,7 @@ export default function TransactionsPage() {
               onSort={handleSort}
               emptyMessage="No transactions found"
             />
+            </div>
 
             {/* Pagination */}
             {pagination && pagination.totalPages > 1 && (
@@ -692,6 +871,24 @@ export default function TransactionsPage() {
           </div>
         )}
       </div>
+
+      <BulkActionToolbar 
+        selectedCount={selectedTransactionIds.size}
+        onClearSelection={() => setSelectedTransactionIds(new Set())}
+        onBulkDelete={handleBulkDelete}
+        onBulkCategorize={() => setShowBulkCategoryModal(true)}
+        onBulkMerge={() => setShowMergeModal(true)}
+        isDeleting={isBulkProcessing}
+      />
+
+      <BulkCategoryModal
+        isOpen={showBulkCategoryModal}
+        onClose={() => setShowBulkCategoryModal(false)}
+        onConfirm={handleBulkCategorize}
+        selectedCount={selectedTransactionIds.size}
+        categories={uniqueCategories}
+        isLoading={isBulkProcessing}
+      />
 
       {/* Add/Edit Transaction Modal */}
       <Modal
@@ -766,6 +963,90 @@ export default function TransactionsPage() {
               placeholder="0.00"
               defaultValue={editingTransaction?.amount || ""}
             />
+            {/* Split Transaction UI */}
+            <div className="flex items-center mt-2 mb-2">
+                <input 
+                    type="checkbox" 
+                    id="split-toggle"
+                    checked={isSplitMode}
+                    onChange={(e) => setIsSplitMode(e.target.checked)}
+                    className="mr-2 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <label htmlFor="split-toggle" className="text-sm font-medium text-gray-700 cursor-pointer">Split this transaction</label>
+            </div>
+            
+            {isSplitMode && (
+                <div className="mt-2 border p-3 rounded-md bg-gray-50 mb-4">
+                    <div className="flex justify-between mb-2 items-center">
+                        <span className="font-medium text-sm text-gray-700">Split Items</span>
+                        <span className="text-sm font-medium text-gray-600">
+                            Total: <span className="text-indigo-600">{splits.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0).toFixed(2)}</span>
+                        </span>
+                    </div>
+                    {splits.map((split, idx) => (
+                        <div key={idx} className="flex gap-2 mb-2 items-start">
+                            <div className="flex-1">
+                                <Input 
+                                    placeholder="Category" 
+                                    value={split.category} 
+                                    onChange={(e) => {
+                                        const newSplits = [...splits];
+                                        newSplits[idx].category = e.target.value;
+                                        setSplits(newSplits);
+                                    }}
+                                    className="h-9 text-sm"
+                                />
+                            </div>
+                            <div className="w-24">
+                                <Input 
+                                    type="number" 
+                                    placeholder="Amt" 
+                                    value={split.amount} 
+                                    onChange={(e) => {
+                                        const newSplits = [...splits];
+                                        newSplits[idx].amount = parseFloat(e.target.value);
+                                        setSplits(newSplits);
+                                    }}
+                                    className="h-9 text-sm"
+                                />
+                            </div>
+                             <div className="flex-1">
+                                <Input 
+                                    placeholder="Description" 
+                                    value={split.description} 
+                                    onChange={(e) => {
+                                        const newSplits = [...splits];
+                                        newSplits[idx].description = e.target.value;
+                                        setSplits(newSplits);
+                                    }}
+                                    className="h-9 text-sm"
+                                />
+                            </div>
+                            <Button 
+                                type="button" 
+                                variant="ghost" 
+                                onClick={() => {
+                                    const newSplits = [...splits];
+                                    newSplits.splice(idx, 1);
+                                    setSplits(newSplits);
+                                }}
+                                className="h-9 w-9 p-0 text-gray-500 hover:text-red-600"
+                            >
+                                <X size={16} />
+                            </Button>
+                        </div>
+                    ))}
+                    <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setSplits([...splits, { category: '', amount: 0, description: '' }])}
+                        className="w-full mt-2 border-dashed border-gray-300 text-gray-600 hover:text-indigo-600 hover:border-indigo-300"
+                    >
+                        <Plus size={14} className="mr-1" /> Add Split
+                    </Button>
+                </div>
+            )}
           </div>
 
           <div>
@@ -836,6 +1117,14 @@ export default function TransactionsPage() {
           setSelectedTransaction(null);
         }}
         transaction={selectedTransaction}
+      />
+
+      {/* Merge Transactions Modal */}
+      <MergeTransactionsModal
+        isOpen={showMergeModal}
+        onClose={() => setShowMergeModal(false)}
+        selectedTransactions={transactions.filter(t => selectedTransactionIds.has(t.id))}
+        onSuccess={() => setSelectedTransactionIds(new Set())}
       />
     </AppLayout>
   );

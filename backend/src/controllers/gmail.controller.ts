@@ -12,7 +12,7 @@ export async function getStatus(req: Request, res: Response, next: NextFunction)
 
     const status = await gmailService.getConnectionStatus(userId);
 
-    res.json({ data: status });
+    res.json(status);
   } catch (error) {
     next(error);
   }
@@ -38,7 +38,7 @@ export async function connect(req: Request, res: Response, next: NextFunction) {
 
     const result = await gmailService.connectGmail(userId, refreshToken);
 
-    res.json({ data: result });
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -53,7 +53,7 @@ export async function disconnect(req: Request, res: Response, next: NextFunction
 
     const result = await gmailService.disconnectGmail(userId);
 
-    res.json({ data: result });
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -74,7 +74,7 @@ export async function triggerHistoricalScan(req: Request, res: Response, next: N
       toDate ? new Date(toDate) : undefined
     );
 
-    res.json({ data: result });
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -90,7 +90,7 @@ export async function getHistoricalScanStatus(req: Request, res: Response, next:
 
     const status = await gmailService.getHistoricalScanStatus(userId, jobId);
 
-    res.json({ data: status });
+    res.json(status);
   } catch (error) {
     logger.error('[GmailController] Error getting scan status:', error);
     next(error);
@@ -288,6 +288,30 @@ export async function incrementalSync(req: Request, res: Response, next: NextFun
     });
   } catch (error) {
     logger.error('[GmailController] Incremental sync error:', error);
+    next(error);
+  }
+}
+
+/**
+ * Get Ingestion Logs
+ */
+export async function getIngestionLogs(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user.id;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const status = req.query.status as string;
+    const search = req.query.search as string;
+
+    const result = await gmailService.getIngestionLogs(userId, {
+      page,
+      limit,
+      status,
+      search,
+    });
+
+    res.json(result);
+  } catch (error) {
     next(error);
   }
 }

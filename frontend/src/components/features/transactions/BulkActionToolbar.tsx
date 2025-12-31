@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Trash2, Tag, MoreHorizontal, X } from "lucide-react";
+import { Trash2, Tag, Merge, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BulkActionToolbarProps {
@@ -9,6 +9,7 @@ interface BulkActionToolbarProps {
   onClearSelection: () => void;
   onBulkDelete: () => void;
   onBulkCategorize: () => void;
+  onBulkMerge?: () => void;
   isDeleting?: boolean;
 }
 
@@ -17,6 +18,7 @@ export function BulkActionToolbar({
   onClearSelection,
   onBulkDelete,
   onBulkCategorize,
+  onBulkMerge,
   isDeleting = false,
 }: BulkActionToolbarProps) {
   if (selectedCount === 0) return null;
@@ -37,6 +39,16 @@ export function BulkActionToolbar({
           <Tag className="w-4 h-4" />
           <span>Categorize</span>
         </button>
+
+        {selectedCount >= 2 && onBulkMerge && (
+          <button
+            onClick={onBulkMerge}
+            className="flex items-center gap-2 px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+          >
+            <Merge className="w-4 h-4" />
+            <span>Merge</span>
+          </button>
+        )}
         
         <button
           onClick={onBulkDelete}
@@ -65,3 +77,4 @@ export function BulkActionToolbar({
     </div>
   );
 }
+

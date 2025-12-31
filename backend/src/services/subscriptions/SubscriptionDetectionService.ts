@@ -96,6 +96,11 @@ export class SubscriptionDetectionService {
             }
         }
 
+        // Persist detected subscriptions
+        for (const sub of subscriptions) {
+            await this.persistSubscription(sub);
+        }
+
         return subscriptions;
     }
 
@@ -259,5 +264,78 @@ export class SubscriptionDetectionService {
             subscriptionCount: subscriptions.length,
             byCategory,
         };
+    }
+    /**
+     * Persist detected subscription to database
+     */
+    private static async persistSubscription(sub: DetectedSubscription) {
+        try {
+            await pool.query(
+                `INSERT INTO recurring_patterns (
+                    user_id, merchant, merchant_normalized, typical_amount, amount_variance,
+                    frequency_type, last_occurrence, next_expected, category,
+                    status, confidence_score, is_subscription, is_auto_detected,
+                    updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active', $10, true, true, NOW())
+                ON CONFLICT (user_id, merchant_normalized, frequency_type)
+                DO UPDATE SET
+                    typical_amount = $4,
+                    amount_variance = $5,
+                    last_occurrence = $7,
+                    next_expected = $8,
+                    confidence_score = $10,
+                    updated_at = NOW()
+                WHERE recurring_patterns.user_confirmed = false`,
+                [
+                    sub.userId, sub.merchantName, sub.normalizedName, sub.typicalAmount, sub.amountVariance,
+                    sub.frequency, sub.lastChargeDate, sub.nextExpectedDate, sub.category,
+                    sub.confidence
+                ]
+            );
+        } catch (error) {
+            logger.error(`[Subscription] Failed to persist subscription ${sub.merchantName}:`, error);
+        }
+    }
+
+    /**
+     * Confirm a subscription
+     */
+    static async confirmSubscription(userId: string, subscriptionId: string): Promise<boolean> {
+        // subscriptionId is likely a pattern ID, passing the ID directly would be better, 
+        // but detected subscriptions don't have DB IDs in their interface yet unless persisted.
+        // Assuming subscriptionId is the UUID from `recurring_patterns` table.
+        const result = await pool.query(
+            `UPDATE recurring_patterns 
+             SET user_confirmed = true, updated_at = NOW() 
+             WHERE id = $1 AND user_id = $2`,
+            [subscriptionId, userId]
+        );
+        return (result.rowCount ?? 0) > 0;
+    }
+
+    /**
+     * Ignore/Dismiss a subscription
+     */
+    static async ignoreSubscription(userId: string, subscriptionId: string): Promise<boolean> {
+        const result = await pool.query(
+            `UPDATE recurring_patterns 
+             SET status = 'ignored', updated_at = NOW() 
+             WHERE id = $1 AND user_id = $2`,
+            [subscriptionId, userId]
+        );
+        return (result.rowCount ?? 0) > 0;
+    }
+
+    /**
+     * Get active subscriptions from DB
+     */
+    static async getActiveSubscriptions(userId: string) {
+        const result = await pool.query(
+            `SELECT * FROM recurring_patterns 
+             WHERE user_id = $1 AND is_subscription = true AND status = 'active'
+             ORDER BY next_expected ASC`,
+            [userId]
+        );
+        return result.rows;
     }
 }

@@ -11,6 +11,7 @@ export * from './primitives/Dropdown';
 export * from './primitives/Badge';
 export * from './primitives/card';
 export * from './primitives/label';
+export * from './primitives/checkbox';
 
 // Feedback components (from subdirectory)
 export * from './feedback/Toast';
