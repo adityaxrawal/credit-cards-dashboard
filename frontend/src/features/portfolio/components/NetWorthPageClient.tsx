@@ -3,16 +3,20 @@
 import React, { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { accountsApi } from "@/features/accounts/api";
+import { analyticsApi } from "@/features/analytics/api";
 import { formatCurrency } from "@/shared/utils";
 import FinancialHealthChart from "@/features/analytics/components/FinancialHealthChart";
 import { AssetCard } from "@/shared/components/ui/AssetCard";
 import { Card } from "@/shared/components/ui";
-import { TrendingUp, TrendingDown, DollarSign } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Loader2 } from "lucide-react";
+
+// Month name lookup
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export default function NetWorthPageClient() {
   const { data: accounts = [], isLoading: accountsLoading } = useQuery({
     queryKey: ["accounts"],
-    queryFn: accountsApi.getAll,
+    queryFn: () => accountsApi.getAll(),
   });
 
   const { data: summary, isLoading: summaryLoading } = useQuery({
@@ -20,17 +24,48 @@ export default function NetWorthPageClient() {
     queryFn: accountsApi.getSummary,
   });
 
-  // Mock Trend Data for Chart (since we don't have historical API yet)
+  // Fetch spending trends for historical data
+  const { data: rawSpendingTrends, isLoading: trendsLoading } = useQuery({
+    queryKey: ["spending-trends-6m"],
+    queryFn: () => analyticsApi.getTrends("6m"),
+  });
+  
+  // Normalize spending trends to always be an array
+  const spendingTrends = Array.isArray(rawSpendingTrends) ? rawSpendingTrends : [];
+
+  // Transform spending trends into financial health chart data
   const healthData = useMemo(() => {
-     return [
-        { month: 'Aug', assets: 42000, liabilities: -4500, netWorth: 37500 },
-        { month: 'Sep', assets: 43500, liabilities: -4200, netWorth: 39300 },
-        { month: 'Oct', assets: 44000, liabilities: -5000, netWorth: 39000 },
-        { month: 'Nov', assets: 46000, liabilities: -4800, netWorth: 41200 },
-        { month: 'Dec', assets: 48500, liabilities: -4000, netWorth: 44500 },
-        { month: 'Jan', assets: 51200, liabilities: -3500, netWorth: 47700 },
-     ];
-  }, []);
+    if (!spendingTrends || spendingTrends.length === 0) {
+      // Return empty array if no data
+      return [];
+    }
+
+    // We have spending data, but we need to calculate assets/liabilities
+    // Since we don't have historical snapshots, we'll estimate based on current values
+    // and the spending trends
+    const currentAssets = summary?.totalBalance || 0;
+    const currentLiabilities = Math.abs(summary?.totalLiabilities || 0);
+    const currentNetWorth = summary?.netWorth || 0;
+
+    // Create historical estimates by working backwards from current values
+    // This is an approximation until we have real historical balance data
+    return spendingTrends.map((trend, index) => {
+      const monthsAgo = spendingTrends.length - 1 - index;
+      
+      // Estimate previous values (rough approximation)
+      // Assume ~2% monthly growth for assets, stable liabilities
+      const estimatedAssets = currentAssets * Math.pow(0.98, monthsAgo);
+      const estimatedLiabilities = currentLiabilities;
+      const estimatedNetWorth = estimatedAssets - estimatedLiabilities;
+
+      return {
+        month: MONTH_NAMES[trend.month - 1] || `M${trend.month}`,
+        assets: Math.round(estimatedAssets),
+        liabilities: -Math.round(estimatedLiabilities),
+        netWorth: Math.round(estimatedNetWorth),
+      };
+    });
+  }, [spendingTrends, summary]);
 
   const topAssets = useMemo(() => {
       // Get top 3 assets by value
@@ -40,8 +75,15 @@ export default function NetWorthPageClient() {
         .slice(0, 3);
   }, [accounts]);
 
-  if (accountsLoading || summaryLoading) {
-      return <div className="p-12 text-center text-muted-text">Loading Net Worth analysis...</div>;
+  const isLoading = accountsLoading || summaryLoading || trendsLoading;
+
+  if (isLoading) {
+      return (
+          <div className="flex items-center justify-center py-20">
+              <Loader2 className="w-8 h-8 animate-spin text-primary-green" />
+              <span className="ml-3 text-secondary-text">Loading Net Worth analysis...</span>
+          </div>
+      );
   }
 
   return (
@@ -68,7 +110,7 @@ export default function NetWorthPageClient() {
                    <span className="text-secondary-text font-medium">Total Liabilities</span>
                </div>
                <div className="text-2xl font-mono font-bold text-primary-text">
-                   {formatCurrency(summary?.totalLiabilities || 0)}
+                   {formatCurrency(Math.abs(summary?.totalLiabilities || 0))}
                </div>
            </Card>
 
@@ -86,24 +128,37 @@ export default function NetWorthPageClient() {
        </div>
 
        {/* Main Chart */}
-       <FinancialHealthChart data={healthData} />
+       {healthData.length > 0 ? (
+           <FinancialHealthChart data={healthData} />
+       ) : (
+           <Card className="p-12 text-center bg-card-bg border-border">
+               <p className="text-secondary-text">No historical data available yet.</p>
+               <p className="text-sm text-muted-text mt-1">As transactions are processed, your financial health chart will populate.</p>
+           </Card>
+       )}
 
        {/* Top Assets */}
        <div>
            <h3 className="text-lg font-semibold text-primary-text mb-4">Top Liquid Assets</h3>
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-               {topAssets.map(account => (
-                   <AssetCard
-                        key={account.id}
-                        type={account.type === 'credit_card' ? 'credit' : 'bank'}
-                        name={account.name}
-                        balance={account.balance}
-                        provider={account.bank_name || 'Bank'}
-                        colorTheme={account.type.includes('bank') ? 'blue' : 'green'}
-                        accountNumber={account.mask_account_number}
-                   />
-               ))}
-           </div>
+           {topAssets.length > 0 ? (
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                   {topAssets.map(account => (
+                       <AssetCard
+                            key={account.id}
+                            type={account.type === 'credit_card' ? 'credit' : 'bank'}
+                            name={account.name}
+                            balance={account.balance}
+                            provider={account.providerName || 'Bank'}
+                            colorTheme={account.type.includes('bank') ? 'blue' : 'green'}
+                            accountNumber={account.last4}
+                       />
+                   ))}
+               </div>
+           ) : (
+               <Card className="p-8 text-center bg-card-bg border-border">
+                   <p className="text-secondary-text">No accounts with positive balance.</p>
+               </Card>
+           )}
        </div>
     </div>
   );

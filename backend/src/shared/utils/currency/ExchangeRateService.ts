@@ -24,6 +24,13 @@ export interface ExchangeRateResult {
     error?: string;
 }
 
+export interface BatchExchangeRateResult {
+    base: string;
+    rates: Record<string, number>;
+    date: string;
+    success: boolean;
+}
+
 /**
  * In-memory rate cache
  */
@@ -263,6 +270,54 @@ export class ExchangeRateService {
         } catch (error) {
             // Non-critical - just log and continue
             console.warn(`[ExchangeRateService] Failed to cache rate to DB: ${error}`);
+        }
+    }
+
+    /**
+     * Get all rates for a base currency (from API)
+     */
+    static async getAllRates(baseCurrency: string): Promise<Record<string, number>> {
+        const baseLower = baseCurrency.toLowerCase();
+        const url = `${API_BASE_URL}/${baseLower}.json`;
+
+        try {
+            // Try to fetch from API
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`API returned ${response.status}`);
+
+            const data = await response.json();
+            const rates = data[baseLower];
+
+            if (!rates) throw new Error('Invalid API response structure');
+
+            const date = new Date().toISOString().split('T')[0];
+
+            // Cache all rates
+            for (const [target, rate] of Object.entries(rates)) {
+                if (typeof rate === 'number') {
+                    const targetUpper = target.toUpperCase();
+
+                    // Update Memory Cache
+                    const cacheKey = getCacheKey(baseCurrency, targetUpper);
+                    rateCache.set(cacheKey, {
+                        rate,
+                        rateDate: date,
+                        source: 'exchange-api',
+                        fromCurrency: baseCurrency,
+                        toCurrency: targetUpper,
+                        success: true
+                    } as ExchangeRateResult);
+
+                    // Update Database (async, don't await)
+                    this.cacheToDatabase(baseCurrency, targetUpper, rate, 'exchange-api').catch(console.error);
+                }
+            }
+
+            return rates;
+        } catch (error) {
+            console.error(`[ExchangeRateService] Failed to fetch all rates: ${error}`);
+            // Return empty object, let caller handle fallback
+            return {};
         }
     }
 

@@ -19,6 +19,16 @@ export interface BudgetHistoryItem {
   alertSent: boolean;
 }
 
+export interface CategoryBudget {
+  id: string;
+  category: string;
+  budgetLimit: number;
+  spent: number;
+  remaining: number;
+  percentage: number;
+  color?: string;
+}
+
 export const budgetApi = {
   /**
    * Get current month budget status
@@ -45,5 +55,14 @@ export const budgetApi = {
     return apiGet<{ data: BudgetHistoryItem[] }>(
       `/api/budget/history?limit=${limit}`
     ).then((res) => res.data);
+  },
+
+  /**
+   * Get category-wise budget limits and spending
+   */
+  getCategoryBudgets: async (): Promise<CategoryBudget[]> => {
+    return apiGet<{ data: CategoryBudget[] }>("/api/budget/envelopes").then(
+      (res) => res.data || []
+    );
   },
 };

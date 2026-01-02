@@ -1,59 +1,119 @@
 "use client";
 
 import React, { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatCurrency } from "@/shared/utils";
-import { Plus, Home, Car, Gem, Trash2 } from "lucide-react";
+import { Plus, Home, Car, Gem, Trash2, Loader2 } from "lucide-react";
 import { Button, Input, Modal, Card } from "@/shared/components/ui";
+import { accountsApi, Account, AccountInput } from "@/features/accounts/api";
 
-interface ManualAsset {
-    id: string;
+// Asset types that map to account types
+const ASSET_TYPES = ['real_estate', 'vehicle', 'jewelry', 'physical_asset', 'other_asset'] as const;
+type AssetType = typeof ASSET_TYPES[number];
+
+interface AssetFormData {
     name: string;
-    type: "real_estate" | "vehicle" | "jewelry" | "other";
+    type: AssetType;
     value: number;
     description?: string;
 }
 
-// Mock Data - In real app, this would be an API
-const INITIAL_ASSETS: ManualAsset[] = [
-    { id: "1", name: "Primary Residence", type: "real_estate", value: 450000, description: "Apartment in Downtown" },
-    { id: "2", name: "Tesla Model 3", type: "vehicle", value: 35000 },
-];
-
 export default function AssetsPageClient() {
-    const [assets, setAssets] = useState<ManualAsset[]>(INITIAL_ASSETS);
+    const queryClient = useQueryClient();
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [formData, setFormData] = useState<Partial<ManualAsset>>({ type: 'other' });
+    const [formData, setFormData] = useState<Partial<AssetFormData>>({ type: 'other_asset' });
 
-    const totalValue = assets.reduce((sum, a) => sum + a.value, 0);
+    // Fetch accounts that are physical assets
+    const { data: accounts = [], isLoading, error } = useQuery({
+        queryKey: ['accounts-assets'],
+        queryFn: async () => {
+            // Fetch all accounts and filter for asset types
+            const allAccounts = await accountsApi.getAll();
+            return allAccounts.filter(account => 
+                ASSET_TYPES.includes(account.type as AssetType) ||
+                account.type === 'asset' ||
+                account.type === 'property' ||
+                account.type === 'real_estate' ||
+                account.type === 'vehicle'
+            );
+        },
+    });
+
+    // Create asset mutation
+    const createMutation = useMutation({
+        mutationFn: (input: AccountInput) => accountsApi.create(input),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['accounts-assets'] });
+            queryClient.invalidateQueries({ queryKey: ['accounts'] });
+            queryClient.invalidateQueries({ queryKey: ['accounts-summary'] });
+            setIsModalOpen(false);
+            setFormData({ type: 'other_asset' });
+        },
+    });
+
+    // Delete asset mutation
+    const deleteMutation = useMutation({
+        mutationFn: (id: string) => accountsApi.delete(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['accounts-assets'] });
+            queryClient.invalidateQueries({ queryKey: ['accounts'] });
+            queryClient.invalidateQueries({ queryKey: ['accounts-summary'] });
+        },
+    });
+
+    const totalValue = accounts.reduce((sum, a) => sum + a.balance, 0);
 
     const getIcon = (type: string) => {
         switch(type) {
-            case 'real_estate': return <Home className="w-5 h-5 text-indigo-500" />;
-            case 'vehicle': return <Car className="w-5 h-5 text-blue-500" />;
-            case 'jewelry': return <Gem className="w-5 h-5 text-pink-500" />;
-            default: return <Gem className="w-5 h-5 text-gray-500" />;
+            case 'real_estate':
+            case 'property': 
+                return <Home className="w-5 h-5 text-indigo-500" />;
+            case 'vehicle': 
+                return <Car className="w-5 h-5 text-blue-500" />;
+            case 'jewelry': 
+                return <Gem className="w-5 h-5 text-pink-500" />;
+            default: 
+                return <Gem className="w-5 h-5 text-gray-500" />;
         }
     };
 
     const handleAdd = (e: React.FormEvent) => {
         e.preventDefault();
-        const newAsset: ManualAsset = {
-            id: Math.random().toString(36).substr(2, 9),
+        
+        const input: AccountInput = {
+            type: formData.type || 'other_asset',
             name: formData.name || "New Asset",
-            type: (formData.type as any) || "other",
-            value: Number(formData.value) || 0,
-            description: formData.description
+            balance: Number(formData.value) || 0,
+            currency: 'INR',
+            metadata: formData.description ? { description: formData.description } : undefined,
         };
-        setAssets([...assets, newAsset]);
-        setIsModalOpen(false);
-        setFormData({ type: 'other' });
+
+        createMutation.mutate(input);
     };
 
     const handleDelete = (id: string) => {
         if(confirm("Delete this asset?")) {
-            setAssets(assets.filter(a => a.id !== id));
+            deleteMutation.mutate(id);
         }
     };
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-8 h-8 animate-spin text-primary-green" />
+                <span className="ml-3 text-secondary-text">Loading assets...</span>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="text-center py-12">
+                <p className="text-error mb-2">Failed to load assets</p>
+                <p className="text-secondary-text text-sm">Please try refreshing the page</p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -76,32 +136,42 @@ export default function AssetsPageClient() {
                 </Button>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
-                {assets.map(asset => (
-                    <Card key={asset.id} className="p-4 flex items-center justify-between hover:bg-hover-bg transition-colors border-border">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 bg-primary-bg rounded-xl border border-border">
-                                {getIcon(asset.type)}
+            {accounts.length === 0 ? (
+                <Card className="p-12 text-center bg-card-bg border-border">
+                    <p className="text-secondary-text">No physical assets tracked yet.</p>
+                    <p className="text-sm text-muted-text mt-1">Add real estate, vehicles, or valuables to track your net worth.</p>
+                </Card>
+            ) : (
+                <div className="grid grid-cols-1 gap-4">
+                    {accounts.map(asset => (
+                        <Card key={asset.id} className="p-4 flex items-center justify-between hover:bg-hover-bg transition-colors border-border">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-primary-bg rounded-xl border border-border">
+                                    {getIcon(asset.type)}
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold text-primary-text">{asset.name}</h3>
+                                    <p className="text-xs text-secondary-text">
+                                        {(asset.metadata as any)?.description || asset.type.replace('_', ' ')}
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <h3 className="font-semibold text-primary-text">{asset.name}</h3>
-                                <p className="text-xs text-secondary-text">{asset.description || asset.type}</p>
+                            <div className="flex items-center gap-6">
+                                <span className="font-mono font-medium text-lg text-primary-text">
+                                    {formatCurrency(asset.balance)}
+                                </span>
+                                <button 
+                                    onClick={() => handleDelete(asset.id)}
+                                    disabled={deleteMutation.isPending}
+                                    className="p-2 text-muted-text hover:text-error transition-colors disabled:opacity-50"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
                             </div>
-                        </div>
-                        <div className="flex items-center gap-6">
-                            <span className="font-mono font-medium text-lg text-primary-text">
-                                {formatCurrency(asset.value)}
-                            </span>
-                            <button 
-                                onClick={() => handleDelete(asset.id)}
-                                className="p-2 text-muted-text hover:text-error transition-colors"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </Card>
-                ))}
-            </div>
+                        </Card>
+                    ))}
+                </div>
+            )}
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Add Asset">
                 <form onSubmit={handleAdd} className="space-y-4">
@@ -116,12 +186,12 @@ export default function AssetsPageClient() {
                         <select 
                             className="w-full p-2 rounded border border-input bg-card-bg"
                             value={formData.type}
-                            onChange={(e) => setFormData({...formData, type: e.target.value as any})}
+                            onChange={(e) => setFormData({...formData, type: e.target.value as AssetType})}
                         >
                             <option value="real_estate">Real Estate</option>
                             <option value="vehicle">Vehicle</option>
                             <option value="jewelry">Jewelry / Art</option>
-                            <option value="other">Other</option>
+                            <option value="other_asset">Other</option>
                         </select>
                     </div>
                     <Input 
@@ -138,7 +208,9 @@ export default function AssetsPageClient() {
                     />
                     <div className="flex justify-end gap-2 pt-4">
                         <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-                        <Button type="submit">Add Asset</Button>
+                        <Button type="submit" disabled={createMutation.isPending}>
+                            {createMutation.isPending ? 'Adding...' : 'Add Asset'}
+                        </Button>
                     </div>
                 </form>
             </Modal>

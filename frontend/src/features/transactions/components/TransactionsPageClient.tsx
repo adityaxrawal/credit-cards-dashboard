@@ -16,7 +16,13 @@ import {
   Tag,
   Trash2,
   Edit2,
-  Check
+  Check,
+  Hash,
+  Globe,
+  Clock,
+  ExternalLink,
+  Building2,
+  Merge
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button, Input, Badge } from "@/shared/components/ui";
@@ -30,6 +36,7 @@ import {
 import { cardApi } from "@/features/cards/api";
 import { useToast } from "@/shared/utils/toast";
 import { queryKeys } from "@/lib/react-query/keys";
+import { GmailUtils } from "@/shared/utils/gmailUtils";
 
 export default function TransactionsPage() {
   const queryClient = useQueryClient();
@@ -111,6 +118,26 @@ export default function TransactionsPage() {
       }
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (ids: string[]) => transactionApi.bulkDelete(ids),
+    onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all });
+        setSelectedIds(new Set());
+        success(`Deleted ${data.deleted} transactions`);
+    }
+  });
+
+  const mergeMutation = useMutation({
+      mutationFn: ({ keepId, dupId }: { keepId: string; dupId: string }) => 
+          transactionApi.merge(keepId, dupId),
+      onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all });
+          setSelectedIds(new Set());
+          success("Transactions merged");
+      },
+      onError: () => errorToast("Failed to merge transactions")
+  });
+
   // --- Handlers ---
   const toggleSelect = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -128,8 +155,22 @@ export default function TransactionsPage() {
       });
   };
 
+  const handleBulkDelete = () => {
+      if(confirm(`Are you sure you want to delete ${selectedIds.size} transactions?`)) {
+          bulkDeleteMutation.mutate(Array.from(selectedIds));
+      }
+  };
+
+  const handleMerge = () => {
+      if (selectedIds.size !== 2) return;
+      const [id1, id2] = Array.from(selectedIds);
+      // Simple heuristic: keep the first one (or could prompt user, but keeping simple for now)
+      mergeMutation.mutate({ keepId: id1, dupId: id2 });
+  };
+
   // --- Render ---
   return (
+    <>
     <div className="flex h-[calc(100vh-100px)] -mt-4 gap-4 overflow-hidden">
         
       {/* LEFT PANEL: LIST (35%) */}
@@ -252,40 +293,6 @@ export default function TransactionsPage() {
             )}
         </div>
 
-        {/* Bulk Action Bar (Floating) */}
-        {selectedIds.size > 0 && (
-            <div className="absolute bottom-4 left-4 w-[368px] bg-primary-text text-primary-bg p-3 rounded-lg shadow-xl flex items-center justify-between z-20 animate-in slide-in-from-bottom-2">
-                <span className="text-sm font-medium pl-1">{selectedIds.size} selected</span>
-                <div className="flex items-center gap-2">
-                    {showBulkEdit ? (
-                         <div className="flex items-center bg-white/10 rounded px-1">
-                             <input 
-                                autoFocus
-                                className="bg-transparent border-none text-white text-xs py-1 px-1 w-24 focus:ring-0 placeholder-white/50"
-                                placeholder="New Category"
-                                value={bulkCategory}
-                                onChange={e => setBulkCategory(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && handleBulkCategorize()}
-                             />
-                             <button onClick={handleBulkCategorize} className="p-1 hover:text-green-300"><Check className="w-3 h-3" /></button>
-                         </div>
-                    ) : (
-                        <button 
-                            onClick={() => setShowBulkEdit(true)} 
-                            className="px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-xs transition-colors"
-                        >
-                            Categorize
-                        </button>
-                    )}
-                    <button 
-                        onClick={() => setSelectedIds(new Set())}
-                        className="p-1.5 hover:bg-white/10 rounded text-white/60 hover:text-white"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
-            </div>
-        )}
       </div>
 
       {/* RIGHT PANEL: DETAILS (65%) */}
@@ -346,6 +353,135 @@ export default function TransactionsPage() {
                             </div>
                       </div>
 
+                      {/* NEW: Extraction Details Section */}
+                      <div className="mt-8 pt-6 border-t border-border">
+                        <h4 className="text-sm font-semibold text-primary-text mb-4">Extraction Details</h4>
+                        
+                        <div className="space-y-4">
+                          {/* Detection Method */}
+                          {selectedTransaction.classification_method && (
+                            <DetailRow label="Detection Method">
+                              <Badge 
+                                label={selectedTransaction.classification_method === 'rule-based' ? 'Rule-based Pattern' : 'System Extracted'}
+                                variant="secondary"
+                              />
+                            </DetailRow>
+                          )}
+
+                          {/* Confidence Score */}
+                          {selectedTransaction.confidence_score !== undefined && (
+                            <DetailRow label="Confidence">
+                              <div className="flex items-center gap-2 justify-end">
+                                <div className="w-24 bg-hover-bg rounded-full h-2">
+                                  <div
+                                    className="bg-success h-2 rounded-full"
+                                    style={{ width: `${selectedTransaction.confidence_score * 100}%` }}
+                                  />
+                                </div>
+                                <span className="text-sm font-semibold text-primary-text">
+                                  {Math.round(selectedTransaction.confidence_score * 100)}%
+                                </span>
+                              </div>
+                            </DetailRow>
+                          )}
+
+                          {/* Source Email */}
+                          {selectedTransaction.email_message_id && (
+                            <DetailRow label="Source Email">
+                              <a
+                                href={GmailUtils.getMailLink(selectedTransaction.email_message_id)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-primary-green hover:underline flex items-center justify-end gap-1"
+                              >
+                                View in Gmail <ExternalLink className="w-3 h-3" />
+                              </a>
+                            </DetailRow>
+                          )}
+                          
+                          {/* Email Thread */}
+                          {selectedTransaction.gmail_thread_id && !selectedTransaction.email_message_id && (
+                             <DetailRow label="Email Thread">
+                               <a
+                                 href={GmailUtils.getThreadLink(selectedTransaction.gmail_thread_id)}
+                                 target="_blank"
+                                 rel="noopener noreferrer"
+                                 className="text-xs text-primary-green hover:underline flex items-center justify-end gap-1"
+                               >
+                                 View Thread <ExternalLink className="w-3 h-3" />
+                               </a>
+                             </DetailRow>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* NEW: Extended Transaction Fields Section */}
+                      <div className="mt-6 pt-6 border-t border-border">
+                        <h4 className="text-sm font-semibold text-primary-text mb-4">Transaction Details</h4>
+                        
+                        <div className="space-y-4">
+                          {/* Reference Numbers */}
+                          {selectedTransaction.rrn && (
+                            <DetailRow label="RRN" icon={<Hash className="w-4 h-4" />}>
+                              <code className="bg-hover-bg px-2 py-1 rounded text-xs text-primary-text">{selectedTransaction.rrn}</code>
+                            </DetailRow>
+                          )}
+                          {selectedTransaction.utr && (
+                            <DetailRow label="UTR" icon={<Hash className="w-4 h-4" />}>
+                              <code className="bg-hover-bg px-2 py-1 rounded text-xs text-primary-text">{selectedTransaction.utr}</code>
+                            </DetailRow>
+                          )}
+                          
+                          {/* Status */}
+                          {selectedTransaction.transaction_status && selectedTransaction.transaction_status !== 'posted' && (
+                            <DetailRow label="Status">
+                              <Badge 
+                                label={selectedTransaction.transaction_status.toUpperCase()} 
+                                variant={selectedTransaction.transaction_status === 'pending' ? 'warning' : 
+                                         selectedTransaction.transaction_status === 'reversed' ? 'error' : 'default'}
+                              />
+                            </DetailRow>
+                          )}
+
+                          {/* Channel */}
+                          {selectedTransaction.channel && (
+                            <DetailRow label="Channel">
+                              <Badge label={selectedTransaction.channel.toUpperCase()} variant="info" size="sm" />
+                            </DetailRow>
+                          )}
+
+                          {/* Original Currency */}
+                          {selectedTransaction.currency_code && selectedTransaction.currency_code !== "INR" && (
+                            <DetailRow label="Original Amount" icon={<Globe className="w-4 h-4" />}>
+                              <span className="text-sm text-primary-text">
+                                {selectedTransaction.currency_code} {selectedTransaction.original_amount?.toFixed(2)}
+                              </span>
+                            </DetailRow>
+                          )}
+
+                          {/* FX Rate */}
+                          {selectedTransaction.fx_rate && selectedTransaction.original_currency_code && (
+                            <DetailRow label="Exchange Rate" icon={<Globe className="w-4 h-4" />}>
+                              <span className="text-sm text-primary-text">
+                                1 {selectedTransaction.original_currency_code} = ₹{selectedTransaction.fx_rate.toFixed(2)}
+                              </span>
+                            </DetailRow>
+                          )}
+
+                          {/* Exact Timestamp */}
+                          {selectedTransaction.exact_timestamp && (
+                            <DetailRow label="Exact Time" icon={<Clock className="w-4 h-4" />}>
+                              <span className="text-sm text-primary-text">
+                                {new Date(selectedTransaction.exact_timestamp).toLocaleString("en-IN", {
+                                  dateStyle: "long",
+                                  timeStyle: "medium",
+                                })}
+                              </span>
+                            </DetailRow>
+                          )}
+                        </div>
+                      </div>
+
                       {/* AI Insights / Splits Placeholder */}
                       <div className="mt-8 pt-8 border-t border-border">
                           <h3 className="text-sm font-semibold text-primary-text mb-4">Breakdown & Insights</h3>
@@ -386,5 +522,87 @@ export default function TransactionsPage() {
           )}
       </div>
     </div>
+    
+    {/* Bulk Action Bar (Page Centered) */}
+    {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-auto min-w-[368px] bg-primary-text text-primary-bg p-3 rounded-full shadow-2xl flex items-center justify-between gap-4 z-50 animate-in slide-in-from-bottom-2 px-6">
+            <span className="text-sm font-medium whitespace-nowrap">{selectedIds.size} selected</span>
+            
+            <div className="h-4 w-px bg-white/20" />
+
+            <div className="flex items-center gap-2">
+                {/* Categorize */}
+                {showBulkEdit ? (
+                        <div className="flex items-center bg-white/10 rounded-full px-2 py-0.5">
+                            <input 
+                            autoFocus
+                            className="bg-transparent border-none text-white text-xs py-1 px-2 w-32 focus:ring-0 placeholder-white/50 focus:outline-none"
+                            placeholder="New Category"
+                            value={bulkCategory}
+                            onChange={e => setBulkCategory(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleBulkCategorize()}
+                            />
+                            <button onClick={handleBulkCategorize} className="p-1 hover:text-green-300"><Check className="w-3 h-3" /></button>
+                        </div>
+                ) : (
+                    <button 
+                        onClick={() => setShowBulkEdit(true)} 
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-full text-xs transition-colors"
+                    >
+                        <Tag className="w-3 h-3" /> Categorize
+                    </button>
+                )}
+
+                {/* Merge (Only for exactly 2) */}
+                {selectedIds.size === 2 && (
+                    <button 
+                        onClick={handleMerge}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-full text-xs transition-colors"
+                    >
+                        <Merge className="w-3 h-3" /> Merge
+                    </button>
+                )}
+
+                {/* Delete */}
+                <button 
+                    onClick={handleBulkDelete}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-error/80 hover:bg-error rounded-full text-white text-xs transition-colors"
+                >
+                    <Trash2 className="w-3 h-3" /> Delete
+                </button>
+            </div>
+
+            <div className="h-4 w-px bg-black/20" />
+
+            <button 
+                onClick={() => { setSelectedIds(new Set()); setShowBulkEdit(false); }}
+                className="p-1.5 hover:bg-black/10 rounded-full text-black/80 hover:text-black transition-colors"
+            >
+                <X className="w-4 h-4" />
+            </button>
+        </div>
+    )}
+    </>
   );
 }
+
+// Helper component for detail rows
+function DetailRow({
+    label,
+    icon,
+    children,
+  }: {
+    label: string;
+    icon?: React.ReactNode;
+    children: React.ReactNode;
+  }) {
+    return (
+      <div className="flex justify-between items-center gap-4 py-1">
+        <div className="flex items-center gap-2 text-secondary-text min-w-[140px]">
+          {icon}
+          <span className="text-xs font-medium uppercase tracking-wider">{label}</span>
+        </div>
+        <div className="text-right flex-1">{children}</div>
+      </div>
+    );
+  }

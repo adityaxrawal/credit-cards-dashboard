@@ -17,6 +17,9 @@ export interface NotificationPreferenceRow {
     quiet_hours_end: string | null;
     created_at: Date;
     updated_at: Date;
+    spending_alerts: boolean;
+    weekly_summary: boolean;
+    payment_alerts: boolean;
 }
 
 export class NotificationRepository {
@@ -42,8 +45,11 @@ export class NotificationRepository {
                 push_enabled, 
                 large_transaction_threshold,
                 budget_warning_threshold,
-                bill_reminder_days
-            ) VALUES ($1, true, true, 10000, 80, 3)
+                bill_reminder_days,
+                spending_alerts,
+                weekly_summary,
+                payment_alerts
+            ) VALUES ($1, true, true, 10000, 80, 3, true, true, true)
             ON CONFLICT (user_id) DO UPDATE SET updated_at = NOW()
             RETURNING *`,
             [userId]

@@ -8,6 +8,7 @@ import { cn, formatCurrency } from "@/shared/utils";
 import { settingsApi, type UserSettings } from "@/features/settings/api";
 import { useToast } from "@/shared/utils/toast";
 import { apiClient } from "@/lib/api-client";
+import { useOverview } from "@/features/dashboard/hooks/useDashboardHooks";
 
 const tabs = [
   { key: "spending", label: "Spending Limits", icon: CreditCard },
@@ -58,8 +59,11 @@ function SpendingLimitsSettings() {
   const queryClient = useQueryClient();
   const { success, error: errorToast } = useToast();
 
+  // Fetch overview data for current spending
+  const { data: overviewData, isLoading: isOverviewLoading } = useOverview();
+
   // Fetch settings
-  const { data: userSettings, isLoading } = useQuery({
+  const { data: userSettings, isLoading: isSettingsLoading } = useQuery({
     queryKey: ["user-settings"],
     queryFn: () => settingsApi.getSettings(),
   });
@@ -107,8 +111,10 @@ function SpendingLimitsSettings() {
     updateMutation.mutate(data);
   };
 
-  const currentSpending = 400; // This should ideally come from analytics API
-  const monthlyLimit = parseInt(settings.monthlyLimit) || 0;
+  const currentSpending = overviewData?.currentMonth?.totalSpent || 0;
+  const monthlyLimit = parseFloat(settings.monthlyLimit) || 0;
+
+  const isLoading = isSettingsLoading || isOverviewLoading;
 
   if (isLoading) {
     return (

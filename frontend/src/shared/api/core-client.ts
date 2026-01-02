@@ -25,7 +25,9 @@ async function fetchCsrfToken(): Promise<string | null> {
     .then(async (response) => {
       if (response.ok) {
         const data = await response.json();
-        csrfToken = data.data?.csrfToken || null;
+        // Handle both standard envelope (data.data.csrfToken) and direct response (data.csrfToken)
+        // The backend was previously returning { csrfToken } (flat), but is being updated to { success: true, data: { csrfToken } }
+        csrfToken = data.data?.csrfToken || data.csrfToken || null;
         console.log("✅ CSRF token fetched successfully");
       }
       csrfTokenPromise = null;

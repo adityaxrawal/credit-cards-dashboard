@@ -1,4 +1,5 @@
 import { CurrencyRepository, CurrencyRateRow } from '@modules/currency/currency.repository';
+import { ExchangeRateService } from '@shared/utils/currency';
 
 export interface CurrencyRate {
     id: string;
@@ -17,7 +18,16 @@ export class CurrencyService {
      * Get latest exchange rates for a base currency
      */
     async getLatestRates(baseCurrency: string = 'INR'): Promise<CurrencyRate[]> {
-        const rows = await CurrencyRepository.getLatestRates(baseCurrency);
+        let rows = await CurrencyRepository.getLatestRates(baseCurrency);
+
+        // If no rates found, try to fetch from external API
+        if (rows.length === 0) {
+            console.log(`[CurrencyService] No rates found for ${baseCurrency}, fetching from API...`);
+            await ExchangeRateService.getAllRates(baseCurrency);
+            // Re-fetch from DB (as getAllRates populates DB)
+            rows = await CurrencyRepository.getLatestRates(baseCurrency);
+        }
+
         return rows.map(row => this.mapRateRow(row));
     }
 

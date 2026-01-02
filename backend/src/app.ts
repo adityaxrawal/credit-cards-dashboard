@@ -97,7 +97,10 @@ app.get('/api/admin/metrics', (req, res) => {
 
 // CSRF Token Endpoint
 app.get('/api/csrf-token', (req, res) => {
-  res.json({ csrfToken: req.csrfToken() });
+  res.json({
+    success: true,
+    data: { csrfToken: req.csrfToken() }
+  });
 });
 
 // Comprehensive Health Check

@@ -5,10 +5,82 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number, currency = "USD"): string {
-  return new Intl.NumberFormat("en-US", {
+/**
+ * Global display currency store
+ * This is set by the CurrencyProvider and used by formatCurrency
+ */
+let _displayCurrency = "INR";
+let _displayLocale = "en-IN";
+let _displayDecimals = 0;
+
+/**
+ * Currency metadata for formatting
+ */
+const CURRENCY_CONFIG: Record<string, { locale: string; decimals: number }> = {
+  INR: { locale: "en-IN", decimals: 0 },
+  USD: { locale: "en-US", decimals: 2 },
+  EUR: { locale: "de-DE", decimals: 2 },
+  GBP: { locale: "en-GB", decimals: 2 },
+  AED: { locale: "ar-AE", decimals: 2 },
+  SGD: { locale: "en-SG", decimals: 2 },
+  CAD: { locale: "en-CA", decimals: 2 },
+  AUD: { locale: "en-AU", decimals: 2 },
+  JPY: { locale: "ja-JP", decimals: 0 },
+  CHF: { locale: "de-CH", decimals: 2 },
+  CNY: { locale: "zh-CN", decimals: 2 },
+  HKD: { locale: "zh-HK", decimals: 2 },
+  NZD: { locale: "en-NZ", decimals: 2 },
+  THB: { locale: "th-TH", decimals: 2 },
+  MYR: { locale: "ms-MY", decimals: 2 },
+};
+
+/**
+ * Set the global display currency (called by CurrencyProvider)
+ */
+export function setDisplayCurrency(currency: string): void {
+  _displayCurrency = currency;
+  const config = CURRENCY_CONFIG[currency] || CURRENCY_CONFIG.INR;
+  _displayLocale = config.locale;
+  _displayDecimals = config.decimals;
+}
+
+/**
+ * Get the current display currency
+ */
+export function getDisplayCurrency(): string {
+  return _displayCurrency;
+}
+
+/**
+ * Format an amount in the user's selected display currency
+ * @param amount - The amount to format (assumed to already be in display currency)
+ * @param currencyOverride - Optional: override the display currency for this call
+ */
+export function formatCurrency(amount: number, currencyOverride?: string): string {
+  const currency = currencyOverride || _displayCurrency;
+  const config = CURRENCY_CONFIG[currency] || CURRENCY_CONFIG.INR;
+
+  return new Intl.NumberFormat(config.locale, {
     style: "currency",
-    currency,
+    currency: currency,
+    minimumFractionDigits: config.decimals,
+    maximumFractionDigits: config.decimals,
+  }).format(amount);
+}
+
+/**
+ * Format amount with explicit source currency
+ * Use this when you need to show the original amount in its original currency
+ */
+export function formatOriginalCurrency(amount: number, sourceCurrency: string): string {
+  const currency = sourceCurrency || "INR";
+  const config = CURRENCY_CONFIG[currency] || { locale: "en-US", decimals: 2 };
+
+  return new Intl.NumberFormat(config.locale, {
+    style: "currency",
+    currency: currency,
+    minimumFractionDigits: config.decimals,
+    maximumFractionDigits: config.decimals,
   }).format(amount);
 }
 

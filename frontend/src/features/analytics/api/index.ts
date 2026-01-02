@@ -81,8 +81,16 @@ export const analyticsApi = {
   getTrends: async (
     range: "6m" | "12m" = "6m"
   ): Promise<SpendingTrendItem[]> => {
-    const response = await apiClient.get<SpendingTrendItem[]>(`/api/analytics/trends`, { range });
-    return response as unknown as SpendingTrendItem[];
+    const response = await apiClient.get<SpendingTrendItem[] | { data: SpendingTrendItem[] }>(`/api/analytics/trends`, { range });
+    // Handle both wrapped { data: [...] } and direct array responses
+    if (Array.isArray(response)) {
+      return response;
+    }
+    if (response && typeof response === 'object' && 'data' in response && Array.isArray(response.data)) {
+      return response.data;
+    }
+    // Return empty array if response is not in expected format
+    return [];
   },
 
   /**

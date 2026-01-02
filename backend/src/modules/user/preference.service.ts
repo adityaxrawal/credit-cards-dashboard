@@ -22,6 +22,9 @@ export interface NotificationPreferences {
     quietHoursEnd: string | null;
     createdAt: Date;
     updatedAt: Date;
+    spendingAlerts: boolean;
+    weeklySummary: boolean;
+    paymentAlerts: boolean;
 }
 
 export class PreferenceService {
@@ -86,6 +89,18 @@ export class PreferenceService {
             setClause.push(`quiet_hours_end = $${paramIndex++}`);
             params.push(updates.quietHoursEnd);
         }
+        if (updates.spendingAlerts !== undefined) {
+            setClause.push(`spending_alerts = $${paramIndex++}`);
+            params.push(updates.spendingAlerts);
+        }
+        if (updates.weeklySummary !== undefined) {
+            setClause.push(`weekly_summary = $${paramIndex++}`);
+            params.push(updates.weeklySummary);
+        }
+        if (updates.paymentAlerts !== undefined) {
+            setClause.push(`payment_alerts = $${paramIndex++}`);
+            params.push(updates.paymentAlerts);
+        }
 
         setClause.push('updated_at = NOW()');
 
@@ -97,7 +112,9 @@ export class PreferenceService {
 
         if (!row) {
             // Create if doesn't exist
-            return this.createDefaultPreferences(userId);
+            await this.createDefaultPreferences(userId);
+            // Apply the updates to the newly created defaults
+            return this.updatePreferences(userId, updates);
         }
 
         return this.mapRowToPreferences(row);
@@ -155,6 +172,9 @@ export class PreferenceService {
             quietHoursEnd: row.quiet_hours_end,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
+            spendingAlerts: row.spending_alerts,
+            weeklySummary: row.weekly_summary,
+            paymentAlerts: row.payment_alerts
         };
     }
 

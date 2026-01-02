@@ -31,7 +31,7 @@ export function AssetCard({
   type,
   name,
   balance,
-  currency = "USD",
+  currency,
   accountNumber,
   provider,
   colorTheme = "black",

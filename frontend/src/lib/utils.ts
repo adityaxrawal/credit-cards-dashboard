@@ -9,14 +9,10 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Format number as currency
+ * Re-export formatCurrency from shared/utils for consistency
+ * This ensures all currency formatting uses the user's selected display currency
  */
-export function formatCurrency(amount: number, currency = "INR"): string {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency,
-  }).format(amount);
-}
+export { formatCurrency, formatOriginalCurrency, setDisplayCurrency, getDisplayCurrency } from "@/shared/utils";
 
 /**
  * Format date in various formats

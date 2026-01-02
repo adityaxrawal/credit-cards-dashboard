@@ -5,7 +5,7 @@ import { TabItem } from "@/shared/components/layout/NavTabs";
 const tabs: TabItem[] = [
   { label: "Overview", href: "/command-center/overview" },
   { label: "Intelligence", href: "/command-center/intelligence" },
-  { label: "Notifications", href: "/command-center/notifications", count: 2 }, // Mock count for now
+  { label: "Notifications", href: "/command-center/notifications" },
 ];
 
 export default function CommandCenterLayout({

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { currencyApi } from '@/shared/utils/currency';
+import { setDisplayCurrency as setGlobalDisplayCurrency } from '@/shared/utils';
 
 /**
  * Supported currencies type
@@ -86,6 +87,11 @@ export function CurrencyProvider({ children, defaultCurrency = 'INR' }: Currency
   const [currency, setCurrencyState] = useState<Currency>(defaultCurrency);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Sync global formatCurrency store when currency changes
+  useEffect(() => {
+    setGlobalDisplayCurrency(currency);
+  }, [currency]);
+
   // Load user preference from API on mount
   useEffect(() => {
     const loadPreference = async () => {
@@ -93,6 +99,8 @@ export function CurrencyProvider({ children, defaultCurrency = 'INR' }: Currency
         const prefs = await currencyApi.getUserPreferences();
         if (prefs.baseCurrency && prefs.baseCurrency in CURRENCIES) {
           setCurrencyState(prefs.baseCurrency as Currency);
+          // Also sync to global store immediately
+          setGlobalDisplayCurrency(prefs.baseCurrency);
         }
       } catch (error) {
         console.warn('Failed to load currency preference:', error);

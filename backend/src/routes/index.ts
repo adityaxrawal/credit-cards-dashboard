@@ -67,6 +67,9 @@ router.use('/currency', currencyRoutes);
 // Phase 5 security routes
 router.use('/security', securityRoutes);
 
+import settingsRoutes from '../modules/settings/settings.routes';
+router.use('/settings', settingsRoutes);
+
 // Rules Engine
 import rulesRoutes from '../modules/rules/rules.routes';
 router.use('/rules', rulesRoutes);

@@ -3,21 +3,72 @@
 import React, { useMemo, useState } from "react";
 import { format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Calendar as CalendarIcon, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowRight, Calendar as CalendarIcon, AlertCircle, Loader2 } from "lucide-react";
 import { cn, formatCurrency } from "@/shared/utils";
 import { Badge, Card } from "@/shared/components/ui";
+import { recurringApi } from "@/features/recurring/api";
+import { billsApi } from "@/features/bills/api";
 
-// Mock API for Cashflow/Recurring (Until we connect real endpoint)
-const mockRecurring = [
-    { id: '1', name: 'Netflix', amount: 15.99, date: 15, type: 'bill' },
-    { id: '2', name: 'Rent', amount: 2500, date: 1, type: 'bill' },
-    { id: '3', name: 'Spotify', amount: 9.99, date: 22, type: 'bill' },
-    { id: '4', name: 'Salary', amount: 5000, date: 30, type: 'income' },
-    { id: '5', name: 'Internet', amount: 80, date: 12, type: 'bill' },
-];
+interface CalendarItem {
+    id: string;
+    name: string;
+    amount: number;
+    date: number;
+    type: 'bill' | 'income' | 'recurring';
+}
 
 export default function CashflowPageClient() {
     const [viewDate, setViewDate] = useState(new Date());
+
+    // Fetch recurring transactions from API
+    const { data: recurringPatterns = [], isLoading: recurringLoading } = useQuery({
+        queryKey: ['recurring-patterns'],
+        queryFn: recurringApi.getRecurringTransactions,
+    });
+
+    // Fetch upcoming bills from API
+    const { data: upcomingBills = [], isLoading: billsLoading } = useQuery({
+        queryKey: ['bills-upcoming'],
+        queryFn: billsApi.getUpcoming,
+    });
+
+    const isLoading = recurringLoading || billsLoading;
+
+    // Transform recurring patterns and bills into calendar items
+    const calendarItems: CalendarItem[] = useMemo(() => {
+        const items: CalendarItem[] = [];
+
+        // Add recurring transactions
+        recurringPatterns.forEach((pattern) => {
+            // Extract day of month from nextExpectedDate or use a default
+            const nextDate = pattern.nextExpectedDate ? new Date(pattern.nextExpectedDate) : null;
+            const dayOfMonth = nextDate ? nextDate.getDate() : 1;
+            
+            items.push({
+                id: pattern.id,
+                name: pattern.merchant || pattern.description || 'Recurring',
+                amount: pattern.avgAmount || 0,
+                date: dayOfMonth,
+                type: pattern.direction === 'credit' ? 'income' : 'recurring',
+            });
+        });
+
+        // Add upcoming bills
+        upcomingBills.forEach((bill) => {
+            const dueDate = bill.due_date ? new Date(bill.due_date) : null;
+            const dayOfMonth = dueDate ? dueDate.getDate() : 1;
+            
+            items.push({
+                id: bill.id,
+                name: bill.card_name || 'Bill',
+                amount: bill.bill_amount || 0,
+                date: dayOfMonth,
+                type: 'bill',
+            });
+        });
+
+        return items;
+    }, [recurringPatterns, upcomingBills]);
 
     // Generate Calendar Days
     const calendarDays = useMemo(() => {
@@ -30,14 +81,50 @@ export default function CashflowPageClient() {
     const upcomingItems = useMemo(() => {
         const today = new Date();
         const nextWeek = addDays(today, 7);
-        // Simple mock filter logic
-        return mockRecurring.filter(item => {
-            // Note: In real app, check against full date logic
-            return item.date >= today.getDate() && item.date <= nextWeek.getDate();
+        const todayDate = today.getDate();
+        const nextWeekDate = nextWeek.getDate();
+        
+        return calendarItems.filter(item => {
+            // Handle month wrap-around
+            if (nextWeekDate < todayDate) {
+                // Next week crosses into next month
+                return item.date >= todayDate || item.date <= nextWeekDate;
+            }
+            return item.date >= todayDate && item.date <= nextWeekDate;
         }).sort((a, b) => a.date - b.date);
-    }, []);
+    }, [calendarItems]);
 
-    const getItemsForDay = (day: number) => mockRecurring.filter(i => i.date === day);
+    const getItemsForDay = (day: number) => calendarItems.filter(i => i.date === day);
+
+    // Calculate projected end balance
+    const projectedBalance = useMemo(() => {
+        const totalIncome = calendarItems
+            .filter(i => i.type === 'income')
+            .reduce((sum, i) => sum + i.amount, 0);
+        const totalExpenses = calendarItems
+            .filter(i => i.type !== 'income')
+            .reduce((sum, i) => sum + i.amount, 0);
+        return totalIncome - totalExpenses;
+    }, [calendarItems]);
+
+    const projectedSavings = useMemo(() => {
+        const totalIncome = calendarItems
+            .filter(i => i.type === 'income')
+            .reduce((sum, i) => sum + i.amount, 0);
+        const totalExpenses = calendarItems
+            .filter(i => i.type !== 'income')
+            .reduce((sum, i) => sum + i.amount, 0);
+        return Math.max(0, totalIncome - totalExpenses);
+    }, [calendarItems]);
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-8 h-8 animate-spin text-primary-green" />
+                <span className="ml-3 text-secondary-text">Loading cashflow data...</span>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8">
@@ -61,11 +148,10 @@ export default function CashflowPageClient() {
                     </div>
                     
                     <div className="grid grid-cols-7 gap-2">
-                        {/* Day Padding would go here */}
                         {calendarDays.map((day, idx) => {
                              const items = getItemsForDay(day.getDate());
                              const hasIncome = items.some(i => i.type === 'income');
-                             const hasBill = items.some(i => i.type === 'bill');
+                             const hasBill = items.some(i => i.type === 'bill' || i.type === 'recurring');
                              const isToday = isSameDay(day, new Date());
 
                              return (
@@ -81,14 +167,17 @@ export default function CashflowPageClient() {
                                      </span>
                                      
                                      <div className="space-y-1">
-                                         {items.map(item => (
+                                         {items.slice(0, 3).map(item => (
                                              <div key={item.id} className="flex justify-between items-center text-[10px]">
                                                  <span className="truncate max-w-[60px] text-primary-text">{item.name}</span>
                                                  <span className={item.type === 'income' ? 'text-success' : 'text-error'}>
-                                                     {item.type === 'income' ? '+' : ''}{Math.round(item.amount)}
+                                                     {item.type === 'income' ? '+' : '-'}{Math.round(item.amount)}
                                                  </span>
                                              </div>
                                          ))}
+                                         {items.length > 3 && (
+                                             <span className="text-[10px] text-muted-text">+{items.length - 3} more</span>
+                                         )}
                                      </div>
                                  </div>
                              );
@@ -104,14 +193,14 @@ export default function CashflowPageClient() {
                             Next 7 Days
                         </h3>
                         {upcomingItems.length === 0 ? (
-                            <p className="text-secondary-text text-sm">No bills due soon.</p>
+                            <p className="text-secondary-text text-sm">No bills or recurring transactions due soon.</p>
                         ) : (
                             <div className="space-y-4">
-                                {upcomingItems.map(item => (
+                                {upcomingItems.slice(0, 5).map(item => (
                                     <div key={item.id} className="flex justify-between items-center p-3 rounded-lg bg-primary-bg border border-border">
                                         <div className="flex items-center gap-3">
                                             <div className="text-center bg-card-bg p-1.5 rounded border border-white/5 min-w-[40px]">
-                                                <span className="block text-xs text-secondary-text">OCT</span>
+                                                <span className="block text-xs text-secondary-text">{format(viewDate, 'MMM').toUpperCase()}</span>
                                                 <span className="block text-sm font-bold text-primary-text">{item.date}</span>
                                             </div>
                                             <div>
@@ -120,8 +209,15 @@ export default function CashflowPageClient() {
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <span className="block font-mono font-bold text-sm text-primary-text">{formatCurrency(item.amount)}</span>
-                                            <Badge label="Due" variant="warning" size="sm" className="mt-1" />
+                                            <span className={cn(
+                                                "block font-mono font-bold text-sm",
+                                                item.type === 'income' ? 'text-success' : 'text-primary-text'
+                                            )}>
+                                                {item.type === 'income' ? '+' : ''}{formatCurrency(item.amount)}
+                                            </span>
+                                            {item.type !== 'income' && (
+                                                <Badge label="Due" variant="warning" size="sm" className="mt-1" />
+                                            )}
                                         </div>
                                     </div>
                                 ))}
@@ -133,10 +229,21 @@ export default function CashflowPageClient() {
                     </Card>
 
                     <Card className="bg-gradient-to-br from-indigo-900/50 to-purple-900/50 p-6 border-indigo-500/20">
-                         <h3 className="text-sm font-semibold text-indigo-100 mb-1">Projected End Balance</h3>
-                         <p className="text-3xl font-mono font-bold text-white mb-4">$12,450.00</p>
+                         <h3 className="text-sm font-semibold text-indigo-100 mb-1">Projected Monthly Balance</h3>
+                         <p className={cn(
+                             "text-3xl font-mono font-bold mb-4",
+                             projectedBalance >= 0 ? "text-white" : "text-error"
+                         )}>
+                             {formatCurrency(Math.abs(projectedBalance))}
+                             {projectedBalance < 0 && <span className="text-sm ml-2">deficit</span>}
+                         </p>
                          <p className="text-xs text-indigo-300">
-                             Based on your average spending and upcoming income, you are on track to save <span className="text-emerald-400 font-bold">$2,100</span> this month.
+                             Based on your recurring income and expenses, you are projected to 
+                             {projectedSavings > 0 ? (
+                                 <> save <span className="text-emerald-400 font-bold">{formatCurrency(projectedSavings)}</span> this month.</>
+                             ) : (
+                                 <> have a balanced budget this month.</>
+                             )}
                          </p>
                     </Card>
                 </div>
