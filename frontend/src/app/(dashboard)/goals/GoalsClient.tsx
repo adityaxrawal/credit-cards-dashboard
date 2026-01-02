@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { AppLayout } from "@/components/layout";
-import { goalsApi, Goal, GoalsSummary } from "@/lib/api/goals";
-import { formatCurrency } from "@/lib/utils";
+import { AppLayout } from "@/shared/components/layout";
+import { goalsApi, Goal, GoalsSummary } from "@/features/goals/api";
+import { formatCurrency } from "@/shared/utils";
 import {
   Plus,
   Target,
@@ -20,7 +20,7 @@ import {
   CheckCircle2,
   TrendingUp,
 } from "lucide-react";
-import { AddGoalModal } from "@/components/features/goals/AddGoalModal";
+import { AddGoalModal } from "@/features/goals/components/AddGoalModal";
 
 const goalTypeConfig: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
   emergency_fund: { label: "Emergency Fund", icon: Shield, color: "#6ECB8E" },

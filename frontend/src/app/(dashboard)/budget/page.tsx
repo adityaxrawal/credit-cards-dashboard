@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api-client";
-import { AppLayout } from "@/components/layout";
+import { AppLayout } from "@/shared/components/layout";
 import {
   Card,
   CardContent,
@@ -23,7 +23,7 @@ import {
   TabsList,
   TabsTrigger,
   Progress,
-} from "@/components/ui";
+} from "@/shared/components/ui";
 
 import {
   AlertCircle,

@@ -2,11 +2,11 @@
 
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AppLayout } from '../../../components/layout/AppLayout';
-import { gmailApi, ScanStatus } from '../../../lib/api/gmail';
-import { Badge } from '../../../components/ui/primitives/Badge';
+import { AppLayout } from '@/shared/components/layout/AppLayout';
+import { gmailApi, ScanStatus } from '@/features/gmail/api';
+import { Badge } from '@/shared/components/ui/primitives/Badge';
 import { RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
-import GmailIntegrationCard from '../../../components/features/settings/GmailIntegrationCard';
+import GmailIntegrationCard from '@/features/settings/components/GmailIntegrationCard';
 
 export default function GmailPipelinePage() {
   const [dateRange, setDateRange] = useState({

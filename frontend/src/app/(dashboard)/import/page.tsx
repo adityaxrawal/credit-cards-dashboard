@@ -3,16 +3,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload, FileText, Check, AlertCircle, ArrowRight, Save, RefreshCw } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/primitives/card';
-import { Button } from '@/components/ui/primitives/Button';
-import { Input } from '@/components/ui/primitives/Input';
-import { Badge } from '@/components/ui/primitives/Badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/forms/select'; 
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/primitives/card';
+import { Button } from '@/shared/components/ui/primitives/Button';
+import { Input } from '@/shared/components/ui/primitives/Input';
+import { Badge } from '@/shared/components/ui/primitives/Badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/forms/select'; 
 import apiClient from '@/lib/api-client';
-import { toastService } from '@/lib/utils/toast';
+import { toastService } from '@/shared/utils/toast';
 import { ParsedCSVResult, ImportHistory } from '@/types/import.types';
-import { formatDate } from '@/lib/utils/date';
-import { formatCurrency } from '@/lib/utils/currency';
+import { formatDate } from '@/shared/utils/date';
+import { formatCurrency } from '@/shared/utils/currency';
 
 // Mapping field options
 const FIELD_OPTIONS = [

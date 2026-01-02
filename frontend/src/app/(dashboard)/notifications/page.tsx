@@ -23,7 +23,7 @@ import {
   SelectValue,
   Badge,
   Switch,
-} from "@/components/ui";
+} from "@/shared/components/ui";
 import {
   Bell,
   BellOff,

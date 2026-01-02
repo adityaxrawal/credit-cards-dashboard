@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import { AppLayout } from "@/components/layout";
-import { Button } from "@/components/ui";
+import { AppLayout } from "@/shared/components/layout";
+import { Button } from "@/shared/components/ui";
 import { AlertTriangle, RefreshCw, Home, Mail } from "lucide-react";
 import Link from "next/link";
 

@@ -4,11 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "@/lib/auth/AuthContext";
-import { LoadingProvider } from "@/lib/hooks/useApiLoader";
-import { GlobalLoadingSpinner } from "@/components/ui/feedback/GlobalLoadingSpinner";
-import { GlobalLoadingOverlay } from "@/components/ui/feedback/LoadingOverlay";
-import { ToastProvider } from "@/components/ui/feedback/Toast";
-import { ErrorBoundary } from "@/components/common/ErrorBoundary";
+import { LoadingProvider } from "@/shared/hooks/useApiLoader";
+import { GlobalLoadingSpinner } from "@/shared/components/ui/feedback/GlobalLoadingSpinner";
+import { GlobalLoadingOverlay } from "@/shared/components/ui/feedback/LoadingOverlay";
+import { ToastProvider } from "@/shared/components/ui/feedback/Toast";
+import { ErrorBoundary } from "@/shared/components/common/ErrorBoundary";
 import { GmailWebSocketProvider } from "@/lib/contexts/GmailWebSocketContext";
 
 export function Providers({ children }: { children: React.ReactNode }) {

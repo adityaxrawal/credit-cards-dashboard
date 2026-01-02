@@ -11,11 +11,11 @@ import {
   CreditCard,
   Calendar,
 } from "lucide-react";
-import { AppLayout } from "@/components/layout";
-import { Badge, Button } from "@/components/ui";
-import { formatCurrency, formatDate, cn } from "@/lib/utils";
-import { rewardsApi, type RewardPoints, type RewardTransaction } from "@/lib/api/rewards";
-import { RedemptionModal } from "@/components/features/rewards/RedemptionModal";
+import { AppLayout } from "@/shared/components/layout";
+import { Badge, Button } from "@/shared/components/ui";
+import { formatCurrency, formatDate, cn } from "@/shared/utils";
+import { rewardsApi, type RewardPoints, type RewardTransaction } from "@/features/rewards/api";
+import { RedemptionModal } from "@/features/rewards/components/RedemptionModal";
 
 export default function RewardsPage() {
   const queryClient = useQueryClient();

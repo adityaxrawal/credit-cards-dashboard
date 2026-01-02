@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AppLayout } from "@/components/layout";
-import { Button } from "@/components/ui";
+import { AppLayout } from "@/shared/components/layout";
+import { Button } from "@/shared/components/ui";
 import {
   Select,
   SelectContent,
@@ -14,7 +14,7 @@ import {
   TabsList,
   TabsTrigger,
   TabsContent,
-} from "@/components/ui";
+} from "@/shared/components/ui";
 import {
   TrendingUp,
   TrendingDown,
@@ -24,11 +24,11 @@ import {
   PieChart as PieChartIcon,
   Download,
 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
-import { analyticsApi, TopMerchant } from "@/lib/api/analytics";
-import { SpendingTrendChart } from "@/components/features/analytics/SpendingTrendChart";
-import { CategoryPieChart } from "@/components/features/analytics/CategoryPieChart";
-import { CategoryDrillDown } from "@/components/features/analytics/CategoryDrillDown";
+import { formatCurrency } from "@/shared/utils";
+import { analyticsApi, TopMerchant } from "@/features/analytics/api";
+import { SpendingTrendChart } from "@/features/analytics/components/SpendingTrendChart";
+import { CategoryPieChart } from "@/features/analytics/components/CategoryPieChart";
+import { CategoryDrillDown } from "@/features/analytics/components/CategoryDrillDown";
 import { queryKeys } from "@/lib/react-query/keys";
 
 interface KPI {

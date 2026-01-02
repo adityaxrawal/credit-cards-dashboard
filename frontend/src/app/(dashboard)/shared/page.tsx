@@ -3,13 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Users, Calendar, DollarSign, CheckCircle, Clock } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/primitives/card';
-import { Button } from '@/components/ui/primitives/Button';
-import { Badge } from '@/components/ui/primitives/Badge';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/primitives/card';
+import { Button } from '@/shared/components/ui/primitives/Button';
+import { Badge } from '@/shared/components/ui/primitives/Badge';
 import apiClient from '@/lib/api-client';
 import { SharedExpenseGroup } from '@/types/shared-expenses';
-import { formatCurrency } from '@/lib/utils/currency';
-import { formatDate } from '@/lib/utils/date';
+import { formatCurrency } from '@/shared/utils/currency';
+import { formatDate } from '@/shared/utils/date';
 
 export default function SharedExpensesPage() {
   const router = useRouter();

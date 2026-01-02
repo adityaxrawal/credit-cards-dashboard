@@ -11,12 +11,12 @@ import {
   CreditCard,
   Clock,
 } from "lucide-react";
-import { AppLayout } from "@/components/layout";
-import { Button, Modal, Input, Badge } from "@/components/ui";
-import { formatCurrency, cn, formatDate } from "@/lib/utils";
-import { billsApi, type Bill, type BillFormData } from "@/lib/api/bills";
-import { cardApi } from "@/lib/api/cards";
-import { useToast } from "@/components/ui/feedback/Toast";
+import { AppLayout } from "@/shared/components/layout";
+import { Button, Modal, Input, Badge } from "@/shared/components/ui";
+import { formatCurrency, cn, formatDate } from "@/shared/utils";
+import { billsApi, type Bill, type BillFormData } from "@/features/bills/api";
+import { cardApi } from "@/features/cards/api";
+import { useToast } from "@/shared/components/ui/feedback/Toast";
 
 export default function BillsPage() {
   const queryClient = useQueryClient();

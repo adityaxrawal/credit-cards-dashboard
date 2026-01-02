@@ -4,15 +4,15 @@ import React, { useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Edit3, Trash2, Plus, Filter, Calendar } from "lucide-react";
-import { AppLayout } from "@/components/layout";
-import { Button, ProgressBar, Modal, Input, Badge, CardVisual } from "@/components/ui";
-import { useToast } from "@/components/ui/feedback/Toast";
+import { AppLayout } from "@/shared/components/layout";
+import { Button, ProgressBar, Modal, Input, Badge, CardVisual } from "@/shared/components/ui";
+import { useToast } from "@/shared/components/ui/feedback/Toast";
 import {
   CategoryBreakdownChart,
-} from "@/components/features/analytics/Charts";
-import { formatCurrency, cn, getCardGradient, calculateUtilization } from "@/lib/utils";
-import { cardApi, type Card, type CardFormData } from "@/lib/api/cards";
-import { transactionApi, type Transaction, type TransactionFormData } from "@/lib/api/transactions";
+} from "@/features/analytics/components/Charts";
+import { formatCurrency, cn, getCardGradient, calculateUtilization } from "@/shared/utils";
+import { cardApi, type Card, type CardFormData } from "@/features/cards/api";
+import { transactionApi, type Transaction, type TransactionFormData } from "@/features/transactions/api";
 
 const tabs = [
   { key: "transactions", label: "Transactions" },

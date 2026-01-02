@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import LoginForm from "@/components/features/auth/LoginForm";
+import LoginForm from "@/features/auth/components/LoginForm";
 
 /**
  * Login Page Content

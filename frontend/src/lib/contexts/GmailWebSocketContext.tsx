@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { toast } from 'react-hot-toast';
-import { ScanStatus } from '@/lib/api/gmail';
+import { ScanStatus } from '@/features/gmail/api';
 
 interface GmailSyncState extends ScanStatus {
   isSyncing: boolean;

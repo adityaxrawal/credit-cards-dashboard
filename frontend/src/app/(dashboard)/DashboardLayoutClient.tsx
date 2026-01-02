@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useUser } from "@/lib/auth/user-context";
-import { OnboardingWizard } from "@/components/features/onboarding/OnboardingWizard";
+import { OnboardingWizard } from "@/features/onboarding/components/OnboardingWizard";
 
 /**
  * Dashboard Layout Client Component

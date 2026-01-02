@@ -19,7 +19,7 @@ import {
 } from "recharts";
 import { format, subMonths } from "date-fns";
 import { apiClient } from "@/lib/api-client";
-import { AppLayout } from "@/components/layout";
+import { AppLayout } from "@/shared/components/layout";
 
 const COLORS = [
   "#3b82f6",

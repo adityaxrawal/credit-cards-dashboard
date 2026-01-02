@@ -3,13 +3,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Trash, Save } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/primitives/card';
-import { Button } from '@/components/ui/primitives/Button';
-import { Input } from '@/components/ui/primitives/Input';
-import { Badge } from '@/components/ui/primitives/Badge';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/primitives/card';
+import { Button } from '@/shared/components/ui/primitives/Button';
+import { Input } from '@/shared/components/ui/primitives/Input';
+import { Badge } from '@/shared/components/ui/primitives/Badge';
 import apiClient from '@/lib/api-client';
 import { CreateSharedExpensePayload } from '@/types/shared-expenses';
-import { toastService } from '@/lib/utils/toast';
+import { toastService } from '@/shared/utils/toast';
 
 interface Participant {
   name: string;

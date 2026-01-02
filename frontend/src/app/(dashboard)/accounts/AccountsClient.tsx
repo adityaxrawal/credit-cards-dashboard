@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { AppLayout } from "@/components/layout";
-import { accountsApi, Account, AccountsSummary } from "@/lib/api/accounts";
-import { formatCurrency } from "@/lib/utils";
+import { AppLayout } from "@/shared/components/layout";
+import { accountsApi, Account, AccountsSummary } from "@/features/accounts/api";
+import { formatCurrency } from "@/shared/utils";
 import {
   Plus,
   Landmark,
@@ -15,7 +15,7 @@ import {
   Lock,
   Unlock,
 } from "lucide-react";
-import { AddAccountModal } from "@/components/features/accounts/AddAccountModal";
+import { AddAccountModal } from "@/features/accounts/components/AddAccountModal";
 
 const accountTypeLabels: Record<string, string> = {
   bank_account: "Bank Account",

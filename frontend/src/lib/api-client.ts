@@ -16,7 +16,7 @@ import {
   ApiResponse as CoreApiResponse,
   ApiError,
   clearCsrfToken
-} from "@/lib/api/core/client";
+} from "@/shared/api/core-client";
 
 // Re-export the canonical ApiResponse type
 export type { CoreApiResponse as ApiResponse };

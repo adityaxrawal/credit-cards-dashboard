@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { AppLayout } from "@/components/layout";
-import { loansApi, Loan, LoansSummary } from "@/lib/api/loans";
-import { formatCurrency } from "@/lib/utils";
+import { AppLayout } from "@/shared/components/layout";
+import { loansApi, Loan, LoansSummary } from "@/features/loans/api";
+import { formatCurrency } from "@/shared/utils";
 import {
   Plus,
   Home,
@@ -16,7 +16,7 @@ import {
   TrendingDown,
   Clock,
 } from "lucide-react";
-import { AddLoanModal } from "@/components/features/loans/AddLoanModal";
+import { AddLoanModal } from "@/features/loans/components/AddLoanModal";
 
 const loanTypeConfig: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
   home_loan: { label: "Home Loan", icon: Home, color: "text-accent-blue" },

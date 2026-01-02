@@ -2,7 +2,7 @@
 
 import React from "react";
 import { AlertTriangle, RefreshCw, Home } from "lucide-react";
-import { Button } from "@/components/ui/primitives/Button";
+import { Button } from "@/shared/components/ui/primitives/Button";
 import Link from "next/link";
 
 interface GlobalErrorProps {

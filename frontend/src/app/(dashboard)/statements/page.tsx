@@ -11,11 +11,11 @@ import {
   TrendingUp,
   DollarSign,
 } from "lucide-react";
-import { AppLayout } from "@/components/layout";
-import { Button, Badge } from "@/components/ui";
-import {  formatCurrency, cn, formatDate } from "@/lib/utils";
-import { statementsApi, type StatementSummary } from "@/lib/api/statements";
-import { cardApi } from "@/lib/api/cards";
+import { AppLayout } from "@/shared/components/layout";
+import { Button, Badge } from "@/shared/components/ui";
+import {  formatCurrency, cn, formatDate } from "@/shared/utils";
+import { statementsApi, type StatementSummary } from "@/features/statements/api";
+import { cardApi } from "@/features/cards/api";
 import { useRouter } from "next/navigation";
 
 export default function StatementsPage() {

@@ -3,11 +3,11 @@
 import React from "react";
 import { Save, Mail, CreditCard, Smartphone, Check, AlertTriangle, RefreshCw } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AppLayout } from "@/components/layout";
-import { Button, Input, ProgressBar, Switch, Label } from "@/components/ui";
-import { cn, formatCurrency } from "@/lib/utils";
-import { settingsApi, type UserSettings } from "@/lib/api/settings";
-import { useToast } from "@/components/ui/feedback/Toast";
+import { AppLayout } from "@/shared/components/layout";
+import { Button, Input, ProgressBar, Switch, Label } from "@/shared/components/ui";
+import { cn, formatCurrency } from "@/shared/utils";
+import { settingsApi, type UserSettings } from "@/features/settings/api";
+import { useToast } from "@/shared/components/ui/feedback/Toast";
 import { apiClient } from "@/lib/api-client";
 
 const tabs = [

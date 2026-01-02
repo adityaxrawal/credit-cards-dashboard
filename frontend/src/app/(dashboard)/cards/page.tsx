@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import CardsPageClient from "@/components/features/cards/CardsPageClient";
+import CardsPageClient from "@/features/cards/components/CardsPageClient";
 
 export const metadata: Metadata = {
   title: "Cards | Credit Card Dashboard",
