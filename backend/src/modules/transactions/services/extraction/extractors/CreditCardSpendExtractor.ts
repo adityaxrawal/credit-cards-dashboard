@@ -4,6 +4,8 @@ import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection
 import { InstrumentAutoService } from '@modules/cards/instrument-auto.service';
 import { BankParserPatterns } from '@shared/utils/cache/regexCache';
 import { UniversalAmountExtractor } from '../UniversalAmountExtractor';
+import { CurrencyAmountExtractor, ExtractedCurrencyAmount } from '../CurrencyAmountExtractor';
+import { currencyConverter } from '@modules/currency/CurrencyConversionService';
 import { EnhancedClassificationResult } from '../../classification/EnhancedRuleClassifier';
 
 export class CreditCardSpendExtractor {
@@ -30,8 +32,9 @@ export class CreditCardSpendExtractor {
         const text = (email.subject + ' ' + email.cleanedBody).toLowerCase();
         const combined = email.subject + ' ' + email.cleanedBody;
 
-        // Extract fields
-        const amount = this.extractAmount(combined);
+        // Extract amount with currency detection
+        const currencyResult = this.extractAmountWithCurrency(combined);
+        const amount = currencyResult.normalizedAmount;
         const merchant = this.extractMerchant(combined);
         const cardLast4 = this.extractCardLast4(combined);
         const date = this.extractDate(text, email.internalDate);
@@ -59,17 +62,35 @@ export class CreditCardSpendExtractor {
             direction: TransactionDirection.DEBIT
         });
 
+        // Perform currency conversion if needed
+        const detectedCurrency = currencyResult.detectedCurrency || 'INR';
+        const conversion = await currencyConverter.convert(amount, detectedCurrency, 'INR');
+
         return {
             type: TransactionType.CREDIT_CARD_SPEND,
             direction: TransactionDirection.DEBIT,
-            amount,
-            currency: this.extractCurrency(combined),
+            amount: currencyResult.isNegative ? -Math.abs(amount) : amount,
+            currency: detectedCurrency,
             merchant,
             instrumentType: InstrumentType.CREDIT_CARD,
             instrumentId,
             category: 'Shopping', // Default category
             referenceNumber: referenceNumber || undefined,
             fingerprint,
+            // Currency extraction fields
+            rawAmountString: currencyResult.rawAmountString,
+            detectedCurrency: currencyResult.detectedCurrency ?? undefined,
+            currencyConfidence: currencyResult.currencyConfidence,
+            currencyDetectionMethod: currencyResult.detectionMethod,
+            // Conversion fields
+            convertedAmount: conversion.convertedAmount,
+            conversionRate: conversion.conversionRate,
+            rateSource: conversion.rateSource,
+            rateDate: conversion.rateDate,
+            conversionSkipped: conversion.conversionSkipped,
+            conversionSkipReason: conversion.skipReason,
+            isCrypto: currencyResult.isCrypto,
+            currencyAmbiguityFlags: currencyResult.ambiguityFlags,
             metadata: {
                 cardLast4,
                 emailSubject: email.subject,
@@ -81,6 +102,25 @@ export class CreditCardSpendExtractor {
 
     private static extractAmount(text: string): number {
         return UniversalAmountExtractor.extract(text);
+    }
+
+    private static extractAmountWithCurrency(text: string): ExtractedCurrencyAmount {
+        try {
+            return CurrencyAmountExtractor.extract(text);
+        } catch {
+            // Fallback to legacy extraction if new extractor fails
+            const amount = UniversalAmountExtractor.extract(text);
+            return {
+                rawAmountString: amount.toString(),
+                normalizedAmount: amount,
+                detectedCurrency: this.extractCurrency(text),
+                currencyConfidence: 'low',
+                isNegative: false,
+                isCrypto: false,
+                detectionMethod: 'unknown',
+                ambiguityFlags: ['Fallback to legacy extraction'],
+            };
+        }
     }
 
     private static extractMerchant(text: string): string {

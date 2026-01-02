@@ -197,6 +197,72 @@ export interface ExtractedTransaction {
     patternGroupId?: string;
     ruleId?: string;
     extractionQualityScore?: number;
+
+    // ============================================
+    // Currency Extraction & Conversion Fields
+    // ============================================
+
+    /**
+     * Exact amount string as extracted from email (unmodified)
+     * Preserves original formatting including currency symbols, commas, etc.
+     */
+    rawAmountString?: string;
+
+    /**
+     * Detected currency ISO code (e.g., 'USD', 'EUR', 'INR')
+     * null if currency could not be confidently detected
+     */
+    detectedCurrency?: string;
+
+    /**
+     * Confidence level in currency detection
+     */
+    currencyConfidence?: 'high' | 'medium' | 'low' | 'unknown';
+
+    /**
+     * How the currency was detected
+     */
+    currencyDetectionMethod?: 'iso_code' | 'symbol' | 'context' | 'position' | 'default' | 'unknown';
+
+    /**
+     * Amount converted to target currency (usually INR or user preference)
+     */
+    convertedAmount?: number;
+
+    /**
+     * Exchange rate used for conversion
+     */
+    conversionRate?: number;
+
+    /**
+     * Source of the exchange rate
+     */
+    rateSource?: 'exchange-api' | 'fallback-json' | 'database' | 'none';
+
+    /**
+     * Date of the exchange rate used
+     */
+    rateDate?: string;
+
+    /**
+     * Whether conversion was skipped
+     */
+    conversionSkipped?: boolean;
+
+    /**
+     * Reason conversion was skipped
+     */
+    conversionSkipReason?: 'unknown_currency' | 'rate_unavailable' | 'already_target' | 'invalid_amount' | 'crypto_rate_unavailable';
+
+    /**
+     * Whether the amount is in cryptocurrency
+     */
+    isCrypto?: boolean;
+
+    /**
+     * Any ambiguity flags from currency detection
+     */
+    currencyAmbiguityFlags?: string[];
 }
 
 export interface PipelineResult {

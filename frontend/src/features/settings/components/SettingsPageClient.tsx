@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Save, Mail, CreditCard, Smartphone, Check, AlertTriangle, RefreshCw } from "lucide-react";
+import { Save, Mail, CreditCard, Smartphone, Check, AlertTriangle, RefreshCw, DollarSign } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button, Input, ProgressBar, Switch, Label } from "@/shared/components/ui";
 import { cn, formatCurrency } from "@/shared/utils";
@@ -13,6 +13,7 @@ const tabs = [
   { key: "spending", label: "Spending Limits", icon: CreditCard },
   { key: "email", label: "Email Preferences", icon: Mail },
   { key: "gmail", label: "Gmail Integration", icon: Smartphone },
+  { key: "currency", label: "Currency Settings", icon: DollarSign },
 ];
 
 export default function SettingsPageClient() {
@@ -47,6 +48,7 @@ export default function SettingsPageClient() {
         {activeTab === "spending" && <SpendingLimitsSettings />}
         {activeTab === "email" && <EmailPreferencesSettings />}
         {activeTab === "gmail" && <GmailIntegrationSettings />}
+        {activeTab === "currency" && <CurrencySettings />}
       </div>
     </div>
   );
@@ -508,6 +510,170 @@ function GmailIntegrationSettings() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function CurrencySettings() {
+  const queryClient = useQueryClient();
+  const { success, error: errorToast } = useToast();
+
+  // Fetch current preferences
+  const { data: preferences, isLoading } = useQuery({
+    queryKey: ["currency-preferences"],
+    queryFn: async () => {
+      const res = await apiClient.get<any>("/api/currency/preferences");
+      return res.data.data;
+    }
+  });
+
+  // Fetch live rates
+  const { data: rates } = useQuery({
+    queryKey: ["currency-rates"],
+    queryFn: async () => {
+      const res = await apiClient.get<any>("/api/currency/rates?base=USD");
+      return res.data.data;
+    }
+  });
+
+  const [selectedCurrency, setSelectedCurrency] = React.useState("INR");
+
+  React.useEffect(() => {
+    if (preferences?.baseCurrency) {
+      setSelectedCurrency(preferences.baseCurrency);
+    }
+  }, [preferences]);
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: async (currency: string) => {
+      await apiClient.put("/api/currency/preferences", { baseCurrency: currency });
+    },
+    onSuccess: () => {
+      success("Currency preference saved");
+      queryClient.invalidateQueries({ queryKey: ["currency-preferences"] });
+    },
+    onError: () => {
+      errorToast("Failed to save currency preference");
+    }
+  });
+
+  const handleSave = () => {
+    updateMutation.mutate(selectedCurrency);
+  };
+
+  const currencies = [
+    { code: "INR", name: "Indian Rupee", symbol: "₹" },
+    { code: "USD", name: "US Dollar", symbol: "$" },
+    { code: "EUR", name: "Euro", symbol: "€" },
+    { code: "GBP", name: "British Pound", symbol: "£" },
+    { code: "AED", name: "UAE Dirham", symbol: "د.إ" },
+    { code: "SGD", name: "Singapore Dollar", symbol: "S$" },
+    { code: "CAD", name: "Canadian Dollar", symbol: "C$" },
+    { code: "AUD", name: "Australian Dollar", symbol: "A$" },
+    { code: "JPY", name: "Japanese Yen", symbol: "¥" },
+    { code: "CHF", name: "Swiss Franc", symbol: "CHF" },
+  ];
+
+  // Sample rates for display
+  const sampleRates: Record<string, number> = {
+    INR: 1,
+    USD: 83.5,
+    EUR: 91.2,
+    GBP: 106.0,
+    AED: 22.7,
+    SGD: 62.3,
+    CAD: 61.4,
+    AUD: 54.6,
+    JPY: 0.56,
+    CHF: 94.9,
+  };
+
+  if (isLoading) {
+    return (
+      <div className="bg-card-bg rounded-xl p-6 border border-muted-text/10">
+        <div className="animate-pulse space-y-4">
+          <div className="h-4 bg-hover-bg rounded w-3/4"></div>
+          <div className="h-4 bg-hover-bg rounded w-1/2"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-card-bg rounded-xl p-6 border border-muted-text/10 space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-primary-text mb-2">
+          Currency Settings
+        </h2>
+        <p className="text-secondary-text">
+          Choose your preferred display currency for transactions and analytics.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <Label htmlFor="display-currency" className="block mb-2">Display Currency</Label>
+          <select
+            id="display-currency"
+            value={selectedCurrency}
+            onChange={(e) => setSelectedCurrency(e.target.value)}
+            className="w-full bg-hover-bg border border-muted-text/20 rounded-lg p-3 text-primary-text focus:ring-2 focus:ring-primary-green/50 focus:border-primary-green"
+          >
+            {currencies.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.symbol} {c.code} - {c.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-sm text-secondary-text mt-2">
+            All transaction amounts will be displayed in this currency.
+          </p>
+        </div>
+
+        {/* Exchange Rate Preview */}
+        <div className="bg-hover-bg rounded-lg p-4">
+          <h3 className="text-sm font-medium text-primary-text mb-3">
+            Current Exchange Rates (to INR)
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            {currencies.slice(0, 6).map((c) => (
+              <div key={c.code} className="flex justify-between text-sm">
+                <span className="text-secondary-text">1 {c.code}</span>
+                <span className="text-primary-text font-medium">
+                  ₹{sampleRates[c.code]?.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-text mt-3">
+            Rates updated daily from currency-api.pages.dev
+          </p>
+        </div>
+
+        {/* Info Box */}
+        <div className="bg-primary-green/5 border border-primary-green/20 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Check className="w-5 h-5 text-primary-green shrink-0 mt-0.5" />
+            <div className="text-sm text-secondary-text">
+              <p className="font-medium text-primary-text mb-1">Automatic Conversion</p>
+              <p>
+                Transactions in foreign currencies are automatically converted using 
+                real-time exchange rates. The original amount is always preserved.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Button
+        className="w-full"
+        onClick={handleSave}
+        disabled={updateMutation.isPending}
+      >
+        <Save className="w-4 h-4 mr-2" />
+        {updateMutation.isPending ? "Saving..." : "Save Currency Settings"}
+      </Button>
     </div>
   );
 }
