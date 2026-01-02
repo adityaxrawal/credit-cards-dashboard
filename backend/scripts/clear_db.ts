@@ -1,6 +1,6 @@
 
 import { Client } from 'pg';
-import { env } from '../src/config/env';
+import { env } from '../src/shared/config/env';
 
 const clearDatabase = async () => {
     const client = new Client({
