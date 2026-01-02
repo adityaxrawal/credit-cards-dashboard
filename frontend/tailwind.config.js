@@ -18,23 +18,23 @@ module.exports = {
         mono: ["JetBrains Mono", "monospace"], // Added for financial data
       },
       colors: {
-// Design system colors - Professional earth-tone palette
-"primary-bg": "#0a0e0d", // Deep charcoal with slight warmth
-"card-bg": "#1a1f1e", // Elevated dark surface
-"hover-bg": "#2d3432", // Subtle warm gray hover
-"primary-text": "#f5f5f4", // stone-100 (warm white)
-"secondary-text": "#a8a29e", // stone-400 (warm gray)
-"muted-text": "#78716c", // stone-500 (muted warm gray)
+        // Design system colors - Professional earth-tone palette
+        "primary-bg": "#0a0e0d", // Deep charcoal with slight warmth
+        "card-bg": "#1a1f1e", // Elevated dark surface
+        "hover-bg": "#2d3432", // Subtle warm gray hover
+        "primary-text": "#f5f5f4", // stone-100 (warm white)
+        "secondary-text": "#a8a29e", // stone-400 (warm gray)
+        "muted-text": "#78716c", // stone-500 (muted warm gray)
 
-"primary-green": "#22c55e", // green-500 (vibrant, professional)
-"semantic-red": "#ef4444", // red-500 (clear danger signal)
-"semantic-amber": "#f59e0b", // amber-500 (perfect as-is)
-"semantic-blue": "#14b8a6", // teal-500 (professional alternative to blue)
+        "primary-green": "#22c55e", // green-500 (vibrant, professional)
+        "semantic-red": "#ef4444", // red-500 (clear danger signal)
+        "semantic-amber": "#f59e0b", // amber-500 (perfect as-is)
+        "semantic-blue": "#14b8a6", // teal-500 (professional alternative to blue)
 
-"accent-purple": "#10b981", // emerald-500 (replaces purple with green)
-"accent-orange": "#f97316", // orange-500 (warm, energetic)
-"accent-cyan": "#06b6d4", // cyan-500 (cool but not blue-dominant)
-        
+        "accent-purple": "#10b981", // emerald-500 (replaces purple with green)
+        "accent-orange": "#f97316", // orange-500 (warm, energetic)
+        "accent-cyan": "#06b6d4", // cyan-500 (cool but not blue-dominant)
+
         // Legacy/Compat mappings
         success: "#6ECB8E",
         warning: "#f59e0b",
