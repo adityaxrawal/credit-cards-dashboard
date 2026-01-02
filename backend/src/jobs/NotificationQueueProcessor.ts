@@ -6,8 +6,8 @@
 import { NotificationRepository } from '../repositories/NotificationRepository';
 import { NotificationQueueRepository } from '../repositories/NotificationQueueRepository';
 import { PreferenceService } from '@modules/user/preference.service';
-import { EmailService } from '../services/notifications/EmailService';
-import { PushNotificationService } from '../services/notifications/PushNotificationService';
+import { EmailService } from '@modules/alerts/email.service';
+import { PushNotificationService } from '@modules/alerts/push-notification.service';
 import logger from '@shared/utils/infrastructure/logger';
 import dayjs from 'dayjs';
 

@@ -1,6 +1,6 @@
 import { PdfParser } from './pdfParser';
 import { StatementExtractor } from './statement.extractor';
-import { CleanEmailContent } from '@services/gmail/sanitize/sanitizer';
+import { CleanEmailContent } from '@modules/gmail/sanitizer';
 
 // Types for Transaction result (aligning with new schema)
 import { ExtractedTransaction, TransactionType, TransactionDirection, InstrumentType } from '@shared/types/transaction.types';

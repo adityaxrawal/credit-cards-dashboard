@@ -1,4 +1,4 @@
-import { EmailService } from '../../services/notifications/EmailService';
+import { EmailService } from './email.service';
 import { AlertRepository } from '@modules/alerts/alerts.repository';
 import { invalidateAlertCache } from '@shared/utils/cache/cacheInvalidation';
 

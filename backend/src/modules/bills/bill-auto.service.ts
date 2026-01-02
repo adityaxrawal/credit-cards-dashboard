@@ -5,7 +5,7 @@
 
 import { BillRepository } from '@modules/bills/bills.repository';
 import logger from '@shared/utils/infrastructure/logger';
-import { CleanEmailContent } from '@services/gmail/sanitize/sanitizer';
+import { CleanEmailContent } from '@modules/gmail/sanitizer';
 
 interface DetectedStatement {
     bankName: string;

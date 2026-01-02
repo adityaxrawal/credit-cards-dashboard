@@ -7,7 +7,7 @@ import { WorkflowLogger } from '@shared/utils/infrastructure/workflowLogger';
 import { universalPipeline } from '@modules/transactions/services/pipeline/UniversalTransactionPipeline';
 // GptQueueManager removed
 import { SimplifiedEmail } from '@shared/types/transaction.types';
-import { SanitizerService } from '../services/gmail/sanitize/sanitizer';
+import { SanitizerService } from '@modules/gmail/sanitizer';
 import dayjs from 'dayjs';
 import { broadcastProcessingUpdate, broadcastJobComplete } from '@modules/alerts/websocket-state';
 import { dbWriteQueueManager } from '../services/infrastructure/DbWriteQueueManager';

@@ -6,7 +6,7 @@ import { SimplifiedEmail, CleanEmail, PipelineResult, TransactionType, Transacti
 import { InstrumentAutoService } from '@modules/cards/instrument-auto.service';
 import { BankPDFPasswordResolver } from '@modules/statements/bank-pdf-password-resolver';
 
-import { SanitizerService } from '../../../../services/gmail/sanitize/sanitizer';
+import { SanitizerService } from '@modules/gmail/sanitizer';
 import { BroadFinancialDetector } from '../detection/BroadFinancialDetector';
 import { TerminatorService } from '../../../../services/infrastructure/termination/TerminatorService';
 import { ClassifierRegistry } from '../classification/ClassifierRegistry';
