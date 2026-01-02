@@ -149,16 +149,24 @@ export function GmailSyncModal({
   }, [isOpen, isSyncing, isCompleted, isFailed]);
 
   const loadDates = async () => {
+    // Helper to get YYYY-MM-DD in local time
+    const toLocalISO = (d: Date) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
     try {
       const { lastSync } = await gmailApi.getLastSync();
-      setEndDate(new Date().toISOString().split('T')[0]);
+      setEndDate(toLocalISO(new Date()));
       // Default to 90 days if no last sync
       const start = lastSync ? new Date(lastSync) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-      setStartDate(start.toISOString().split('T')[0]);
+      setStartDate(toLocalISO(start));
     } catch (e) {
       console.error("Failed to load last sync:", e);
-      setStartDate(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
-      setEndDate(new Date().toISOString().split('T')[0]);
+      setStartDate(toLocalISO(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)));
+      setEndDate(toLocalISO(new Date()));
     }
   };
 

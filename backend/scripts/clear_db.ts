@@ -22,7 +22,7 @@ const clearDatabase = async () => {
 
         const tables = res.rows
             .map(row => row.table_name)
-            .filter(tableName => tableName !== 'users'); // Preserve users table
+            .filter(tableName => tableName !== 'users'); // Explicitly preserve users table
 
         if (tables.length === 0) {
             console.log('No tables found in public schema.');

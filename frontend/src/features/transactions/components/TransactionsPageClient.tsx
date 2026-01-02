@@ -27,6 +27,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button, Input, Badge } from "@/shared/components/ui";
 import { formatCurrency, formatDate, cn } from "@/shared/utils";
+import { getLocalDateISOString, getRelativeLocalDateISOString } from "@/lib/timezone";
 import {
   transactionApi,
   type TransactionFilters,
@@ -53,7 +54,11 @@ export default function TransactionsPage() {
   // Filters
   const [filterCardId, setFilterCardId] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
-  const [filterDate, setFilterDate] = useState({ start: "", end: "" });
+  // Default to last 3 months
+  const [filterDate, setFilterDate] = useState({ 
+      start: getRelativeLocalDateISOString(3), 
+      end: getLocalDateISOString() 
+  });
 
   // Bulk Edit State
   const [bulkCategory, setBulkCategory] = useState("");
@@ -221,6 +226,26 @@ export default function TransactionsPage() {
                           value={filterCategory}
                           onChange={e => setFilterCategory(e.target.value)}
                       />
+                      <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                              <label className="text-xs text-secondary-text">From</label>
+                              <input 
+                                  type="date"
+                                  className="w-full bg-card-bg border border-border rounded p-1.5 text-secondary-text text-xs"
+                                  value={filterDate.start}
+                                  onChange={e => setFilterDate(prev => ({ ...prev, start: e.target.value }))}
+                              />
+                          </div>
+                          <div className="space-y-1">
+                              <label className="text-xs text-secondary-text">To</label>
+                              <input 
+                                  type="date"
+                                  className="w-full bg-card-bg border border-border rounded p-1.5 text-secondary-text text-xs"
+                                  value={filterDate.end}
+                                  onChange={e => setFilterDate(prev => ({ ...prev, end: e.target.value }))}
+                              />
+                          </div>
+                      </div>
                   </div>
               )}
 

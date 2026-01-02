@@ -8,6 +8,8 @@ export interface UserSettings {
   currency?: string;
   date_format?: string;
   auto_sync_enabled?: boolean;
+  timezone?: string;
+  available_timezones?: Array<{ value: string; label: string }>;
   notification_preferences?: {
     bill_reminders?: boolean;
     payment_alerts?: boolean;

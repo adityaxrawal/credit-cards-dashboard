@@ -43,9 +43,15 @@ export async function runHistoricalScan(
     const refreshToken = decrypt(user.google_refresh_token);
 
     // 2. Setup Query
-    const fromDateToUse = fromDate ? dayjs(fromDate) : dayjs().subtract(90, 'day');
+    // Use UTC to ensure consistency regardless of server timezone
+    const fromDateToUse = fromDate ? dayjs(fromDate).utc() : dayjs().utc().subtract(90, 'day');
     const from = fromDateToUse.format('YYYY/MM/DD');
-    const to = toDate ? dayjs(toDate).format('YYYY/MM/DD') : dayjs().format('YYYY/MM/DD');
+
+    // Fix: Gmail 'before' is exclusive, so we must add 1 day to include the toDate fully.
+    // Also ensuring we use UTC.
+    const toDateToUse = toDate ? dayjs(toDate).utc() : dayjs().utc();
+    const to = toDateToUse.add(1, 'day').format('YYYY/MM/DD');
+
     // Fetch ALL emails to ensure we never miss a transaction.
     const query = `after:${from} before:${to} in:inbox -category:promotions -category:social`;
 

@@ -2,6 +2,8 @@
 import { Request, Response } from 'express';
 import { PreferenceService } from '../user/preference.service';
 import { BudgetRepository } from '../budget/budget.repository';
+import { UserRepository } from '../user/user.repository';
+import { TimezoneService, COMMON_TIMEZONES, DEFAULT_TIMEZONE } from '@shared/utils/helpers/TimezoneService';
 
 export class SettingsController {
 
@@ -15,9 +17,10 @@ export class SettingsController {
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
-            const [preferences, monthlyBudget] = await Promise.all([
+            const [preferences, monthlyBudget, userTimezone] = await Promise.all([
                 PreferenceService.getPreferences(userId),
-                BudgetRepository.getUserMonthlyBudget(userId)
+                BudgetRepository.getUserMonthlyBudget(userId),
+                UserRepository.getUserTimezone(userId)
             ]);
 
             const settings = {
@@ -35,7 +38,10 @@ export class SettingsController {
                 theme: 'system',
                 currency: 'INR', // This is handled by Currency module, but we provide a default here
                 date_format: 'DD/MM/YYYY',
-                auto_sync_enabled: true
+                auto_sync_enabled: true,
+                // Timezone settings
+                timezone: userTimezone || DEFAULT_TIMEZONE,
+                available_timezones: COMMON_TIMEZONES
             };
 
             res.json({
@@ -64,6 +70,15 @@ export class SettingsController {
             // Update Budget if present
             if (updates.monthly_budget !== undefined) {
                 promises.push(BudgetRepository.updateUserMonthlyBudget(userId, Number(updates.monthly_budget)));
+            }
+
+            // Update Timezone if present
+            if (updates.timezone !== undefined) {
+                // Validate timezone
+                if (!TimezoneService.isValidTimezone(updates.timezone)) {
+                    return res.status(400).json({ error: 'Invalid timezone' });
+                }
+                promises.push(UserRepository.updateTimezone(userId, updates.timezone));
             }
 
             // Update Preferences if present

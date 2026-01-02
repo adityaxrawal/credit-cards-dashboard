@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Save, Mail, CreditCard, Smartphone, Check, AlertTriangle, RefreshCw, DollarSign } from "lucide-react";
+import { Save, Mail, CreditCard, Smartphone, Check, AlertTriangle, RefreshCw, DollarSign, Clock } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button, Input, ProgressBar, Switch, Label } from "@/shared/components/ui";
 import { cn, formatCurrency } from "@/shared/utils";
@@ -15,6 +15,7 @@ const tabs = [
   { key: "email", label: "Email Preferences", icon: Mail },
   { key: "gmail", label: "Gmail Integration", icon: Smartphone },
   { key: "currency", label: "Currency Settings", icon: DollarSign },
+  { key: "timezone", label: "Timezone", icon: Clock },
 ];
 
 export default function SettingsPageClient() {
@@ -50,6 +51,7 @@ export default function SettingsPageClient() {
         {activeTab === "email" && <EmailPreferencesSettings />}
         {activeTab === "gmail" && <GmailIntegrationSettings />}
         {activeTab === "currency" && <CurrencySettings />}
+        {activeTab === "timezone" && <TimezoneSettings />}
       </div>
     </div>
   );
@@ -683,3 +685,155 @@ function CurrencySettings() {
     </div>
   );
 }
+
+function TimezoneSettings() {
+  const queryClient = useQueryClient();
+  const { success, error: errorToast } = useToast();
+
+  // Fetch current settings including timezone
+  const { data: userSettings, isLoading } = useQuery({
+    queryKey: ["user-settings"],
+    queryFn: () => settingsApi.getSettings(),
+  });
+
+  const [selectedTimezone, setSelectedTimezone] = React.useState("Asia/Kolkata");
+
+  // Detect browser timezone
+  const browserTimezone = React.useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      return "Asia/Kolkata";
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (userSettings?.timezone) {
+      setSelectedTimezone(userSettings.timezone);
+    }
+  }, [userSettings]);
+
+  // Get available timezones from API response or use defaults
+  const timezones = userSettings?.available_timezones || [
+    { value: "Asia/Kolkata", label: "India Standard Time (IST)" },
+    { value: "America/New_York", label: "Eastern Time (ET)" },
+    { value: "America/Chicago", label: "Central Time (CT)" },
+    { value: "America/Denver", label: "Mountain Time (MT)" },
+    { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
+    { value: "Europe/London", label: "Greenwich Mean Time (GMT)" },
+    { value: "Europe/Paris", label: "Central European Time (CET)" },
+    { value: "Asia/Dubai", label: "Gulf Standard Time (GST)" },
+    { value: "Asia/Singapore", label: "Singapore Time (SGT)" },
+    { value: "Asia/Tokyo", label: "Japan Standard Time (JST)" },
+    { value: "Australia/Sydney", label: "Australian Eastern Time (AET)" },
+    { value: "UTC", label: "Coordinated Universal Time (UTC)" },
+  ];
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: (timezone: string) => settingsApi.updateSettings({ timezone } as any),
+    onSuccess: () => {
+      success("Timezone updated successfully");
+      queryClient.invalidateQueries({ queryKey: ["user-settings"] });
+    },
+    onError: () => {
+      errorToast("Failed to update timezone");
+    },
+  });
+
+  const handleSave = () => {
+    updateMutation.mutate(selectedTimezone);
+  };
+
+  const handleDetectTimezone = () => {
+    setSelectedTimezone(browserTimezone);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="bg-card-bg rounded-xl p-6 border border-muted-text/10">
+        <div className="animate-pulse space-y-4">
+          <div className="h-4 bg-hover-bg rounded w-3/4"></div>
+          <div className="h-4 bg-hover-bg rounded w-1/2"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-card-bg rounded-xl p-6 border border-muted-text/10 space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-primary-text mb-2">
+          Timezone Settings
+        </h2>
+        <p className="text-secondary-text">
+          Set your timezone to display transaction dates and times correctly.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <Label htmlFor="timezone-select" className="block mb-2">Your Timezone</Label>
+          <select
+            id="timezone-select"
+            value={selectedTimezone}
+            onChange={(e) => setSelectedTimezone(e.target.value)}
+            className="w-full bg-hover-bg border border-muted-text/20 rounded-lg p-3 text-primary-text focus:ring-2 focus:ring-primary-green/50 focus:border-primary-green"
+          >
+            {timezones.map((tz: { value: string; label: string }) => (
+              <option key={tz.value} value={tz.value}>
+                {tz.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-sm text-secondary-text mt-2">
+            Transaction dates will be displayed in this timezone.
+          </p>
+        </div>
+
+        {/* Browser Detection */}
+        <div className="flex items-center justify-between bg-hover-bg rounded-lg p-4">
+          <div>
+            <p className="text-sm font-medium text-primary-text">
+              Detected Browser Timezone
+            </p>
+            <p className="text-sm text-secondary-text">{browserTimezone}</p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleDetectTimezone}
+            disabled={selectedTimezone === browserTimezone}
+          >
+            Use This
+          </Button>
+        </div>
+
+        {/* Info Box */}
+        <div className="bg-primary-green/5 border border-primary-green/20 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Clock className="w-5 h-5 text-primary-green shrink-0 mt-0.5" />
+            <div className="text-sm text-secondary-text">
+              <p className="font-medium text-primary-text mb-1">How it works</p>
+              <p>
+                All transaction timestamps are stored in UTC for accuracy. 
+                Your selected timezone is used to display dates and times 
+                in your local time.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Button
+        className="w-full"
+        onClick={handleSave}
+        disabled={updateMutation.isPending}
+      >
+        <Save className="w-4 h-4 mr-2" />
+        {updateMutation.isPending ? "Saving..." : "Save Timezone"}
+      </Button>
+    </div>
+  );
+}
+

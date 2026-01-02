@@ -7,6 +7,12 @@ import { initializeWebSocket } from './modules/alerts/websocket.service';
 import { registerAll } from './modules/transactions/services/classification';
 import { dbWriteQueueManager } from './services/infrastructure/DbWriteQueueManager';
 import logger from './shared/utils/infrastructure/logger';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const PORT = env.PORT || 8000;
 

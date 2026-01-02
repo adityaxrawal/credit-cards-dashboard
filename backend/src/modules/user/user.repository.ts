@@ -10,6 +10,7 @@ export interface User {
     gmail_history_id?: string | null;
     gmail_watch_expiration?: Date | null;
     date_of_birth?: Date;
+    timezone?: string;
     is_active: boolean;
     created_at: Date;
     updated_at: Date;
@@ -181,4 +182,28 @@ export class UserRepository {
         );
         return result.rows[0] || null;
     }
+
+    // ==================== Timezone Methods ====================
+
+    /**
+     * Get user's timezone preference
+     */
+    static async getUserTimezone(userId: string): Promise<string | null> {
+        const result = await query(
+            `SELECT timezone FROM users WHERE id = $1`,
+            [userId]
+        );
+        return result.rows[0]?.timezone || null;
+    }
+
+    /**
+     * Update user's timezone preference
+     */
+    static async updateTimezone(userId: string, timezone: string): Promise<void> {
+        await query(
+            `UPDATE users SET timezone = $2, updated_at = NOW() WHERE id = $1`,
+            [userId, timezone]
+        );
+    }
 }
+

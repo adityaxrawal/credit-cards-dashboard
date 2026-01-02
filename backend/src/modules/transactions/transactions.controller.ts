@@ -14,6 +14,7 @@ import { CreateTransactionSchema, UpdateTransactionSchema } from './validators/t
 
 import logger from '@shared/utils/infrastructure/logger';
 import { Transaction, TransactionFilters, TransactionMetadata } from '@shared/types/transaction.types';
+import { TimezoneService } from '@shared/utils/helpers/TimezoneService';
 
 /**
  * Transaction Service Interface (inline for this controller)
@@ -74,15 +75,39 @@ export function createTransactionsController(
     async getTransactions(req: AuthRequest, res: Response, next: NextFunction) {
       try {
         const userId = req.user.id;
+        const userTimezone = await TimezoneService.getUserTimezone(userId);
+
+        // Date handling logic:
+        // 1. If dates provided in query, assume they are in User Timezone and convert to UTC
+        // 2. If not provided, default to Last 3 Months (in User Timezone) converted to UTC
+
+        let fromDate: Date | undefined;
+        let toDate: Date | undefined;
+
+        if (req.query.from) {
+          fromDate = TimezoneService.userDateToUTC(req.query.from as string, userTimezone);
+        } else {
+          // Default: 3 months ago relative to user's "now"
+          fromDate = TimezoneService.getRelativeDateInUTC(3, 'month', userTimezone);
+        }
+
+        if (req.query.to) {
+          // For 'to' date, we usually want the end of that day to include all transactions
+          toDate = TimezoneService.userDateToUTC(req.query.to as string, userTimezone, true);
+        } else {
+          // Default: Now (which is end of current lookup window)
+          toDate = TimezoneService.getNowInUTC(userTimezone);
+        }
+
         const filters = {
           cardId: req.query.cardId as string,
           instrumentType: req.query.instrumentType as string,
           instrumentId: req.query.instrumentId as string,
           direction: req.query.direction as string,
-          from: req.query.from ? new Date(req.query.from as string) : undefined,
-          to: req.query.to ? new Date(req.query.to as string) : undefined,
+          from: fromDate,
+          to: toDate,
           billMonth: req.query.billMonth ? parseInt(req.query.billMonth as string) : undefined,
-          billYear: req.query.billYear ? parseInt(req.query.billYear as string) : undefined,
+          billYear: req.query.billYear ? parseInt(req.query.billYear as string) : undefined, // Check param name
           category: req.query.category as string,
           transactionType: req.query.transactionType as string,
           merchant: req.query.merchant as string,
@@ -94,7 +119,19 @@ export function createTransactionsController(
           search: req.query.search as string,
         };
         const result = await transactionsService.listTransactions(userId, filters);
-        res.json(result);
+
+        // Convert transaction dates to user's timezone
+        const dataWithTimezone = TimezoneService.convertTransactionsBatch(result.data, userTimezone);
+
+        res.json({
+          ...result,
+          data: dataWithTimezone,
+          timezone: userTimezone,
+          filter_dates: {
+            from: fromDate.toISOString(),
+            to: toDate.toISOString()
+          }
+        });
       } catch (error) {
         next(error);
       }
@@ -108,7 +145,12 @@ export function createTransactionsController(
         if (!transaction) {
           return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Transaction not found' } }) as any;
         }
-        res.json({ data: transaction });
+
+        // Convert transaction dates to user's timezone
+        const userTimezone = await TimezoneService.getUserTimezone(userId);
+        const transactionWithTimezone = TimezoneService.convertTransactionDates(transaction, userTimezone);
+
+        res.json({ data: transactionWithTimezone, timezone: userTimezone });
       } catch (error) {
         next(error);
       }

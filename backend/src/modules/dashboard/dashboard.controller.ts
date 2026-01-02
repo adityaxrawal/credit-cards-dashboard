@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from '@shared/types/auth.types';
+import { TimezoneService } from '@shared/utils/helpers/TimezoneService';
 
 export interface IDashboardService {
     getSummary(userId: string): Promise<any>;
@@ -59,7 +60,12 @@ export function createDashboardController(dashboardService: IDashboardService): 
                 const userId = req.user.id;
                 const limit = parseInt(req.query.limit as string) || 10;
                 const transactions = await dashboardService.getRecentTransactions(userId, limit);
-                res.json({ data: transactions });
+
+                // Convert transaction dates to user's timezone
+                const userTimezone = await TimezoneService.getUserTimezone(userId);
+                const transactionsWithTimezone = TimezoneService.convertTransactionsBatch(transactions, userTimezone);
+
+                res.json({ data: transactionsWithTimezone, timezone: userTimezone });
             } catch (error) {
                 next(error);
             }
