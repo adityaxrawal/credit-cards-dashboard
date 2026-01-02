@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import { RecurringTransaction } from "../../types/recurring";
+import { RecurringTransaction } from "@/types/recurring";
 
 export const recurringApi = {
     getRecurringTransactions: async (): Promise<RecurringTransaction[]> => {

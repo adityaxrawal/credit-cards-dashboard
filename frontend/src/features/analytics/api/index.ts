@@ -1,5 +1,5 @@
-import { apiClient } from "@/lib/api-client";
-import { SpendingReport, CategoryReport, MonthlyReport } from "../../types/reports";
+import { apiClient, apiRequest } from "@/lib/api-client";
+import { SpendingReport, CategoryReport, MonthlyReport } from "@/types/reports";
 
 export interface DashboardOverview {
   currentMonth: {
@@ -130,10 +130,17 @@ export const analyticsApi = {
       url = `/api/reports/category-breakdown/pdf`;
     }
 
-    const response = await apiClient.getClient().get(url, {
-      params,
-      responseType: 'blob'
-    });
-    return response.data;
+    if (params) {
+      const query = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          query.append(key, String(value));
+        }
+      });
+      url += `?${query.toString()}`;
+    }
+
+    const response = await apiRequest(url);
+    return response.blob();
   }
 };

@@ -261,3 +261,25 @@ export function useRecurringStats() {
         refetch: query.refetch,
     };
 }
+
+/**
+ * Hook for accounts summary
+ */
+import { accountsApi } from "@/features/accounts/api";
+
+export function useAccountsSummary() {
+    const { user } = useUser();
+
+    const query = useQuery({
+        queryKey: ["accounts-summary"],
+        queryFn: accountsApi.getSummary,
+        enabled: !!user,
+    });
+
+    return {
+        data: query.data,
+        isLoading: query.isLoading,
+        error: query.error,
+        refetch: query.refetch,
+    };
+}

@@ -15,23 +15,31 @@ module.exports = {
     extend: {
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+        mono: ["JetBrains Mono", "monospace"], // Added for financial data
       },
       colors: {
-        // Design system colors from specification
-        "primary-bg": "#1A1D21",
-        "card-bg": "#25282E",
-        "hover-bg": "#2F3339",
-        "primary-text": "#E0E0E0",
-        "secondary-text": "#A0A0A0",
-        "muted-text": "#6B7280",
-        "primary-green": "#6ECB8E",
-        "accent-purple": "#9B59B6",
-        "accent-orange": "#F39C12",
-        "accent-blue": "#3498DB",
+// Design system colors - Professional earth-tone palette
+"primary-bg": "#0a0e0d", // Deep charcoal with slight warmth
+"card-bg": "#1a1f1e", // Elevated dark surface
+"hover-bg": "#2d3432", // Subtle warm gray hover
+"primary-text": "#f5f5f4", // stone-100 (warm white)
+"secondary-text": "#a8a29e", // stone-400 (warm gray)
+"muted-text": "#78716c", // stone-500 (muted warm gray)
+
+"primary-green": "#22c55e", // green-500 (vibrant, professional)
+"semantic-red": "#ef4444", // red-500 (clear danger signal)
+"semantic-amber": "#f59e0b", // amber-500 (perfect as-is)
+"semantic-blue": "#14b8a6", // teal-500 (professional alternative to blue)
+
+"accent-purple": "#10b981", // emerald-500 (replaces purple with green)
+"accent-orange": "#f97316", // orange-500 (warm, energetic)
+"accent-cyan": "#06b6d4", // cyan-500 (cool but not blue-dominant)
+        
+        // Legacy/Compat mappings
         success: "#6ECB8E",
-        warning: "#F39C12",
-        error: "#E74C3C",
-        info: "#3498DB",
+        warning: "#f59e0b",
+        error: "#ef4444",
+        info: "#3b82f6",
 
         // Original shadcn colors for compatibility
         border: "hsl(var(--border))",

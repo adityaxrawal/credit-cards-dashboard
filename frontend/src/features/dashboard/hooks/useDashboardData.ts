@@ -7,7 +7,7 @@
  * Refactored as part of Issue #11: useDashboardData God-Hook decomposition
  */
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useUser } from "@/lib/auth/user-context";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/react-query/keys";
@@ -22,6 +22,7 @@ import {
     useRewardsSummary,
     useUpcomingBills,
     useRecurringStats,
+    useAccountsSummary,
     type UpcomingBill,
 } from "./useDashboardHooks";
 
@@ -45,6 +46,7 @@ export function useDashboardData() {
     const rewards = useRewardsSummary();
     const bills = useUpcomingBills(cardsData.cards);
     const recurring = useRecurringStats();
+    const accounts = useAccountsSummary();
 
     // Combined Loading State
     const loading =
@@ -55,7 +57,8 @@ export function useDashboardData() {
         trends.isLoading ||
         rewards.isLoading ||
         bills.isLoading ||
-        recurring.isLoading;
+        recurring.isLoading ||
+        accounts.isLoading;
 
     // Manual Refresh Function (Invalidate all queries)
     const loadDashboardData = useCallback(async (force = false) => {
@@ -68,6 +71,7 @@ export function useDashboardData() {
             queryKeys.rewards.summary,
             queryKeys.bills?.upcoming ?? ["bills", "upcoming"],
             queryKeys.recurring.stats,
+            ["accounts-summary"],
         ];
 
         if (force) {
@@ -81,9 +85,31 @@ export function useDashboardData() {
         }
     }, [queryClient]);
 
+    // Synthesize "summary" object for backward compatibility with OverviewPage
+    const summary = useMemo(() => {
+        if (!overview.data || !accounts.data) return null;
+
+        const currentMonth = overview.data.currentMonth || { totalSpent: 0, totalEarned: 0 };
+
+        return {
+            ...overview.data,
+            netWorth: accounts.data.netWorth,
+            accountTotals: {
+                cash: accounts.data.totalBalance, // Assuming totalBalance is assets (cash + investments)
+                bankAccounts: accounts.data.byType?.['bank']?.totalBalance || 0,
+                creditCardOutstanding: accounts.data.totalLiabilities,
+            },
+            monthlySnapshot: {
+                expenses: currentMonth.totalSpent,
+                savings: 0 - currentMonth.totalSpent, // Approximate (Income not available in overview)
+            }
+        };
+    }, [overview.data, accounts.data]);
+
     // Return same shape as before for backward compatibility
     return {
-        overview: overview.data,
+        summary, // This uses the synthesized object
+        overview: overview.data, // Keep original property just in case
         budgetStatus: budget.data,
         recentTransactions: transactions.data,
         upcomingBills: bills.bills,
@@ -94,6 +120,7 @@ export function useDashboardData() {
         totalRewards: rewards.totalPoints,
         recurringStats: recurring.data,
         loading,
+        isLoading: loading, // Add alias if component uses isLoading
         loadDashboardData,
         user
     };

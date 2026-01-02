@@ -5,7 +5,7 @@ import {
   TransactionListResponse,
   TransactionFormData,
   TransactionType
-} from "../../types/transaction";
+} from "@/types/transaction";
 
 // Re-export specific types if needed by consumers of this API file
 export type { Transaction, TransactionFilters, TransactionListResponse, TransactionFormData, TransactionType };

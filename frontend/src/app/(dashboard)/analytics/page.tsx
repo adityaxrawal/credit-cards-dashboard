@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/shared/components/layout";
 import { Button } from "@/shared/components/ui";
@@ -23,13 +23,23 @@ import {
   Calendar,
   PieChart as PieChartIcon,
   Download,
+  Activity,
+  Map as MapIcon,
+  Layers,
+  GitMerge
 } from "lucide-react";
 import { formatCurrency } from "@/shared/utils";
 import { analyticsApi, TopMerchant } from "@/features/analytics/api";
+import { transactionApi } from "@/features/transactions/api";
 import { SpendingTrendChart } from "@/features/analytics/components/SpendingTrendChart";
 import { CategoryPieChart } from "@/features/analytics/components/CategoryPieChart";
 import { CategoryDrillDown } from "@/features/analytics/components/CategoryDrillDown";
+import { SankeyChart } from "@/features/analytics/components/SankeyChart";
+import { SpendHeatmap } from "@/features/analytics/components/SpendHeatmap";
+import { CategoryTreemap } from "@/features/analytics/components/CategoryTreemap";
+import { CohortAnalysisChart } from "@/features/analytics/components/CohortAnalysisChart";
 import { queryKeys } from "@/lib/react-query/keys";
+import { startOfMonth, subMonths, endOfMonth, format, parseISO } from "date-fns";
 
 interface KPI {
   name: string;
@@ -70,6 +80,128 @@ export default function AnalyticsPage() {
     queryKey: queryKeys.analytics.merchants(currentMonth, currentYear),
     queryFn: () => analyticsApi.getTopMerchants(currentMonth, currentYear),
   });
+
+  // Fetch transactions for detailed client-side analytics (Heatmap & Sankey)
+  // We fetch last 3 months to be safe and give rich data
+  const { data: transactionList, isLoading: txLoading } = useQuery({
+    queryKey: ['analytics', 'raw-transactions', '3m'],
+    queryFn: () => transactionApi.getTransactions({
+        limit: 2000,
+        from: format(subMonths(startOfMonth(new Date()), 2), 'yyyy-MM-dd'), // Last 3 months approx
+        to: format(endOfMonth(new Date()), 'yyyy-MM-dd'),
+    })
+  });
+
+  // --- Data Transformations ---
+
+  // 1. Heatmap Data (Daily info)
+  const heatmapData = useMemo(() => {
+    if (!transactionList?.data) return [];
+    
+    const dailyMap = new Map<string, number>();
+    transactionList.data.forEach(tx => {
+        // Only count expenses
+        if (tx.amount > 0) {
+            const dateStr = (tx.transaction_date || tx.created_at).split('T')[0]; // YYYY-MM-DD
+            dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + tx.amount);
+        }
+    });
+
+    return Array.from(dailyMap.entries()).map(([date, value]) => ({ date, value }));
+  }, [transactionList]);
+
+  // 2. Sankey Data (Income equivalent -> Categories -> Merchants)
+  const sankeyData = useMemo(() => {
+    if (!transactionList?.data) return { nodes: [], links: [] };
+
+    // Simply take top 5 categories and top 3 merchants per category for the CURRENT MONTH Only
+    const currentMonthTxs = transactionList.data.filter(tx => {
+        const d = parseISO(tx.transaction_date || tx.created_at);
+        return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
+    });
+
+    // Calculate totals
+    const catTotals = new Map<string, number>(); // Category -> Total
+    const catMerchTotals = new Map<string, Map<string, number>>(); // Category -> Merchant -> Total
+
+    let totalFlow = 0;
+
+    currentMonthTxs.forEach(tx => {
+        if (tx.amount > 0 && tx.category) { // Expenses only
+             // Category Total
+             catTotals.set(tx.category, (catTotals.get(tx.category) || 0) + tx.amount);
+             
+             // Merchant Total
+             if (!catMerchTotals.has(tx.category)) {
+                 catMerchTotals.set(tx.category, new Map());
+             }
+             const mName = tx.merchant || 'Unknown';
+             const mLast = catMerchTotals.get(tx.category)!;
+             mLast.set(mName, (mLast.get(mName) || 0) + tx.amount);
+
+             totalFlow += tx.amount;
+        }
+    });
+
+    // Sort and slice top 5 categories
+    const sortedCats = Array.from(catTotals.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    
+    const nodes = [{ name: "Total Spend" }];
+    const links: any[] = [];
+
+    // Add Category Nodes and Links from "Total Spend"
+    sortedCats.forEach(([catTitle, catVal], catIdx) => {
+        const catNodeIdx = nodes.length;
+        nodes.push({ name: catTitle });
+        links.push({ source: 0, target: catNodeIdx, value: catVal });
+
+        // Add Top 3 Merchants for this Category
+        const merchants = catMerchTotals.get(catTitle);
+        if (merchants) {
+            const sortedMerchants = Array.from(merchants.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3);
+            sortedMerchants.forEach(([mName, mVal]) => {
+                // Check if merchant node exists effectively (global unique check?)
+                // Sankey nodes usually need unique indices. 
+                // We'll create unique nodes for Merchant-Category pair to avoid cycles/crossing mess for now
+                // Or try to reuse if merchant appears in multiple categories (complex).
+                // Let's create unique merchant nodes "Merchant (Category)" to keep it simple tree-like
+                const mNodeIdx = nodes.length;
+                nodes.push({ name: mName });
+                links.push({ source: catNodeIdx, target: mNodeIdx, value: mVal });
+            });
+        }
+    });
+
+    return { nodes, links };
+  }, [transactionList, currentMonth, currentYear]);
+
+  // 3. Treemap Data
+  const treemapData = useMemo(() => {
+    if (!categoryData?.categories) return [];
+    return Object.entries(categoryData.categories)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value);
+  }, [categoryData]);
+
+  // 4. Cohort Data
+  const cohortData = useMemo(() => {
+      if (!Array.isArray(trendsData)) return { data: [], categories: [] };
+      
+      const allCategories = new Set<string>();
+      const processed = trendsData.map(item => {
+          const point: any = { month: `${item.month}/${item.year}` };
+          if (item.byCategory) {
+              Object.entries(item.byCategory).forEach(([cat, val]) => {
+                  point[cat] = val;
+                  allCategories.add(cat);
+              });
+          }
+          return point;
+      });
+
+      return { data: processed, categories: Array.from(allCategories) };
+  }, [trendsData]);
+
 
   // Process KPI Data
   const kpis: KPI[] = [];
@@ -214,7 +346,6 @@ export default function AnalyticsPage() {
             </p>
           </div>
           <div className="flex items-center space-x-4">
-             {/* Period selection could be added here if backend supports arbitrary ranges for overview */}
             <Button variant="secondary" onClick={async () => {
               try {
                 const blob = await analyticsApi.exportData('monthly_pdf');
@@ -285,6 +416,65 @@ export default function AnalyticsPage() {
             <h3 className="text-lg font-semibold text-primary-text mb-4">Spending by Category (Current Month)</h3>
             <CategoryPieChart data={pieData} isLoading={categoryLoading} />
           </div>
+        </div>
+
+        {/* Deep Dive Section - The New Stuff */}
+        <div>
+            <h2 className="text-xl font-bold text-primary-text mb-4 flex items-center">
+                <Activity className="w-5 h-5 mr-2 text-primary-green" />
+                Deep Dive
+            </h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* 1. Sankey Diagram */}
+                <div className="bg-card-bg p-6 rounded-xl border border-muted-text/10 shadow-sm col-span-1 lg:col-span-2">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center">
+                            <GitMerge className="w-4 h-4 mr-2 text-secondary-text" />
+                            <h3 className="text-lg font-semibold text-primary-text">Spending Flow</h3>
+                        </div>
+                        <p className="text-xs text-secondary-text">Top 5 Categories &rarr; Merchants</p>
+                    </div>
+                    <SankeyChart data={sankeyData} isLoading={txLoading} />
+                </div>
+
+                {/* 2. Heatmap */}
+                <div className="bg-card-bg p-6 rounded-xl border border-muted-text/10 shadow-sm">
+                     <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center">
+                            <Calendar className="w-4 h-4 mr-2 text-secondary-text" />
+                            <h3 className="text-lg font-semibold text-primary-text">Spending Heatmap</h3>
+                        </div>
+                        <p className="text-xs text-secondary-text">Daily Intensity (Last 3m)</p>
+                    </div>
+                    <SpendHeatmap data={heatmapData} isLoading={txLoading} />
+                </div>
+
+                {/* 3. Treemap */}
+                <div className="bg-card-bg p-6 rounded-xl border border-muted-text/10 shadow-sm">
+                     <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center">
+                            <Layers className="w-4 h-4 mr-2 text-secondary-text" />
+                            <h3 className="text-lg font-semibold text-primary-text">Category Map</h3>
+                        </div>
+                         <p className="text-xs text-secondary-text">Relative Spend Size</p>
+                    </div>
+                    <CategoryTreemap data={treemapData} isLoading={categoryLoading} />
+                </div>
+
+                 {/* 4. Cohort Analysis */}
+                 <div className="bg-card-bg p-6 rounded-xl border border-muted-text/10 shadow-sm col-span-1 lg:col-span-2">
+                     <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center">
+                            <MapIcon className="w-4 h-4 mr-2 text-secondary-text" />
+                            <h3 className="text-lg font-semibold text-primary-text">Category Trends Over Time</h3>
+                        </div>
+                        <p className="text-xs text-secondary-text">6 Month History</p>
+                    </div>
+                    <CohortAnalysisChart data={cohortData.data} categories={cohortData.categories} isLoading={trendsLoading} />
+                </div>
+
+            </div>
         </div>
 
         {/* Detailed Tables */}
