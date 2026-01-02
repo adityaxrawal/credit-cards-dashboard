@@ -1,4 +1,4 @@
-import pool from '../../lib/db';
+import { GoalsRepository, GoalRow, ContributionRow } from '../../repositories/GoalsRepository';
 import { addMonths, differenceInDays, format } from 'date-fns';
 
 export interface GoalInput {
@@ -96,38 +96,17 @@ export class GoalsService {
         userId: string,
         filters: { status?: string; type?: string } = {}
     ): Promise<Goal[]> {
-        let query = `SELECT * FROM goals WHERE user_id = $1`;
-        const params: unknown[] = [userId];
-        let paramIndex = 2;
-
-        if (filters.status) {
-            query += ` AND status = $${paramIndex++}`;
-            params.push(filters.status);
-        }
-
-        if (filters.type) {
-            query += ` AND goal_type = $${paramIndex++}`;
-            params.push(filters.type);
-        }
-
-        query += ` ORDER BY 
-      CASE WHEN status = 'active' THEN 0 ELSE 1 END,
-      progress_percent DESC, 
-      target_date ASC NULLS LAST`;
-
-        const result = await pool.query(query, params);
-        return result.rows.map(this.mapToGoal);
+        const rows = await GoalsRepository.findAll(userId, filters);
+        return rows.map(this.mapToGoal);
     }
 
     /**
      * Get goal by ID
      */
     async getById(userId: string, goalId: string): Promise<Goal | null> {
-        const query = `SELECT * FROM goals WHERE id = $1 AND user_id = $2`;
-        const result = await pool.query(query, [goalId, userId]);
-
-        if (result.rows.length === 0) return null;
-        return this.mapToGoal(result.rows[0]);
+        const row = await GoalsRepository.findById(userId, goalId);
+        if (!row) return null;
+        return this.mapToGoal(row);
     }
 
     /**
@@ -135,7 +114,7 @@ export class GoalsService {
      */
     async create(userId: string, input: GoalInput): Promise<Goal> {
         // Calculate next contribution date
-        let nextContributionDate: string | null = null;
+        let nextContributionDate: string | undefined;
         if (input.contributionFrequency && input.contributionAmount) {
             const today = new Date();
             switch (input.contributionFrequency) {
@@ -157,45 +136,35 @@ export class GoalsService {
             }
         }
 
-        const query = `
-      INSERT INTO goals (
-        user_id, linked_account_id, goal_name, goal_type, description,
-        icon, color, target_amount, current_amount, currency,
-        target_date, contribution_frequency, contribution_amount,
-        next_contribution_date, metadata, status
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'active'
-      )
-      RETURNING *
-    `;
-        const result = await pool.query(query, [
+        const row = await GoalsRepository.create({
             userId,
-            input.linkedAccountId || null,
-            input.goalName,
-            input.goalType,
-            input.description || null,
-            input.icon || null,
-            input.color || null,
-            input.targetAmount,
-            input.currentAmount || 0,
-            input.currency || 'INR',
-            input.targetDate || null,
-            input.contributionFrequency || null,
-            input.contributionAmount || null,
+            goalName: input.goalName,
+            goalType: input.goalType,
+            description: input.description,
+            icon: input.icon,
+            color: input.color,
+            targetAmount: input.targetAmount,
+            currentAmount: input.currentAmount || 0,
+            currency: input.currency || 'INR',
+            targetDate: input.targetDate,
+            startDate: format(new Date(), 'yyyy-MM-dd'),
+            contributionFrequency: input.contributionFrequency,
+            contributionAmount: input.contributionAmount,
             nextContributionDate,
-            JSON.stringify(input.metadata || {}),
-        ]);
+            linkedAccountId: input.linkedAccountId,
+            metadata: input.metadata || {},
+        });
 
         // If initial amount provided, create contribution record
         if (input.currentAmount && input.currentAmount > 0) {
-            await this.addContribution(userId, result.rows[0].id, {
+            await this.addContribution(userId, row.id, {
                 amount: input.currentAmount,
                 contributionType: 'manual',
                 notes: 'Initial contribution',
             });
         }
 
-        return this.mapToGoal(result.rows[0]);
+        return this.mapToGoal(row);
     }
 
     /**
@@ -209,50 +178,30 @@ export class GoalsService {
         const existing = await this.getById(userId, goalId);
         if (!existing) return null;
 
-        const query = `
-      UPDATE goals SET
-        goal_name = COALESCE($3, goal_name),
-        description = COALESCE($4, description),
-        icon = COALESCE($5, icon),
-        color = COALESCE($6, color),
-        target_amount = COALESCE($7, target_amount),
-        target_date = COALESCE($8, target_date),
-        contribution_frequency = COALESCE($9, contribution_frequency),
-        contribution_amount = COALESCE($10, contribution_amount),
-        linked_account_id = COALESCE($11, linked_account_id),
-        metadata = COALESCE($12::jsonb, metadata),
-        updated_at = NOW()
-      WHERE id = $1 AND user_id = $2
-      RETURNING *
-    `;
-        const result = await pool.query(query, [
-            goalId,
-            userId,
-            input.goalName,
-            input.description,
-            input.icon,
-            input.color,
-            input.targetAmount,
-            input.targetDate,
-            input.contributionFrequency,
-            input.contributionAmount,
-            input.linkedAccountId,
-            input.metadata ? JSON.stringify(input.metadata) : null,
-        ]);
+        const setClauses: string[] = [];
+        const values: any[] = [];
+        let idx = 1;
 
-        return this.mapToGoal(result.rows[0]);
+        if (input.goalName) { setClauses.push(`goal_name = $${idx++}`); values.push(input.goalName); }
+        if (input.description !== undefined) { setClauses.push(`description = $${idx++}`); values.push(input.description); }
+        if (input.icon !== undefined) { setClauses.push(`icon = $${idx++}`); values.push(input.icon); }
+        if (input.color !== undefined) { setClauses.push(`color = $${idx++}`); values.push(input.color); }
+        if (input.targetAmount !== undefined) { setClauses.push(`target_amount = $${idx++}`); values.push(input.targetAmount); }
+        if (input.targetDate !== undefined) { setClauses.push(`target_date = $${idx++}`); values.push(input.targetDate); }
+        if (input.contributionFrequency !== undefined) { setClauses.push(`contribution_frequency = $${idx++}`); values.push(input.contributionFrequency); }
+        if (input.contributionAmount !== undefined) { setClauses.push(`contribution_amount = $${idx++}`); values.push(input.contributionAmount); }
+        if (input.linkedAccountId !== undefined) { setClauses.push(`linked_account_id = $${idx++}`); values.push(input.linkedAccountId); }
+        if (input.metadata) { setClauses.push(`metadata = $${idx++}::jsonb`); values.push(JSON.stringify(input.metadata)); }
+
+        const row = await GoalsRepository.update(goalId, userId, setClauses, values);
+        return row ? this.mapToGoal(row) : null;
     }
 
     /**
      * Delete a goal
      */
     async delete(userId: string, goalId: string): Promise<void> {
-        const query = `
-      UPDATE goals 
-      SET status = 'cancelled', updated_at = NOW()
-      WHERE id = $1 AND user_id = $2
-    `;
-        await pool.query(query, [goalId, userId]);
+        await GoalsRepository.delete(goalId, userId);
     }
 
     /**
@@ -271,52 +220,38 @@ export class GoalsService {
         const newBalance = Math.max(0, goal.currentAmount + adjustedAmount);
 
         // Insert contribution
-        const insertQuery = `
-      INSERT INTO goal_contributions (
-        goal_id, user_id, amount, contribution_date, contribution_type,
-        source_account_id, balance_after, notes
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8
-      )
-      RETURNING *
-    `;
-        const contributionResult = await pool.query(insertQuery, [
+        const contributionRow = await GoalsRepository.addContribution({
             goalId,
-            userId,
-            adjustedAmount,
-            input.contributionDate || new Date().toISOString().split('T')[0],
-            input.contributionType || 'manual',
-            input.sourceAccountId || null,
-            newBalance,
-            input.notes || null,
-        ]);
+            amount: adjustedAmount,
+            contributionDate: input.contributionDate || new Date().toISOString().split('T')[0],
+            contributionType: input.contributionType || 'manual',
+            sourceAccountId: input.sourceAccountId,
+            balanceAfter: newBalance,
+            notes: input.notes,
+        });
 
         // Update goal
         const isCompleted = newBalance >= goal.targetAmount;
-        const updateQuery = `
-      UPDATE goals SET
-        current_amount = $3,
-        status = CASE WHEN $4 THEN 'completed' ELSE status END,
-        completed_at = CASE WHEN $4 THEN NOW() ELSE completed_at END,
-        updated_at = NOW()
-      WHERE id = $1 AND user_id = $2
-    `;
-        await pool.query(updateQuery, [goalId, userId, newBalance, isCompleted]);
+        const progressPercent = (newBalance / goal.targetAmount) * 100;
 
-        return this.mapToContribution(contributionResult.rows[0]);
+        await GoalsRepository.updateAfterContribution(
+            goalId,
+            userId,
+            newBalance,
+            progressPercent,
+            isCompleted ? 'completed' : goal.status,
+            isCompleted ? new Date() : null
+        );
+
+        return this.mapToContribution(contributionRow);
     }
 
     /**
      * Get contributions for a goal
      */
     async getContributions(userId: string, goalId: string): Promise<Contribution[]> {
-        const query = `
-      SELECT * FROM goal_contributions
-      WHERE goal_id = $1 AND user_id = $2
-      ORDER BY contribution_date DESC, created_at DESC
-    `;
-        const result = await pool.query(query, [goalId, userId]);
-        return result.rows.map(this.mapToContribution);
+        const rows = await GoalsRepository.getContributions(goalId);
+        return rows.map(this.mapToContribution);
     }
 
     /**
@@ -389,18 +324,7 @@ export class GoalsService {
      * Get goals summary
      */
     async getSummary(userId: string): Promise<GoalsSummary> {
-        const query = `
-      SELECT 
-        goal_type,
-        status,
-        COUNT(*) as count,
-        SUM(target_amount) as target_total,
-        SUM(current_amount) as current_total
-      FROM goals
-      WHERE user_id = $1
-      GROUP BY goal_type, status
-    `;
-        const result = await pool.query(query, [userId]);
+        const summaryRows = await GoalsRepository.getSummary(userId);
 
         const byType: Record<string, { count: number; targetAmount: number; currentAmount: number }> = {};
         let totalGoals = 0;
@@ -409,17 +333,17 @@ export class GoalsService {
         let totalTargetAmount = 0;
         let totalCurrentAmount = 0;
 
-        for (const row of result.rows) {
+        for (const row of summaryRows) {
             const count = parseInt(row.count);
-            const targetTotal = parseFloat(row.target_total) || 0;
-            const currentTotal = parseFloat(row.current_total) || 0;
+            const targetTotal = parseFloat(row.target_amount) || 0;
+            const currentTotal = parseFloat(row.current_amount) || 0;
 
-            if (!byType[row.goal_type]) {
-                byType[row.goal_type] = { count: 0, targetAmount: 0, currentAmount: 0 };
+            if (!byType[row.status]) {
+                byType[row.status] = { count: 0, targetAmount: 0, currentAmount: 0 };
             }
-            byType[row.goal_type].count += count;
-            byType[row.goal_type].targetAmount += targetTotal;
-            byType[row.goal_type].currentAmount += currentTotal;
+            byType[row.status].count += count;
+            byType[row.status].targetAmount += targetTotal;
+            byType[row.status].currentAmount += currentTotal;
 
             totalGoals += count;
             totalTargetAmount += targetTotal;
@@ -434,21 +358,12 @@ export class GoalsService {
             : 0;
 
         // Get upcoming milestones (goals close to completion)
-        const milestonesQuery = `
-      SELECT id, goal_name, progress_percent, target_date
-      FROM goals
-      WHERE user_id = $1 
-        AND status = 'active'
-        AND progress_percent >= 50
-      ORDER BY progress_percent DESC
-      LIMIT 5
-    `;
-        const milestonesResult = await pool.query(milestonesQuery, [userId]);
-        const upcomingMilestones = milestonesResult.rows.map(row => ({
+        const milestones = await GoalsRepository.getUpcomingMilestones(userId, 5);
+        const upcomingMilestones = milestones.map(row => ({
             goalId: row.id,
             goalName: row.goal_name,
-            progressPercent: parseFloat(row.progress_percent) || 0,
-            targetDate: row.target_date,
+            progressPercent: parseFloat(String(row.progress_percent)) || 0,
+            targetDate: row.target_date ?? undefined,
         }));
 
         return {
@@ -463,46 +378,46 @@ export class GoalsService {
         };
     }
 
-    private mapToGoal(row: Record<string, unknown>): Goal {
+    private mapToGoal(row: GoalRow): Goal {
         return {
-            id: row.id as string,
-            userId: row.user_id as string,
-            linkedAccountId: row.linked_account_id as string | undefined,
-            goalName: row.goal_name as string,
-            goalType: row.goal_type as string,
-            description: row.description as string | undefined,
-            icon: row.icon as string | undefined,
-            color: row.color as string | undefined,
-            targetAmount: parseFloat(row.target_amount as string) || 0,
-            currentAmount: parseFloat(row.current_amount as string) || 0,
-            currency: (row.currency as string) || 'INR',
-            targetDate: row.target_date as string | undefined,
-            startDate: row.start_date as string,
-            contributionFrequency: row.contribution_frequency as string | undefined,
+            id: row.id,
+            userId: row.user_id,
+            linkedAccountId: row.linked_account_id ?? undefined,
+            goalName: row.goal_name,
+            goalType: row.goal_type,
+            description: row.description ?? undefined,
+            icon: row.icon ?? undefined,
+            color: row.color ?? undefined,
+            targetAmount: parseFloat(String(row.target_amount)) || 0,
+            currentAmount: parseFloat(String(row.current_amount)) || 0,
+            currency: row.currency || 'INR',
+            targetDate: row.target_date ?? undefined,
+            startDate: row.start_date,
+            contributionFrequency: row.contribution_frequency ?? undefined,
             contributionAmount: row.contribution_amount
-                ? parseFloat(row.contribution_amount as string)
+                ? parseFloat(String(row.contribution_amount))
                 : undefined,
-            nextContributionDate: row.next_contribution_date as string | undefined,
-            progressPercent: parseFloat(row.progress_percent as string) || 0,
-            status: row.status as string,
-            completedAt: row.completed_at as Date | undefined,
-            metadata: row.metadata as Record<string, unknown> | undefined,
-            createdAt: row.created_at as Date,
-            updatedAt: row.updated_at as Date,
+            nextContributionDate: row.next_contribution_date ?? undefined,
+            progressPercent: parseFloat(String(row.progress_percent)) || 0,
+            status: row.status,
+            completedAt: row.completed_at ?? undefined,
+            metadata: row.metadata ?? undefined,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
         };
     }
 
-    private mapToContribution(row: Record<string, unknown>): Contribution {
+    private mapToContribution(row: ContributionRow): Contribution {
         return {
-            id: row.id as string,
-            goalId: row.goal_id as string,
-            amount: parseFloat(row.amount as string) || 0,
-            contributionDate: row.contribution_date as string,
-            contributionType: row.contribution_type as string,
-            sourceAccountId: row.source_account_id as string | undefined,
-            balanceAfter: parseFloat(row.balance_after as string) || 0,
-            notes: row.notes as string | undefined,
-            createdAt: row.created_at as Date,
+            id: row.id,
+            goalId: row.goal_id,
+            amount: parseFloat(String(row.amount)) || 0,
+            contributionDate: row.contribution_date,
+            contributionType: row.contribution_type,
+            sourceAccountId: row.source_account_id ?? undefined,
+            balanceAfter: parseFloat(String(row.balance_after)) || 0,
+            notes: row.notes ?? undefined,
+            createdAt: row.created_at,
         };
     }
 }

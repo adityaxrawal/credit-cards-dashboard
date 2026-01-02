@@ -18,6 +18,7 @@ export interface CreditCard {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  last_four?: string; // Legacy alias for card_number_last4
 }
 
 /**

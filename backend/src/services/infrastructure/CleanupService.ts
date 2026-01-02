@@ -1,6 +1,5 @@
-
 import cron from 'node-cron';
-import pool from '../../lib/db';
+import { LogRepository } from '../../repositories/LogRepository';
 import logger from '../../utils/infrastructure/logger';
 
 /**
@@ -31,44 +30,31 @@ export class CleanupService {
      */
     private static async cleanupOldLogs() {
         const retentionDays = 30;
+        const now = new Date();
+        const retentionDate = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
 
         // 1. Email Processing Logs
-        const emailLogsRes = await pool.query(
-            `DELETE FROM email_processing_log WHERE created_at < NOW() - INTERVAL '${retentionDays} days'`
-        );
-        if ((emailLogsRes.rowCount || 0) > 0) {
-            logger.info(`[CleanupService] Deleted ${emailLogsRes.rowCount} old email_processing_log entries`);
+        const emailLogCount = await LogRepository.deleteOldEmailLogs(retentionDate);
+        if (emailLogCount > 0) {
+            logger.info(`[CleanupService] Deleted ${emailLogCount} old email_processing_log entries`);
         }
 
-        // 2. Gmail Sync Jobs (Only completed/failed, keep active ones just in case)
-        const jobsRes = await pool.query(
-            `DELETE FROM gmail_sync_jobs 
-       WHERE (status = 'COMPLETED' OR status = 'FAILED') 
-       AND created_at < NOW() - INTERVAL '${retentionDays} days'`
-        );
-        if ((jobsRes.rowCount || 0) > 0) {
-            logger.info(`[CleanupService] Deleted ${jobsRes.rowCount} old gmail_sync_jobs entries`);
+        // 2. Gmail Sync Jobs (Only completed/failed)
+        const jobCount = await LogRepository.deleteOldSyncJobs(retentionDate);
+        if (jobCount > 0) {
+            logger.info(`[CleanupService] Deleted ${jobCount} old gmail_sync_jobs entries`);
         }
 
-        // 3. Processing Retry Queue (Only completed/resolved items)
-        // Assuming 'completed' or similar status. If status isn't clear, we might skip or check logic.
-        // Based on schema: status VARCHAR(20) DEFAULT 'pending'
-        const queueRes = await pool.query(
-            `DELETE FROM processing_retry_queue 
-         WHERE status != 'pending' 
-         AND created_at < NOW() - INTERVAL '${retentionDays} days'`
-        );
-        if ((queueRes.rowCount || 0) > 0) {
-            logger.info(`[CleanupService] Deleted ${queueRes.rowCount} old processing_retry_queue entries`);
+        // 3. Processing Retry Queue (Only completed/resolved)
+        const queueCount = await LogRepository.deleteOldRetryItems(retentionDate);
+        if (queueCount > 0) {
+            logger.info(`[CleanupService] Deleted ${queueCount} old processing_retry_queue entries`);
         }
 
         // 4. Pipeline Error Logs
-        const errorsRes = await pool.query(
-            `DELETE FROM pipeline_error_logs 
-         WHERE created_at < NOW() - INTERVAL '${retentionDays} days'`
-        );
-        if ((errorsRes.rowCount || 0) > 0) {
-            logger.info(`[CleanupService] Deleted ${errorsRes.rowCount} old pipeline_error_logs entries`);
+        const errorCount = await LogRepository.deleteOldPipelineErrors(retentionDate);
+        if (errorCount > 0) {
+            logger.info(`[CleanupService] Deleted ${errorCount} old pipeline_error_logs entries`);
         }
     }
 }

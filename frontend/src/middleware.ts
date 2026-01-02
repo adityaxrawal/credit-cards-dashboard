@@ -15,10 +15,13 @@ const PUBLIC_PATHS = [
   "/api",
   "/favicon.ico",
   "/icon.png",
+  "/icon-192.png",
+  "/icon-512.png",
   "/apple-touch-icon.png",
   "/manifest.webmanifest",
   "/robots.txt",
   "/sitemap.xml",
+  "/.well-known",
 ];
 
 /**
@@ -109,17 +112,70 @@ function checkSecurityLevel(
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const fullUrl = request.url;
+  const allCookies = request.cookies.getAll();
+
+  console.log(`\n========== [Middleware] START ==========`);
+  console.log(`[Middleware] Full URL: ${fullUrl}`);
+  console.log(`[Middleware] Pathname: ${pathname}`);
+  console.log(`[Middleware] Search params: ${request.nextUrl.searchParams.toString()}`);
+  console.log(`[Middleware] Cookies present: ${allCookies.map(c => c.name).join(', ') || 'NONE'}`);
 
   // Allow public paths (static assets, API routes, etc.)
   if (isPublicPath(pathname)) {
+    console.log(`[Middleware] ✅ Path is in PUBLIC_PATHS static list, passing through`);
     return NextResponse.next();
   }
 
   // Get required security level for this route
   const requiredLevel = getRequiredSecurityLevel(pathname);
+  console.log(`[Middleware] Required security level for ${pathname}: ${requiredLevel}`);
 
-  // Public routes don't need auth check
+  // Public routes don't need auth check - but redirect authenticated users away from login
   if (requiredLevel === "public") {
+    console.log(`[Middleware] Route is PUBLIC (from security map)`);
+
+    // If user is visiting login page and has a valid access token, redirect to dashboard
+    if (pathname === "/login") {
+      console.log(`[Middleware] On /login page, checking for existing auth...`);
+      const accessToken = request.cookies.get("accessToken")?.value;
+      console.log(`[Middleware] accessToken cookie exists: ${!!accessToken}`);
+
+      if (accessToken) {
+        console.log(`[Middleware] accessToken found: ${accessToken.substring(0, 20)}...`);
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+        console.log(`[Middleware] Verifying token with backend at: ${apiUrl}`);
+
+        const userContext = await verifyToken(accessToken, apiUrl);
+        console.log(`[Middleware] Token verification result: ${userContext ? 'VALID - user: ' + userContext.email : 'INVALID'}`);
+
+        if (userContext) {
+          // User is authenticated, redirect to dashboard (or to 'next' param if valid)
+          const nextUrl = request.nextUrl.searchParams.get("next");
+          console.log(`[Middleware] User authenticated, next param: ${nextUrl}`);
+
+          // Only allow redirect to internal paths, not external URLs, and not to login itself
+          const safeNextUrl = nextUrl && nextUrl.startsWith("/") && nextUrl !== "/login"
+            ? nextUrl
+            : "/dashboard";
+          console.log(`[Middleware] 🔄 REDIRECTING authenticated user from /login to: ${safeNextUrl}`);
+          console.log(`========== [Middleware] END ==========\n`);
+          return NextResponse.redirect(new URL(safeNextUrl, request.url));
+        }
+
+        // Token is invalid - delete the invalid cookies and continue to login page
+        console.log(`[Middleware] ⚠️ Token INVALID, deleting cookies and showing login`);
+        const response = NextResponse.next();
+        response.cookies.delete("accessToken");
+        response.cookies.delete("refreshToken");
+        console.log(`[Middleware] Deleted accessToken and refreshToken cookies`);
+        console.log(`========== [Middleware] END ==========\n`);
+        return response;
+      }
+      console.log(`[Middleware] No accessToken cookie, showing login page`);
+    }
+    console.log(`[Middleware] ✅ Passing through to public route`);
+    console.log(`========== [Middleware] END ==========\n`);
     return NextResponse.next();
   }
 
@@ -133,10 +189,12 @@ export async function middleware(request: NextRequest) {
 
   // No access token - try to refresh using refresh token
   if (!accessToken) {
+    console.log(`[Middleware] ❌ No accessToken cookie found`);
     const refreshToken = request.cookies.get("refreshToken")?.value;
+    console.log(`[Middleware] refreshToken cookie exists: ${!!refreshToken}`);
 
     if (refreshToken) {
-      console.log("[Middleware] Access token missing, attempting refresh with refresh token");
+      console.log(`[Middleware] Attempting token refresh with refreshToken: ${refreshToken.substring(0, 20)}...`);
       try {
         // Call backend to refresh token
         const controller = new AbortController();
@@ -205,30 +263,37 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    console.log("❌ Middleware: No valid tokens found. Redirecting to login.");
+    console.log(`[Middleware] ❌ No valid tokens found. Redirecting to login.`);
     const loginUrl = new URL("/login", request.url);
     if (pathname !== "/login") {
       loginUrl.searchParams.set("next", pathname);
+      console.log(`[Middleware] Setting next param to: ${pathname}`);
     }
+    console.log(`[Middleware] 🔄 REDIRECTING to: ${loginUrl.toString()}`);
     const response = NextResponse.redirect(loginUrl);
     // Clear potentially invalid refresh token to prevent infinite loop
     if (refreshToken) {
-      console.log("Cleaning up invalid refresh token");
+      console.log(`[Middleware] Deleting invalid refreshToken cookie`);
       response.cookies.delete("refreshToken");
     }
+    console.log(`========== [Middleware] END ==========\n`);
     return response;
   }
 
   // Verify token and get user context
+  console.log(`[Middleware] Verifying accessToken with backend...`);
   const userContext = await verifyToken(accessToken, apiUrl);
+  console.log(`[Middleware] Token verification result: ${userContext ? 'VALID - user: ' + userContext.email : 'INVALID'}`);
 
   // Invalid token - try to refresh if we have a refresh token
   if (!userContext) {
-    console.log("❌ Middleware: Token verification failed for path:", pathname);
+    console.log(`[Middleware] ❌ Token verification FAILED for path: ${pathname}`);
 
     const refreshToken = request.cookies.get("refreshToken")?.value;
+    console.log(`[Middleware] refreshToken exists for retry: ${!!refreshToken}`);
+
     if (refreshToken) {
-      console.log("[Middleware] Access token invalid/expired, attempting refresh with refresh token");
+      console.log(`[Middleware] Attempting token refresh after verification failure...`);
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -239,10 +304,12 @@ export async function middleware(request: NextRequest) {
           signal: controller.signal,
         }).finally(() => clearTimeout(timeoutId));
 
+        console.log(`[Middleware] Refresh response status: ${refreshResponse.status}`);
+
         if (refreshResponse.ok) {
           const data = await refreshResponse.json();
           const newAccessToken = data.accessToken;
-          console.log("[Middleware] Token refresh successful after verification failure");
+          console.log(`[Middleware] ✅ Token refresh SUCCESSFUL, got new accessToken`);
 
           const response = NextResponse.next();
 
@@ -261,33 +328,51 @@ export async function middleware(request: NextRequest) {
 
           // Re-verify with new token
           const retryUserContext = await verifyToken(newAccessToken, apiUrl);
+          console.log(`[Middleware] Re-verification result: ${retryUserContext ? 'VALID' : 'INVALID'}`);
+
           if (retryUserContext) {
             // Check security level with new context
             const hasAccess = checkSecurityLevel(retryUserContext, requiredLevel);
+            console.log(`[Middleware] Security check - required: ${requiredLevel}, hasAccess: ${hasAccess}`);
             if (!hasAccess) {
               // Security check fail logic
               if (requiredLevel === "gmailConnected" && !retryUserContext.gmailConnected) {
+                console.log(`[Middleware] 🔄 REDIRECTING to Gmail connect`);
+                console.log(`========== [Middleware] END ==========\n`);
                 return NextResponse.redirect(new URL(getGmailConnectPath(pathname), request.url));
               } else if (requiredLevel === "admin" && !retryUserContext.isAdmin) {
+                console.log(`[Middleware] 🔄 REDIRECTING to dashboard (not admin)`);
+                console.log(`========== [Middleware] END ==========\n`);
                 return NextResponse.redirect(new URL("/dashboard", request.url));
               } else {
+                console.log(`[Middleware] 🔄 REDIRECTING to: ${getSecurityRedirectPath(requiredLevel, pathname)}`);
+                console.log(`========== [Middleware] END ==========\n`);
                 return NextResponse.redirect(new URL(getSecurityRedirectPath(requiredLevel, pathname), request.url));
               }
             }
+            console.log(`[Middleware] ✅ Access GRANTED after refresh`);
+            console.log(`========== [Middleware] END ==========\n`);
             return response;
           }
         } else {
-          console.error("[Middleware] Refresh failed during retry:", refreshResponse.status);
+          console.error(`[Middleware] ❌ Refresh FAILED with status: ${refreshResponse.status}`);
+          try {
+            const errorBody = await refreshResponse.text();
+            console.error(`[Middleware] Refresh error body: ${errorBody}`);
+          } catch { }
         }
       } catch (err) {
-        console.error("[Middleware] Error during refresh retry:", err);
+        console.error(`[Middleware] ❌ Error during refresh retry:`, err);
       }
     }
 
     // If refresh failed or no refresh token, redirect to login
+    console.log(`[Middleware] 🔄 REDIRECTING to /login after failed verification/refresh`);
     const response = NextResponse.redirect(new URL("/login", request.url));
     response.cookies.delete("accessToken");
     response.cookies.delete("refreshToken");
+    console.log(`[Middleware] Deleted both accessToken and refreshToken cookies`);
+    console.log(`========== [Middleware] END ==========\n`);
     return response;
   }
 

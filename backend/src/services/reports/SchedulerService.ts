@@ -8,7 +8,7 @@ import cron from 'node-cron';
 import logger from '../../utils/infrastructure/logger';
 import { ReportService } from './ReportService';
 import { BudgetRulesService } from '../bills/BudgetRulesService';
-import pool from '../../lib/db';
+import { UserRepository } from '../../repositories/user.repository';
 import dayjs from 'dayjs';
 // import { EmailService } from '../notifications/EmailService'; // Assuming exists or need to import
 
@@ -56,13 +56,13 @@ export class SchedulerService {
         logger.info('[Scheduler] Starting monthly report generation...');
         try {
             // Get all users
-            const users = await pool.query('SELECT id, email FROM users');
+            const users = await UserRepository.findAll();
 
             const lastMonth = dayjs().subtract(1, 'month');
             const month = lastMonth.month() + 1; // 1-12
             const year = lastMonth.year();
 
-            for (const user of users.rows) {
+            for (const user of users) {
                 try {
                     logger.info(`[Scheduler] Generating report for user ${user.id}`);
                     const report = await ReportService.generateMonthlySummaryPDF(user.id, month, year);
@@ -85,14 +85,14 @@ export class SchedulerService {
     private async executeRollover() {
         logger.info('[Scheduler] Starting budget rollover...');
         try {
-            const users = await pool.query('SELECT id FROM users');
+            const users = await UserRepository.findAll();
             const lastMonth = dayjs().subtract(1, 'month');
             const month = lastMonth.month() + 1;
             const year = lastMonth.year();
             const currentMonth = dayjs().month() + 1;
             const currentYear = dayjs().year();
 
-            for (const user of users.rows) {
+            for (const user of users) {
                 if (await BudgetRulesService.isRolloverEnabled(user.id)) {
                     await BudgetRulesService.executeRollover(user.id, month, year, currentMonth, currentYear);
                 }

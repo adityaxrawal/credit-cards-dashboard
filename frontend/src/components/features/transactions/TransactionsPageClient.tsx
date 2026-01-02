@@ -26,6 +26,7 @@ import {
   type TransactionFormData,
   type TransactionFilters,
   type Transaction,
+  type TransactionType,
 } from "@/lib/api/transactions";
 import { cardApi } from "@/lib/api/cards";
 import { useToast } from "@/components/ui/feedback/Toast";
@@ -47,7 +48,7 @@ interface TransactionModalData {
   merchant: string;
   category: string;
   amount: number;
-  transactionType: "debit" | "credit" | "refund" | "bill_payment";
+  transactionType: TransactionType;
   description: string;
 }
 
@@ -214,11 +215,7 @@ export default function TransactionsPage() {
       merchant: formData.get("merchant") as string,
       category: formData.get("category") as string,
       amount: parseFloat(formData.get("amount") as string),
-      transactionType: formData.get("transactionType") as
-        | "debit"
-        | "credit"
-        | "refund"
-        | "bill_payment",
+      transactionType: formData.get("transactionType") as TransactionType,
       description: formData.get("description") as string,
     };
 
@@ -265,8 +262,8 @@ export default function TransactionsPage() {
   const handleEdit = (transaction: Transaction) => {
     setEditingTransaction({
       id: transaction.id,
-      cardId: transaction.card_id,
-      transactionDate: transaction.transaction_date.split("T")[0],
+      cardId: transaction.card_id || "",
+      transactionDate: (transaction.transaction_date || "").split("T")[0],
       merchant: transaction.merchant,
       category: transaction.category,
       amount: Math.abs(transaction.amount),
@@ -352,7 +349,7 @@ export default function TransactionsPage() {
   };
 
   const uniqueCategories = useMemo(() => {
-    const cats = new Set(transactions.map(t => t.category).filter(Boolean));
+    const cats = new Set(transactions.map((t) => t.category).filter((c): c is string => !!c));
     return Array.from(cats).sort();
   }, [transactions]);
 
@@ -422,7 +419,7 @@ export default function TransactionsPage() {
           onChange={(e) => handleSelectAll(e.target.checked)}
           className="translate-y-[2px]"
         />
-      ),
+      ) as any,
       render: (_: unknown, row: unknown) => (
         <Checkbox
           checked={selectedTransactionIds.has((row as Transaction).id)}
@@ -512,12 +509,12 @@ export default function TransactionsPage() {
                 </div>
             )}
 
-            {tx.detection_method === 'regex' && (
+            {tx.classification_method === 'regex' && (
                 <div title="Extracted by Pattern" className="text-secondary-text">
                    <Zap className="w-4 h-4" />
                 </div>
             )}
-            {tx.gmail_message_id && (
+            {tx.email_message_id && (
                 <div title="From Email" className="text-blue-400">
                     <span className="sr-only">Email</span>
                    {/* We can put an icon here if needed, but mail is in actions */}
@@ -577,8 +574,8 @@ export default function TransactionsPage() {
                 }}
                 onEdit={() => handleEdit(row as unknown as Transaction)}
                 onDelete={() => handleDelete((row as unknown as Transaction).id)}
-                onViewGmail={(row as Transaction).gmail_message_id ? () => {
-                    window.open(GmailUtils.getMailLink((row as Transaction).gmail_message_id!), "_blank");
+                onViewGmail={(row as Transaction).email_message_id ? () => {
+                    window.open(GmailUtils.getMailLink((row as Transaction).email_message_id!), "_blank");
                 } : undefined}
             />
         </div>
@@ -630,7 +627,7 @@ export default function TransactionsPage() {
                             `"${t.merchant.replace(/"/g, '""')}"`, // Escape quotes
                             t.transaction_type === 'debit' ? -Math.abs(t.amount) : Math.abs(t.amount),
                             t.transaction_type,
-                            `"${t.category.replace(/"/g, '""')}"`,
+                            `"${(t.category || "").replace(/"/g, '""')}"`,
                             `"${(t.card?.card_name || 'Unknown').replace(/"/g, '""')}"`,
                             `"${(t.description || '').replace(/"/g, '""')}"`
                         ]);
@@ -886,7 +883,7 @@ export default function TransactionsPage() {
         onClose={() => setShowBulkCategoryModal(false)}
         onConfirm={handleBulkCategorize}
         selectedCount={selectedTransactionIds.size}
-        categories={uniqueCategories}
+        categories={uniqueCategories as string[]}
         isLoading={isBulkProcessing}
       />
 

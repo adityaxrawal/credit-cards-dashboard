@@ -3,7 +3,7 @@
  * Identifies and tracks recurring subscriptions from transaction patterns
  */
 
-import pool from '../../lib/db';
+import { SubscriptionRepository } from '../../repositories/SubscriptionRepository';
 import logger from '../../utils/infrastructure/logger';
 
 // Known subscription merchants with typical amounts and frequencies
@@ -68,29 +68,21 @@ export class SubscriptionDetectionService {
      */
     static async detectSubscriptions(userId: string): Promise<DetectedSubscription[]> {
         // Get recurring transactions from the last 12 months
-        const result = await pool.query(
-            `SELECT merchant, 
-                    COUNT(*) as tx_count,
-                    AVG(amount) as avg_amount,
-                    STDDEV(amount) as stddev_amount,
-                    MAX(transaction_date) as last_date,
-                    MIN(transaction_date) as first_date,
-                    ARRAY_AGG(amount ORDER BY transaction_date) as amounts,
-                    ARRAY_AGG(transaction_date ORDER BY transaction_date) as dates
-             FROM transactions
-             WHERE user_id = $1
-               AND direction = 'debit'
-               AND transaction_date > NOW() - INTERVAL '12 months'
-             GROUP BY merchant
-             HAVING COUNT(*) >= 2
-             ORDER BY COUNT(*) DESC`,
-            [userId]
-        );
+        const rows = await SubscriptionRepository.getRecurringMerchantStats(userId);
 
         const subscriptions: DetectedSubscription[] = [];
 
-        for (const row of result.rows) {
-            const subscription = this.analyzeForSubscription(userId, row);
+        for (const row of rows) {
+            const subscription = this.analyzeForSubscription(userId, {
+                merchant: row.merchant,
+                tx_count: row.tx_count,
+                avg_amount: row.avg_amount,
+                stddev_amount: row.stddev_amount,
+                last_date: row.last_date,
+                first_date: row.first_date,
+                amounts: row.amounts,
+                dates: row.dates
+            });
             if (subscription) {
                 subscriptions.push(subscription);
             }
@@ -270,28 +262,7 @@ export class SubscriptionDetectionService {
      */
     private static async persistSubscription(sub: DetectedSubscription) {
         try {
-            await pool.query(
-                `INSERT INTO recurring_patterns (
-                    user_id, merchant, merchant_normalized, typical_amount, amount_variance,
-                    frequency_type, last_occurrence, next_expected, category,
-                    status, confidence_score, is_subscription, is_auto_detected,
-                    updated_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active', $10, true, true, NOW())
-                ON CONFLICT (user_id, merchant_normalized, frequency_type)
-                DO UPDATE SET
-                    typical_amount = $4,
-                    amount_variance = $5,
-                    last_occurrence = $7,
-                    next_expected = $8,
-                    confidence_score = $10,
-                    updated_at = NOW()
-                WHERE recurring_patterns.user_confirmed = false`,
-                [
-                    sub.userId, sub.merchantName, sub.normalizedName, sub.typicalAmount, sub.amountVariance,
-                    sub.frequency, sub.lastChargeDate, sub.nextExpectedDate, sub.category,
-                    sub.confidence
-                ]
-            );
+            await SubscriptionRepository.upsert(sub);
         } catch (error) {
             logger.error(`[Subscription] Failed to persist subscription ${sub.merchantName}:`, error);
         }
@@ -301,41 +272,20 @@ export class SubscriptionDetectionService {
      * Confirm a subscription
      */
     static async confirmSubscription(userId: string, subscriptionId: string): Promise<boolean> {
-        // subscriptionId is likely a pattern ID, passing the ID directly would be better, 
-        // but detected subscriptions don't have DB IDs in their interface yet unless persisted.
-        // Assuming subscriptionId is the UUID from `recurring_patterns` table.
-        const result = await pool.query(
-            `UPDATE recurring_patterns 
-             SET user_confirmed = true, updated_at = NOW() 
-             WHERE id = $1 AND user_id = $2`,
-            [subscriptionId, userId]
-        );
-        return (result.rowCount ?? 0) > 0;
+        return SubscriptionRepository.confirm(subscriptionId, userId);
     }
 
     /**
      * Ignore/Dismiss a subscription
      */
     static async ignoreSubscription(userId: string, subscriptionId: string): Promise<boolean> {
-        const result = await pool.query(
-            `UPDATE recurring_patterns 
-             SET status = 'ignored', updated_at = NOW() 
-             WHERE id = $1 AND user_id = $2`,
-            [subscriptionId, userId]
-        );
-        return (result.rowCount ?? 0) > 0;
+        return SubscriptionRepository.ignore(subscriptionId, userId);
     }
 
     /**
      * Get active subscriptions from DB
      */
     static async getActiveSubscriptions(userId: string) {
-        const result = await pool.query(
-            `SELECT * FROM recurring_patterns 
-             WHERE user_id = $1 AND is_subscription = true AND status = 'active'
-             ORDER BY next_expected ASC`,
-            [userId]
-        );
-        return result.rows;
+        return SubscriptionRepository.getActive(userId);
     }
 }

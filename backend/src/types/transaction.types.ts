@@ -228,6 +228,7 @@ export interface Transaction {
     updated_at: Date;
     exact_timestamp?: Date;
     email_subject?: string;
+    email_sender?: string;
     gmail_thread_id?: string;
     gmail_account_index?: number;
     currency_code?: string;
@@ -349,6 +350,9 @@ export interface TransactionFilters {
     rrn?: string;
     utr?: string;
     linkedTransactionId?: string;
+    page?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
 }
 
 export interface UnclassifiedRecord {
@@ -371,27 +375,27 @@ export interface Category {
     id: string;
     name: string;
     slug: string;
-    parentId?: string;
+    parent_id?: string;
     icon?: string;
     color?: string;
     description?: string;
-    isSystem: boolean;
-    isPersonal: boolean;
-    isTaxDeductible: boolean;
-    sortOrder: number;
-    createdAt: Date;
-    updatedAt: Date;
+    is_system: boolean;
+    is_personal: boolean;
+    is_tax_deductible: boolean;
+    sort_order: number;
+    created_at: Date;
+    updated_at: Date;
     children?: Category[];
 }
 
 export interface MerchantCategoryMapping {
     id: string;
-    merchantPattern: string;
-    categoryId: string;
+    merchant_pattern: string;
+    category_id: string;
     priority: number;
-    isRegex: boolean;
-    createdBy?: string;
-    createdAt: Date;
+    is_regex: boolean;
+    created_by?: string;
+    created_at: Date;
 }
 
 // Types that should be excluded from transaction ingestion

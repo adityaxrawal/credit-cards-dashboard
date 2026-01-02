@@ -1,4 +1,4 @@
-import pool, { safeQuery } from '../../../lib/db';
+import { ManualReviewRepository } from '../../../repositories/ManualReviewRepository';
 import logger from '../../../utils/infrastructure/logger';
 
 interface EmailContext {
@@ -26,32 +26,20 @@ export class ManualReviewService {
         }
     ): Promise<void> {
         try {
-            await safeQuery(
-                `INSERT INTO manual_review_queue (
-          email_id, user_id, email_subject, email_snippet, email_sender,
-          suggested_type, suggested_merchant, suggested_amount, 
-          suggested_classification, review_reason, retry_count,
-          scan_job_id, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
-        ON CONFLICT (email_id, user_id) DO UPDATE SET
-          retry_count = manual_review_queue.retry_count + 1,
-          review_reason = EXCLUDED.review_reason,
-          updated_at = NOW()`,
-                [
-                    context.emailId,
-                    context.userId,
-                    context.subject,
-                    context.snippet?.substring(0, 1000),
-                    context.sender,
-                    suggestedClassification?.type,
-                    suggestedClassification?.merchant,
-                    suggestedClassification?.amount,
-                    suggestedClassification?.classification ? JSON.stringify(suggestedClassification.classification) : null,
-                    reason,
-                    context.retryCount,
-                    context.jobId
-                ]
-            );
+            await ManualReviewRepository.addToQueue({
+                userId: context.userId,
+                emailId: context.emailId,
+                subject: context.subject,
+                snippet: context.snippet?.substring(0, 1000),
+                sender: context.sender,
+                suggestedType: suggestedClassification?.type,
+                suggestedMerchant: suggestedClassification?.merchant,
+                suggestedAmount: suggestedClassification?.amount,
+                suggestedClassification: suggestedClassification?.classification,
+                reviewReason: reason,
+                retryCount: context.retryCount,
+                scanJobId: context.jobId
+            });
             logger.info(`[ManualReviewService] Marked ${context.emailId} for manual review: ${reason}`);
         } catch (err) {
             logger.error('[ManualReviewService] Failed to mark for manual review', err);
@@ -66,24 +54,10 @@ export class ManualReviewService {
         limit: number = 50,
         offset: number = 0
     ): Promise<{ items: any[]; total: number }> {
-        const countResult = await safeQuery(
-            `SELECT COUNT(*) as total FROM manual_review_queue 
-       WHERE user_id = $1 AND status = 'pending'`,
-            [userId]
-        );
+        const total = await ManualReviewRepository.getQueueCount(userId);
+        const items = await ManualReviewRepository.getQueue(userId, limit, offset);
 
-        const itemsResult = await safeQuery(
-            `SELECT * FROM manual_review_queue 
-       WHERE user_id = $1 AND status = 'pending'
-       ORDER BY created_at DESC
-       LIMIT $2 OFFSET $3`,
-            [userId, limit, offset]
-        );
-
-        return {
-            items: itemsResult.rows,
-            total: parseInt(countResult.rows[0].total, 10)
-        };
+        return { items, total };
     }
 
     /**
@@ -95,17 +69,14 @@ export class ManualReviewService {
         finalClassification: any,
         notes?: string
     ): Promise<void> {
-        await safeQuery(
-            `UPDATE manual_review_queue SET
-        status = 'approved',
-        final_classification = $1,
-        review_notes = $2,
-        reviewed_by_user_id = $3,
-        reviewed_at = NOW(),
-        updated_at = NOW()
-       WHERE id = $4 AND user_id = $3`,
-            [JSON.stringify(finalClassification), notes, userId, reviewId]
-        );
+        // Note: Transaction creation is handled by the main ManualReviewService or client
+        // This method strictly updates the status
+        await ManualReviewRepository.updateStatus(userId, reviewId, {
+            status: 'approved',
+            finalClassification,
+            reviewNotes: notes,
+            reviewedByUserId: userId
+        });
     }
 
     /**
@@ -116,15 +87,10 @@ export class ManualReviewService {
         userId: string,
         notes?: string
     ): Promise<void> {
-        await safeQuery(
-            `UPDATE manual_review_queue SET
-        status = 'rejected',
-        review_notes = $1,
-        reviewed_by_user_id = $2,
-        reviewed_at = NOW(),
-        updated_at = NOW()
-       WHERE id = $3 AND user_id = $2`,
-            [notes, userId, reviewId]
-        );
+        await ManualReviewRepository.updateStatus(userId, reviewId, {
+            status: 'rejected',
+            reviewNotes: notes,
+            reviewedByUserId: userId
+        });
     }
 }

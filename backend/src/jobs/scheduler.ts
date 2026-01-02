@@ -5,6 +5,7 @@ import { runRecurringPatternDetectorJob, markMissedRecurringJob } from './recurr
 import { runAnalyticsCacheRefreshJob } from './analyticsCacheRefreshJob';
 import { runBillReminderJob } from './billReminderJob';
 import { runSpendingAlertJob } from './spendingAlertJob';
+import { processNotificationQueue } from './NotificationQueueProcessor';
 
 /**
  * Job Scheduler
@@ -23,6 +24,7 @@ export type JobName =
     | 'analytics_cache_refresh'
     | 'bill_reminder'
     | 'spending_alert'
+    | 'notification_queue_processor'
     | 'all_daily'
     | 'all_hourly';
 
@@ -100,6 +102,12 @@ const jobs: Record<JobName, JobConfig | (() => Promise<void>)> = {
         schedule: 'daily',
         enabled: true,
     },
+    notification_queue_processor: {
+        name: 'Notification Queue Processor',
+        fn: processNotificationQueue,
+        schedule: 'hourly',
+        enabled: true,
+    },
     all_daily: async () => {
         await runDailyJobs();
     },
@@ -173,6 +181,7 @@ export async function runHourlyJobs(): Promise<void> {
 
     const hourlyJobs: JobName[] = [
         'analytics_cache_refresh',
+        'notification_queue_processor',
     ];
 
     for (const jobName of hourlyJobs) {

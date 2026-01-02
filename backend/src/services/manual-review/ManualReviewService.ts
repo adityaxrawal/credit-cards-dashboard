@@ -1,6 +1,6 @@
 import { UnclassifiedRepository } from './UnclassifiedRepository';
 import { UnclassifiedRecord } from '../../types/transaction.types';
-import pool from '../../lib/db';
+import { ManualReviewRepository } from '../../repositories/ManualReviewRepository';
 import logger from '../../utils/infrastructure/logger';
 import * as transactionsService from '../transactions/TransactionService';
 
@@ -52,31 +52,11 @@ export class ManualReviewService {
         items: ReviewQueueItem[];
         total: number;
     }> {
-        const countResult = await pool.query(
-            `SELECT COUNT(*) FROM manual_review_queue WHERE user_id = $1 AND status = 'pending'`,
-            [userId]
-        );
-        const total = parseInt(countResult.rows[0]?.count || '0');
-
-        const result = await pool.query(
-            `SELECT 
-                id, email_id as "emailId", user_id as "userId",
-                email_subject as "emailSubject", email_snippet as "emailSnippet",
-                email_sender as "emailSender", suggested_type as "suggestedType",
-                suggested_merchant as "suggestedMerchant", 
-                suggested_amount as "suggestedAmount",
-                suggested_classification as "suggestedClassification",
-                review_reason as "reviewReason", retry_count as "retryCount",
-                status, created_at as "createdAt"
-             FROM manual_review_queue 
-             WHERE user_id = $1 AND status = 'pending'
-             ORDER BY created_at DESC
-             LIMIT $2 OFFSET $3`,
-            [userId, limit, offset]
-        );
+        const total = await ManualReviewRepository.getQueueCount(userId);
+        const items = await ManualReviewRepository.getQueue(userId, limit, offset);
 
         return {
-            items: result.rows,
+            items: items as ReviewQueueItem[],
             total,
         };
     }
@@ -90,16 +70,11 @@ export class ManualReviewService {
         data: ApproveData
     ): Promise<{ success: boolean; transactionId?: string; error?: string }> {
         // Get the review item
-        const itemResult = await pool.query(
-            `SELECT * FROM manual_review_queue WHERE id = $1 AND user_id = $2`,
-            [itemId, userId]
-        );
+        const item = await ManualReviewRepository.getById(itemId, userId);
 
-        if (itemResult.rows.length === 0) {
+        if (!item) {
             return { success: false, error: 'Review item not found' };
         }
-
-        const item = itemResult.rows[0];
 
         try {
             // Create a transaction from the approved data
@@ -120,16 +95,12 @@ export class ManualReviewService {
             }
 
             // Update the review queue item
-            await pool.query(
-                `UPDATE manual_review_queue 
-                 SET status = 'approved', 
-                     reviewed_at = NOW(),
-                     final_classification = $3,
-                     created_transaction_id = $4,
-                     updated_at = NOW()
-                 WHERE id = $1 AND user_id = $2`,
-                [itemId, userId, JSON.stringify(data), transaction.id]
-            );
+            await ManualReviewRepository.updateStatus(userId, itemId, {
+                status: 'approved',
+                finalClassification: data,
+                reviewedByUserId: userId,
+                createdTransactionId: transaction.id
+            });
 
             logger.info('review_item_approved', { itemId, userId, transactionId: transaction.id });
 
@@ -148,18 +119,9 @@ export class ManualReviewService {
         itemId: string,
         reason: string
     ): Promise<{ success: boolean; error?: string }> {
-        const result = await pool.query(
-            `UPDATE manual_review_queue 
-             SET status = 'rejected', 
-                 reviewed_at = NOW(),
-                 review_notes = $3,
-                 updated_at = NOW()
-             WHERE id = $1 AND user_id = $2
-             RETURNING id`,
-            [itemId, userId, reason]
-        );
+        const success = await ManualReviewRepository.rejectItem(itemId, userId, reason);
 
-        if (result.rowCount === 0) {
+        if (!success) {
             return { success: false, error: 'Review item not found' };
         }
 
@@ -174,16 +136,9 @@ export class ManualReviewService {
         userId: string,
         itemId: string
     ): Promise<{ success: boolean; error?: string }> {
-        const result = await pool.query(
-            `UPDATE manual_review_queue 
-             SET status = 'skipped',
-                 updated_at = NOW()
-             WHERE id = $1 AND user_id = $2
-             RETURNING id`,
-            [itemId, userId]
-        );
+        const success = await ManualReviewRepository.skipItem(itemId, userId);
 
-        if (result.rowCount === 0) {
+        if (!success) {
             return { success: false, error: 'Review item not found' };
         }
 
@@ -217,23 +172,12 @@ export class ManualReviewService {
      * Get queue statistics
      */
     static async getQueueStats(userId: string): Promise<ReviewStats> {
-        const result = await pool.query(
-            `SELECT 
-                COUNT(*) FILTER (WHERE status = 'pending') as pending,
-                COUNT(*) FILTER (WHERE status = 'approved') as approved,
-                COUNT(*) FILTER (WHERE status = 'rejected') as rejected,
-                COUNT(*) as total
-             FROM manual_review_queue 
-             WHERE user_id = $1`,
-            [userId]
-        );
-
-        const row = result.rows[0] || {};
+        const stats = await ManualReviewRepository.getStats(userId);
         return {
-            pending: parseInt(row.pending || '0'),
-            approved: parseInt(row.approved || '0'),
-            rejected: parseInt(row.rejected || '0'),
-            total: parseInt(row.total || '0'),
+            pending: parseInt(stats.pending || '0'),
+            approved: parseInt(stats.approved || '0'),
+            rejected: parseInt(stats.rejected || '0'),
+            total: parseInt(stats.total || '0'),
         };
     }
 

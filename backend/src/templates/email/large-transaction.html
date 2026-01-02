@@ -1,0 +1,26 @@
+<h2>Large Transaction Alert</h2>
+
+<p>A transaction exceeding your threshold of <strong>{{threshold}}</strong> was detected.</p>
+
+<div style="background-color: #f9fafb; padding: 20px; border-radius: 6px; margin: 24px 0;">
+    <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 8px 0; color: #6b7280;">Amount</td>
+            <td style="padding: 8px 0; font-weight: bold; text-align: right; font-size: 18px;">{{amount}}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #6b7280;">Merchant</td>
+            <td style="padding: 8px 0; font-weight: bold; text-align: right;">{{merchant}}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #6b7280;">Date</td>
+            <td style="padding: 8px 0; font-weight: bold; text-align: right;">{{date}}</td>
+        </tr>
+    </table>
+</div>
+
+<p>If this was you, no action is needed. If you don't recognize this transaction, please check your bank statement immediately.</p>
+
+<div style="text-align: center;">
+    <a href="{{dashboardUrl}}" class="button">View Dashboard</a>
+</div>

@@ -1,0 +1,26 @@
+<h2>Budget Alert</h2>
+
+<p>Your spending for <strong>{{month}}/{{year}}</strong> has reached <strong>{{percentage}}%</strong> of your monthly budget.</p>
+
+<div style="background-color: #f9fafb; padding: 20px; border-radius: 6px; margin: 24px 0;">
+    <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 8px 0; color: #6b7280;">Monthly Budget</td>
+            <td style="padding: 8px 0; font-weight: bold; text-align: right;">{{monthlyBudget}}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #6b7280;">Total Spent</td>
+            <td style="padding: 8px 0; font-weight: bold; text-align: right;">{{spent}}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #6b7280;">Status</td>
+            <td style="padding: 8px 0; font-weight: bold; text-align: right; color: {{statusColor}};">{{status}}</td>
+        </tr>
+    </table>
+</div>
+
+<p>Please review your spending to stay within your budget limits.</p>
+
+<div style="text-align: center;">
+    <a href="{{dashboardUrl}}" class="button">View Budget</a>
+</div>

@@ -1,5 +1,7 @@
-import pool from '../lib/db';
 import * as alertsService from '../services/alerts/AlertsService';
+import { UserRepository } from '../repositories/UserRepository';
+import { LoanRepository } from '../repositories/LoanRepository';
+import { AlertRepository } from '../repositories/AlertRepository';
 import dayjs from 'dayjs';
 
 /**
@@ -11,9 +13,7 @@ export async function runEmiReminderJob() {
 
     try {
         // Get all active users
-        const { rows: users } = await pool.query(
-            'SELECT id, email FROM users WHERE is_active = true'
-        );
+        const users = await UserRepository.getAllActiveUsers();
 
         console.log(`[EmiReminderJob] Processing ${users.length} users`);
 
@@ -25,13 +25,7 @@ export async function runEmiReminderJob() {
         for (const user of users) {
             try {
                 // Get all active loans for the user
-                const { rows: loans } = await pool.query(
-                    `SELECT id, loan_name, lender_name, emi_amount, emi_day, 
-                  current_outstanding, remaining_emis, next_emi_date
-           FROM loans 
-           WHERE user_id = $1 AND status = 'active' AND deleted_at IS NULL`,
-                    [user.id]
-                );
+                const loans = await LoanRepository.findActiveByUserId(user.id);
 
                 for (const loan of loans) {
                     // Calculate next EMI date if not set
@@ -55,15 +49,9 @@ export async function runEmiReminderJob() {
                         const priority = daysUntilEmi === 1 ? 'critical' : daysUntilEmi === 3 ? 'high' : 'medium';
 
                         // Check if reminder already sent today
-                        const { rows: existing } = await pool.query(
-                            `SELECT id FROM alerts 
-               WHERE user_id = $1 AND type = 'emi_reminder' 
-               AND (metadata->>'loanId')::text = $2
-               AND created_at::date = CURRENT_DATE`,
-                            [user.id, loan.id]
-                        );
+                        const existing = await AlertRepository.findExistingEmiAlert(user.id, loan.id);
 
-                        if (existing.length === 0) {
+                        if (!existing) {
                             await alertsService.createAlert(user.id, 'emi_reminder', {
                                 title: `EMI Due: ${loan.loan_name}`,
                                 message: daysUntilEmi === 1
@@ -108,22 +96,11 @@ export async function updateEmiDatesJob() {
         const today = dayjs().format('YYYY-MM-DD');
 
         // Get all loans with passed EMI dates
-        const { rows: loans } = await pool.query(
-            `SELECT id, emi_day, next_emi_date 
-       FROM loans 
-       WHERE status = 'active' 
-       AND deleted_at IS NULL
-       AND next_emi_date < $1`,
-            [today]
-        );
+        const loans = await LoanRepository.findWithPassedEmiDate(today);
 
         for (const loan of loans) {
             const nextEmiDate = dayjs(loan.next_emi_date).add(1, 'month').format('YYYY-MM-DD');
-
-            await pool.query(
-                'UPDATE loans SET next_emi_date = $1 WHERE id = $2',
-                [nextEmiDate, loan.id]
-            );
+            await LoanRepository.updateNextEmiDate(loan.id, nextEmiDate);
         }
 
         console.log(`[UpdateEmiDatesJob] Updated ${loans.length} loan EMI dates`);

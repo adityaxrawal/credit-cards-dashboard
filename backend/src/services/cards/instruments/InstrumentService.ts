@@ -1,7 +1,7 @@
-import pool from '../../../lib/db';
 import { Instrument, InstrumentType } from '../../../types/transaction.types';
 import logger from '../../../utils/infrastructure/logger';
 import { InstrumentRegistry } from './InstrumentRegistry';
+import { InstrumentLegacyRepository, LegacyInstrumentRow } from '../../../repositories/InstrumentLegacyRepository';
 
 // In-memory cache: userId -> { timestamp, instruments[] }
 const instrumentCache = new Map<string, { timestamp: number; instruments: Instrument[] }>();
@@ -22,24 +22,9 @@ export class InstrumentService {
         }
 
         try {
-            // Join with banks to get names (legacy expects bank_name)
-            const result = await pool.query(
-                `SELECT 
-                    ui.id, 
-                    ui.user_id, 
-                    ui.type as instrument_type, 
-                    b.name as bank_name, 
-                    COALESCE(ui.identifier, CONCAT('XXXX', ui.last4)) as account_number_masked,
-                    CASE WHEN ui.status = 'active' THEN true ELSE false END as is_active, 
-                    ui.is_primary,
-                    ui.id as instrument_id
-                 FROM instruments ui
-                 LEFT JOIN banks b ON ui.bank_id = b.id
-                 WHERE ui.user_id = $1 AND ui.status = 'active'`,
-                [userId]
-            );
+            const rows = await InstrumentLegacyRepository.getUserInstruments(userId);
 
-            const instruments = result.rows.map(row => ({
+            const instruments = rows.map((row: LegacyInstrumentRow) => ({
                 id: row.id,
                 user_id: row.user_id,
                 instrument_type: row.instrument_type as InstrumentType,

@@ -1,4 +1,5 @@
-import pool from '../../lib/db';
+import { BackupExportRepository } from '../../repositories/BackupExportRepository';
+import { AuditTrailRepository } from '../../repositories/AuditTrailRepository';
 import crypto from 'crypto';
 import dayjs from 'dayjs';
 
@@ -62,45 +63,21 @@ export class BackupExportService {
 
         // Export accounts/instruments
         if (options.includeAccounts !== false) {
-            const { rows: accounts } = await pool.query(
-                `SELECT * FROM instruments WHERE user_id = $1 AND deleted_at IS NULL`,
-                [userId]
-            );
+            const accounts = await BackupExportRepository.getAccounts(userId);
             exportData.accounts = accounts;
             stats.accounts = accounts.length;
         }
 
         // Export transactions
         if (options.includeTransactions !== false) {
-            let txnQuery = `SELECT * FROM transactions WHERE user_id = $1`;
-            const params: any[] = [userId];
-
-            if (options.dateRange) {
-                txnQuery += ` AND transaction_date BETWEEN $2 AND $3`;
-                params.push(options.dateRange.start, options.dateRange.end);
-            }
-
-            txnQuery += ` ORDER BY transaction_date DESC`;
-
-            const { rows: transactions } = await pool.query(txnQuery, params);
+            const transactions = await BackupExportRepository.getTransactions(userId, options.dateRange);
             exportData.transactions = transactions;
             stats.transactions = transactions.length;
         }
 
         // Export loans
         if (options.includeLoans !== false) {
-            const { rows: loans } = await pool.query(
-                `SELECT * FROM loans WHERE user_id = $1 AND deleted_at IS NULL`,
-                [userId]
-            );
-
-            const { rows: payments } = await pool.query(
-                `SELECT lp.* FROM loan_payments lp
-         JOIN loans l ON lp.loan_id = l.id
-         WHERE l.user_id = $1`,
-                [userId]
-            );
-
+            const { loans, payments } = await BackupExportRepository.getLoans(userId);
             exportData.loans = loans;
             exportData.loanPayments = payments;
             stats.loans = loans.length;
@@ -108,18 +85,7 @@ export class BackupExportService {
 
         // Export goals
         if (options.includeGoals !== false) {
-            const { rows: goals } = await pool.query(
-                `SELECT * FROM goals WHERE user_id = $1 AND deleted_at IS NULL`,
-                [userId]
-            );
-
-            const { rows: contributions } = await pool.query(
-                `SELECT gc.* FROM goal_contributions gc
-         JOIN goals g ON gc.goal_id = g.id
-         WHERE g.user_id = $1`,
-                [userId]
-            );
-
+            const { goals, contributions } = await BackupExportRepository.getGoals(userId);
             exportData.goals = goals;
             exportData.goalContributions = contributions;
             stats.goals = goals.length;
@@ -127,28 +93,19 @@ export class BackupExportService {
 
         // Export bills
         if (options.includeBills !== false) {
-            const { rows: bills } = await pool.query(
-                `SELECT * FROM bills WHERE user_id = $1`,
-                [userId]
-            );
+            const bills = await BackupExportRepository.getBills(userId);
             exportData.bills = bills;
         }
 
         // Export recurring transactions
         if (options.includeRecurring !== false) {
-            const { rows: recurring } = await pool.query(
-                `SELECT * FROM recurring_transactions WHERE user_id = $1`,
-                [userId]
-            );
+            const recurring = await BackupExportRepository.getRecurringPatterns(userId);
             exportData.recurring = recurring;
         }
 
         // Export categories
         if (options.includeCategories !== false) {
-            const { rows: categories } = await pool.query(
-                `SELECT * FROM categories WHERE user_id = $1 OR user_id IS NULL`,
-                [userId]
-            );
+            const categories = await BackupExportRepository.getCategories(userId);
             exportData.categories = categories;
         }
 
@@ -164,20 +121,16 @@ export class BackupExportService {
         }
 
         // Log the export
-        await pool.query(
-            `INSERT INTO transaction_audit_log 
-       (user_id, action, changes, changed_at)
-       VALUES ($1, 'user:export', $2, NOW())`,
-            [
-                userId,
-                JSON.stringify({
-                    encrypted,
-                    stats,
-                    dateRange: options.dateRange,
-                    checksum
-                })
-            ]
-        );
+        await AuditTrailRepository.create({
+            userId,
+            action: 'user:export',
+            changes: {
+                encrypted,
+                stats,
+                dateRange: options.dateRange,
+                checksum
+            }
+        });
 
         return {
             data: jsonData,
@@ -242,64 +195,27 @@ export class BackupExportService {
             };
         }
 
-        const client = await pool.connect();
         try {
-            await client.query('BEGIN');
+            // Import transactions
+            if (exportData.transactions) {
+                imported.transactions = await BackupExportRepository.importTransactions(userId, exportData.transactions);
+            }
 
             // Import accounts
             if (exportData.accounts) {
-                for (const account of exportData.accounts) {
-                    try {
-                        await client.query(
-                            `INSERT INTO instruments (id, user_id, name, type, balance, currency, created_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)
-               ON CONFLICT (id) DO UPDATE SET balance = $5`,
-                            [account.id, userId, account.name, account.type, account.balance, account.currency, account.created_at]
-                        );
-                        imported.accounts++;
-                    } catch (err: any) {
-                        errors.push({ entity: 'account', id: account.id, error: err.message });
-                    }
-                }
+                imported.accounts = await BackupExportRepository.importAccounts(userId, exportData.accounts);
             }
-
-            // Import transactions
-            if (exportData.transactions) {
-                for (const txn of exportData.transactions) {
-                    try {
-                        await client.query(
-                            `INSERT INTO transactions 
-               (id, user_id, instrument_id, amount, direction, description, category, transaction_date, created_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-               ON CONFLICT (id) DO NOTHING`,
-                            [
-                                txn.id, userId, txn.instrument_id, txn.amount, txn.direction,
-                                txn.description, txn.category, txn.transaction_date, txn.created_at
-                            ]
-                        );
-                        imported.transactions++;
-                    } catch (err: any) {
-                        errors.push({ entity: 'transaction', id: txn.id, error: err.message });
-                    }
-                }
-            }
-
-            await client.query('COMMIT');
 
             // Log the import
-            await pool.query(
-                `INSERT INTO transaction_audit_log 
-         (user_id, action, changes, changed_at)
-         VALUES ($1, 'user:import', $2, NOW())`,
-                [userId, JSON.stringify({ imported, errorCount: errors.length })]
-            );
+            await AuditTrailRepository.create({
+                userId,
+                action: 'user:import',
+                changes: { imported, errorCount: errors.length }
+            });
 
             return { success: true, imported, errors };
         } catch (error: any) {
-            await client.query('ROLLBACK');
             return { success: false, imported, errors: [{ error: error.message }] };
-        } finally {
-            client.release();
         }
     }
 
@@ -313,23 +229,8 @@ export class BackupExportService {
 
         const backupId = `backup_${userId}_${dayjs().format('YYYY-MM-DD_HH-mm-ss')}`;
 
-        // In production, this would upload to cloud storage
-        // For now, we just store metadata in DB
-        await pool.query(
-            `INSERT INTO dashboard_snapshots 
-       (user_id, snapshot_date, snapshot_type, data)
-       VALUES ($1, $2, 'backup', $3)`,
-            [
-                userId,
-                dayjs().format('YYYY-MM-DD'),
-                JSON.stringify({
-                    backupId,
-                    stats: exportResult.stats,
-                    checksum: exportResult.checksum,
-                    createdAt: exportResult.createdAt,
-                })
-            ]
-        );
+        // Store backup metadata
+        await BackupExportRepository.createBackupRecord(userId, backupId, `/backups/${backupId}.json`);
 
         return { backupId, path: `/backups/${backupId}.json` };
     }

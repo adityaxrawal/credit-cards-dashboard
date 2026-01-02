@@ -65,7 +65,7 @@ router.get('/slug/:slug', authenticate, asyncHandler(async (req: Request, res: R
  * @access Private
  */
 router.post('/', authenticate, asyncHandler(async (req: Request, res: Response) => {
-    const { name, slug, parentId, icon, color, description, isPersonal, isTaxDeductible } = req.body;
+    const { name, slug, parent_id, icon, color, description, is_personal, is_tax_deductible } = req.body;
 
     if (!name || !slug) {
         throw new AppError('Name and slug are required', 400);
@@ -80,12 +80,12 @@ router.post('/', authenticate, asyncHandler(async (req: Request, res: Response) 
     const category = await CategoryService.createCategory({
         name,
         slug,
-        parentId,
+        parent_id,
         icon,
         color,
         description,
-        isPersonal,
-        isTaxDeductible
+        is_personal,
+        is_tax_deductible
     });
 
     res.status(201).json({
@@ -100,15 +100,15 @@ router.post('/', authenticate, asyncHandler(async (req: Request, res: Response) 
  * @access Private
  */
 router.patch('/:id', authenticate, asyncHandler(async (req: Request, res: Response) => {
-    const { name, icon, color, description, isPersonal, isTaxDeductible } = req.body;
+    const { name, icon, color, description, is_personal, is_tax_deductible } = req.body;
 
     const category = await CategoryService.updateCategory(req.params.id, {
         name,
         icon,
         color,
         description,
-        isPersonal,
-        isTaxDeductible
+        is_personal,
+        is_tax_deductible
     });
 
     if (!category) {
@@ -128,18 +128,18 @@ router.patch('/:id', authenticate, asyncHandler(async (req: Request, res: Respon
  */
 router.post('/mappings', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
-    const { merchantPattern, categoryId, priority, isRegex } = req.body;
+    const { merchant_pattern, category_id, priority, is_regex } = req.body;
 
-    if (!merchantPattern || !categoryId) {
-        throw new AppError('merchantPattern and categoryId are required', 400);
+    if (!merchant_pattern || !category_id) {
+        throw new AppError('merchant_pattern and category_id are required', 400);
     }
 
     const mapping = await CategoryService.createMerchantMapping({
-        merchantPattern,
-        categoryId,
+        merchant_pattern,
+        category_id,
         priority,
-        isRegex,
-        createdBy: userId
+        is_regex,
+        created_by: userId
     });
 
     res.status(201).json({

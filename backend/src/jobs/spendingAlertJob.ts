@@ -1,4 +1,4 @@
-import pool from '../lib/db';
+import { UserRepository } from '../repositories/UserRepository';
 import * as budgetService from '../services/bills/BudgetService';
 import * as alertsService from '../services/alerts/AlertsService';
 import logger from '../utils/infrastructure/logger';
@@ -12,9 +12,7 @@ export async function runSpendingAlertJob() {
 
   try {
     // Get all active users
-    const { rows: users } = await pool.query(
-      'SELECT id, email, monthly_budget FROM users WHERE is_active = true'
-    );
+    const users = await UserRepository.getAllActiveUsers();
 
     logger.info(`[SpendingAlertJob] Processing ${users.length} users`);
 

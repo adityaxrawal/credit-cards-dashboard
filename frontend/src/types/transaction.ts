@@ -52,8 +52,8 @@ export type TransactionType =
   | 'interest_credit'
   | 'cheque_deposit'
   | 'cheque_return'
-  | 'atm_withdrawal'
   | 'atm_inquiry'
+  | 'atm_withdrawal'
   | 'sweep_in'
   | 'sweep_out'
   | 'standing_instruction'
@@ -61,66 +61,92 @@ export type TransactionType =
   | 'cash_deposit'
   | 'wallet_load'
   | 'wallet_unload'
-  | 'unclassified';
+  | 'card_limit_change'
+  | 'pre_authorization'
+  | 'loan_disbursal'
+  | 'loan_repayment'
+  | 'emi_creation'
+  | 'emi_installment'
+  | 'unclassified'
+  // Legacy
+  | 'bill_payment'
+  | 'debit'
+  | 'credit';
 
 // ============================================
 // Transaction Entity
 // ============================================
 
+export interface TransactionMetadata {
+  [key: string]: unknown;
+  original_merchant?: string;
+  payment_mode?: string;
+  bank_ref_num?: string;
+  tax_amount?: number;
+  location?: string;
+  is_recurring?: boolean;
+  installments?: {
+    current: number;
+    total: number;
+  };
+  related_message_ids?: string[];
+}
+
 /**
- * Transaction entity - Extended with all new fields
+ * Transaction entity - Aligned with Backend
  */
 export interface Transaction {
   id: string;
-  amount: number;
-  transaction_date: string;
-  merchant: string;
-  category?: string;
+  user_id: string;
   card_id: string;
-  description?: string;
-  bill_month: number;
-  bill_year: number;
+  transaction_date: string; // ISO String from Date
+  merchant: string;
+  category: string;
+  amount: number;
+  transaction_type: TransactionType;
+  description: string | null;
+  bill_month: number | null;
+  bill_year: number | null;
   is_settled: boolean;
-  created_at: string;
-  updated_at: string;
-  card?: CreditCard;
+  email_message_id: string | null;
+  is_manually_added: boolean;
+  metadata?: TransactionMetadata;
+  created_at: string; // ISO String
+  updated_at: string; // ISO String
 
-  // Extended fields (matching backend)
-  user_id?: string;
-  transaction_type?: TransactionType;
-  direction?: 'debit' | 'credit';
+  // Optional Extended Fields
+  exact_timestamp?: string;
+  email_subject?: string;
+  email_sender?: string;
+  gmail_thread_id?: string;
+  gmail_account_index?: number;
   currency_code?: string;
   original_amount?: number;
   reference_number?: string;
-  counterparty_name?: string;
-  counterparty_identifier?: string;
+  transaction_subtype?: string;
+  direction?: 'debit' | 'credit' | string;
   instrument_type?: string;
   instrument_id?: string;
+  parent_transaction_id?: string | null;
+  classification_method?: string;
   confidence_score?: number;
   needs_review?: boolean;
   review_reason?: string;
-  email_message_id?: string;
-  email_subject?: string;
+  counterparty_name?: string;
+  counterparty_identifier?: string;
 
-  // Reference Numbers
+  // New Architecture Fields (Migration 026)
   rrn?: string;
   utr?: string;
   arn?: string;
   auth_code?: string;
-
-  // Date Differentiation
   posting_date?: string;
   value_date?: string;
-
-  // Status & Lifecycle
   transaction_status?: TransactionStatus;
-
-  // Balance & Currency
   running_balance?: number;
   fx_rate?: number;
   original_currency_code?: string;
 
-  // Fee Components
   fee_components?: {
     gst?: number;
     tax?: number;
@@ -128,7 +154,6 @@ export interface Transaction {
     [key: string]: number | undefined;
   };
 
-  // Instrument Details
   instrument_details?: {
     card_last4?: string;
     account_masked?: string;
@@ -137,11 +162,9 @@ export interface Transaction {
     [key: string]: string | undefined;
   };
 
-  // Channel & Merchant
   channel?: TransactionChannel;
   mcc?: string;
 
-  // Lifecycle Flags
   is_recurring?: boolean;
   is_reversal?: boolean;
   is_provisional?: boolean;
@@ -149,21 +172,23 @@ export interface Transaction {
   dispute_flag?: boolean;
   chargeback_flag?: boolean;
 
-  // Transaction Linking
   linked_transaction_id?: string;
   link_type?: TransactionLinkType;
 
-  // Provenance
   parser_version?: string;
   rule_id?: string;
   pattern_group_id?: string;
   extraction_quality_score?: number;
   review_assignee?: string;
+  source_message_timestamp?: string;
 
   // Category Hierarchy
   category_id?: string;
   category_confidence?: number;
   category_override_by_user?: boolean;
+
+  // Frontend Joined Fields
+  card?: CreditCard;
 }
 
 // ============================================
@@ -174,35 +199,75 @@ export interface Transaction {
  * Filters for querying transactions
  */
 export interface TransactionFilters {
+  // Core filters
+  card_id?: string;
+  cardId?: string; // Legacy/API alias
   month?: number;
   year?: number;
-  card_id?: string;
+  billMonth?: number; // API alias
+  billYear?: number; // API alias
+
+  // Date range (API expects strings YYYY-MM-DD or ISO)
+  from?: string;
+  to?: string;
+  start_date?: string; // Legacy alias
+  end_date?: string;   // Legacy alias
+
+  // Classification
   category?: string;
-  type?: "revenue" | "expense";
-  search?: string;
+  category_id?: string;
+  merchant?: string;
+  transaction_type?: TransactionType;
+  transactionType?: string; // API alias
+  type?: "revenue" | "expense"; // For legacy UI components
+  direction?: 'debit' | 'credit';
+
+  // Filters
   min_amount?: number;
   max_amount?: number;
-  start_date?: string;
-  end_date?: string;
-  page?: number;
-  limit?: number;
+  search?: string;
 
-  // Extended filters
-  category_id?: string;
-  channel?: TransactionChannel;
+  // Status & Flags
   transaction_status?: TransactionStatus;
-  transaction_type?: TransactionType;
-  direction?: 'debit' | 'credit';
-  instrument_type?: string;
-  instrument_id?: string;
+  needs_review?: boolean;
   is_recurring?: boolean;
   is_reversal?: boolean;
   has_dispute?: boolean;
   has_chargeback?: boolean;
-  needs_review?: boolean;
+
+  // Metadata
+  instrument_type?: string;
+  instrument_id?: string;
+  channel?: TransactionChannel;
   rrn?: string;
   utr?: string;
   linked_transaction_id?: string;
+
+  // Pagination & Sorting
+  page?: number;
+  limit?: number;
+  sort_by?: string;   // Match backend snake_case
+  sortBy?: string;    // API uses this
+  sort_order?: "asc" | "desc";
+  sortOrder?: "asc" | "desc"; // API uses this
+}
+
+/**
+ * API Response for transaction list
+ */
+export interface TransactionListResponse {
+  data: Transaction[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  aggregations?: {
+    totalSpent: number;
+    totalTransactions: number;
+    byCategory: Record<string, number>;
+  };
 }
 
 // ============================================
@@ -214,13 +279,20 @@ export interface TransactionFilters {
  */
 export interface TransactionFormData {
   amount: number;
-  transaction_date: string;
+  transactionDate: string; // camelCase (primary)
+  transaction_date?: string; // snake_case (optional alias)
   merchant: string;
-  category?: string;
-  card_id: string;
+  category: string;
+  cardId: string; // camelCase (primary)
+  card_id?: string; // snake_case (optional alias)
   description?: string;
-  bill_month: number;
-  bill_year: number;
+  billMonth?: number; // camelCase (primary)
+  bill_month?: number; // snake_case (optional alias)
+  billYear?: number; // camelCase (primary)
+  bill_year?: number; // snake_case (optional alias)
+  transactionType?: TransactionType | "debit" | "credit" | "refund" | "bill_payment"; // camelCase - allowing full union
+  transaction_type?: TransactionType;
+  parentTransactionId?: string;
 }
 
 /**

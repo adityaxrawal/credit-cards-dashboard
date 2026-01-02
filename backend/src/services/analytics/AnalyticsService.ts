@@ -1,5 +1,5 @@
 import * as analyticsQueries from '../../db/queries/analytics.queries';
-import * as transactionsQueries from '../../db/queries/transactions.queries';
+import { TransactionRepository } from '../../repositories/TransactionRepository';
 import dayjs from 'dayjs';
 
 export class AnalyticsService {
@@ -60,7 +60,7 @@ export class AnalyticsService {
     const from = dayjs().year(year).month(month - 1).startOf('month').toDate();
     const to = dayjs().year(year).month(month - 1).endOf('month').toDate();
 
-    const aggregations = await transactionsQueries.getSpendingAggregations(userId, {
+    const aggregations = await TransactionRepository.getAggregations(userId, {
       from,
       to,
     });
@@ -90,7 +90,7 @@ export class AnalyticsService {
     const from = dayjs().year(targetYear).month(targetMonth - 1).startOf('month').toDate();
     const to = dayjs().year(targetYear).month(targetMonth - 1).endOf('month').toDate();
 
-    const aggregations = await transactionsQueries.getSpendingAggregations(userId, {
+    const aggregations = await TransactionRepository.getAggregations(userId, {
       from,
       to,
     });
@@ -257,7 +257,7 @@ export class AnalyticsService {
     const to = dayjs(endDate).endOf('day').toDate();
 
     // Get aggregations for the custom range
-    const aggregations = await transactionsQueries.getSpendingAggregations(userId, {
+    const aggregations = await TransactionRepository.getAggregations(userId, {
       from,
       to,
     });

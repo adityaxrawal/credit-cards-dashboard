@@ -20,7 +20,9 @@ export default function LoginForm() {
 
   // Clear errors when component mounts
   useEffect(() => {
-    console.log("[LoginForm] Component Mounted");
+    console.log("[LoginForm] ========== Component Mounted ==========");
+    console.log(`[LoginForm] Current URL: ${typeof window !== 'undefined' ? window.location.href : 'SSR'}`);
+    console.log(`[LoginForm] Search params: ${searchParams?.toString() || 'none'}`);
     clearError();
     setLocalError(null);
   }, [clearError]);
@@ -29,9 +31,12 @@ export default function LoginForm() {
   useEffect(() => {
     const code = searchParams?.get("code");
     const errorParam = searchParams?.get("error");
+    const nextParam = searchParams?.get("next");
+
+    console.log(`[LoginForm] useEffect - code: ${code ? 'present' : 'missing'}, error: ${errorParam || 'none'}, next: ${nextParam || 'none'}`);
 
     if (errorParam) {
-      console.error("❌ OAuth Error:", errorParam);
+      console.error("[LoginForm] ❌ OAuth Error:", errorParam);
 
       // Provide specific error messages
       let errorMessage = "Authentication failed";
@@ -50,8 +55,13 @@ export default function LoginForm() {
 
     // Prevent duplicate API calls (handles React Strict Mode double-mounting)
     if (code && !hasProcessedCode.current) {
+      console.log(`[LoginForm] Processing OAuth code: ${code.substring(0, 20)}...`);
       hasProcessedCode.current = true;
       handleOAuthCallback(code);
+    } else if (code) {
+      console.log(`[LoginForm] Code already processed, skipping`);
+    } else {
+      console.log(`[LoginForm] No code in URL, showing login form`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -68,12 +78,8 @@ export default function LoginForm() {
     try {
       await login(code);
       // If login succeeds, user is redirected by AuthContext
-      // No need to manually redirect here
-      
-      // Clear code param on success too, to avoid re-triggering if user hits back button
-      const url = new URL(window.location.href);
-      url.searchParams.delete("code");
-      window.history.replaceState({}, "", url.toString());
+      // No need to manually redirect here or modify history as we are navigating away
+      console.log("[LoginForm] Login successful, waiting for redirect...");
     } catch (err) {
       console.error("Login error:", err);
 

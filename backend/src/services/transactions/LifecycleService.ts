@@ -1,6 +1,6 @@
-import pool from '../../lib/db';
 import { TransactionStatus } from '../../types/transaction.types';
 import logger from '../../utils/infrastructure/logger';
+import { TransactionRepository } from '../../repositories/TransactionRepository';
 
 /**
  * Transaction lifecycle event
@@ -48,21 +48,67 @@ export class LifecycleService {
         }
     ): Promise<{ success: boolean; error?: string }> {
         try {
-            // Get current status
-            const current = await pool.query(
-                `SELECT transaction_status FROM transactions WHERE id = $1`,
-                [transactionId]
-            );
+            // Get current status - userId is needed for repository but not passed here.
+            // Assumption: we need to find the user first or update repository to not require user?
+            // Existing code used `SELECT ... WHERE id = $1` without user_id restriction for fetch, but update used it?
+            // Actually the original query: `SELECT transaction_status FROM transactions WHERE id = $1`
+            // But update: `UPDATE ... WHERE id = $2` (no user check in original update query? Let's check original)
 
-            if (current.rows.length === 0) {
+            // Original Update: `WHERE id = $2` 
+            // Original code did NOT use user_id in transitionStatus. This is a security gap (IDOR) but for strict refactor I might need to support it.
+            // However, TransactionRepository methods STRICTLY require userId.
+
+            // To use TransactionRepository, I must provide userId.
+            // But I don't have it here.
+            // I should fetch the transaction first to get the userId?
+            // Wait, TransactionRepository.findById requires userId.
+
+            // I need a generic `TransactionRepository.adminFindById` or similar if I don't have userId.
+            // OR I should change `transitionStatus` signature to require userId, but that breaks callers.
+
+            // Let's assume for now I added a method to get userId by transactionId or use a repository method that allows it.
+            // BUT, `TransactionRepository` is strictly user-scoped in my implementation.
+
+            // Quick fix: Add `findByIdWithoutUser` to TransactionRepository or just query purely here?
+            // "Services should only interact with repositories".
+            // So I must add a support method to Repository.
+
+            // For now, I will use a direct query via a new repository method `TransactionRepository.getBasicInfo(transactionId)` which returns `{userId, status}`.
+
+            // Wait, looking at usage of `transitionStatus`. Who calls it?
+            // Likely webhooks or internal jobs.
+
+            // Let's add `TransactionRepository.updateStatusSystem(transactionId, status)`?
+
+            // Using `TransactionRepository.getStatus` which I added requires userId.
+
+            // I will update TransactionRepository to support these "system" level updates or require strictly userId.
+            // If I look at `markDisputed`, it takes `userId`.
+
+            // Let's fix `transitionStatus` to require `userId`?
+            // The signature is public. Changing it is risky.
+
+            // Let's check `TransactionRepository` again.
+            // It has to be flexible.
+
+            // For this refactor, I will modify TransactionRepository to have `transitionStatus` which takes just ID? 
+            // Or `TransactionRepository.findByIdSystem(id)`.
+
+            // Actually, if I look at `transitionStatus` signature: `(transactionId, newStatus, options)`.
+            // I'll add `TransactionRepository.findUserByTransactionId(transactionId)` to help.
+
+            // Let's assume I can update TransactionRepository to add `findUserIdByTransactionId`.
+
+            const txn = await TransactionRepository.findUserIdByTransactionId(transactionId);
+            if (!txn) {
                 return { success: false, error: 'Transaction not found' };
             }
 
-            const currentStatus = (current.rows[0].transaction_status as TransactionStatus) || TransactionStatus.POSTED;
+            const { userId, status: currentStatus } = txn;
 
             // Validate transition
             if (!options?.force) {
-                const validNextStates = this.VALID_TRANSITIONS[currentStatus] || [];
+                const validNextStates = this.VALID_TRANSITIONS[currentStatus as TransactionStatus] || [];
                 if (!validNextStates.includes(newStatus)) {
                     return {
                         success: false,
@@ -72,13 +118,7 @@ export class LifecycleService {
             }
 
             // Perform transition
-            await pool.query(
-                `UPDATE transactions 
-                 SET transaction_status = $1, 
-                     updated_at = NOW()
-                 WHERE id = $2`,
-                [newStatus, transactionId]
-            );
+            await TransactionRepository.updateStatus(userId, transactionId, newStatus);
 
             logger.info(`[Lifecycle] Transaction ${transactionId} transitioned: ${currentStatus} → ${newStatus}`);
 
@@ -98,16 +138,7 @@ export class LifecycleService {
         reason?: string
     ): Promise<boolean> {
         try {
-            const result = await pool.query(
-                `UPDATE transactions 
-                 SET dispute_flag = TRUE,
-                     review_reason = COALESCE($1, review_reason, 'Disputed by user'),
-                     needs_review = TRUE,
-                     updated_at = NOW()
-                 WHERE id = $2 AND user_id = $3`,
-                [reason, transactionId, userId]
-            );
-            return (result.rowCount ?? 0) > 0;
+            return await TransactionRepository.markDisputed(userId, transactionId, reason || 'Disputed by user');
         } catch (error) {
             logger.error('[Lifecycle] Failed to mark disputed:', error);
             return false;
@@ -122,15 +153,7 @@ export class LifecycleService {
         userId: string
     ): Promise<boolean> {
         try {
-            const result = await pool.query(
-                `UPDATE transactions 
-                 SET chargeback_flag = TRUE,
-                     dispute_flag = TRUE,
-                     updated_at = NOW()
-                 WHERE id = $2 AND user_id = $3`,
-                [transactionId, userId]
-            );
-            return (result.rowCount ?? 0) > 0;
+            return await TransactionRepository.markChargeback(userId, transactionId);
         } catch (error) {
             logger.error('[Lifecycle] Failed to mark chargeback:', error);
             return false;
@@ -142,31 +165,7 @@ export class LifecycleService {
      */
     static async detectRecurring(userId: string): Promise<number> {
         try {
-            // Find transactions with same merchant/amount appearing monthly
-            const result = await pool.query(
-                `WITH recurring_candidates AS (
-                    SELECT 
-                        merchant,
-                        amount,
-                        COUNT(*) as occurrence_count,
-                        ARRAY_AGG(id) as transaction_ids
-                    FROM transactions
-                    WHERE user_id = $1
-                      AND transaction_date > NOW() - INTERVAL '6 months'
-                      AND is_recurring = FALSE
-                    GROUP BY merchant, amount
-                    HAVING COUNT(*) >= 2
-                )
-                UPDATE transactions t
-                SET is_recurring = TRUE, updated_at = NOW()
-                FROM recurring_candidates rc
-                WHERE t.id = ANY(rc.transaction_ids)
-                  AND t.is_recurring = FALSE
-                RETURNING t.id`,
-                [userId]
-            );
-
-            const count = result.rows.length;
+            const count = await TransactionRepository.detectRecurring(userId);
             if (count > 0) {
                 logger.info(`[Lifecycle] Detected ${count} recurring transactions for user ${userId}`);
             }
@@ -182,29 +181,7 @@ export class LifecycleService {
      */
     static async detectReversals(userId: string): Promise<number> {
         try {
-            // Find reversals: credit transactions following a debit with same amount/merchant
-            const result = await pool.query(
-                `UPDATE transactions credit_txn
-                 SET is_reversal = TRUE,
-                     linked_transaction_id = debit_txn.id,
-                     link_type = 'reversal',
-                     updated_at = NOW()
-                 FROM transactions debit_txn
-                 WHERE credit_txn.user_id = $1
-                   AND debit_txn.user_id = $1
-                   AND credit_txn.direction = 'credit'
-                   AND debit_txn.direction = 'debit'
-                   AND credit_txn.amount = debit_txn.amount
-                   AND LOWER(TRIM(credit_txn.merchant)) = LOWER(TRIM(debit_txn.merchant))
-                   AND credit_txn.transaction_date > debit_txn.transaction_date
-                   AND credit_txn.transaction_date < debit_txn.transaction_date + INTERVAL '30 days'
-                   AND credit_txn.is_reversal = FALSE
-                   AND credit_txn.linked_transaction_id IS NULL
-                 RETURNING credit_txn.id`,
-                [userId]
-            );
-
-            return result.rows.length;
+            return await TransactionRepository.detectReversals(userId);
         } catch (error) {
             logger.error('[Lifecycle] Failed to detect reversals:', error);
             return 0;
@@ -219,14 +196,7 @@ export class LifecycleService {
         daysOld: number
     ): Promise<string[]> {
         try {
-            const result = await pool.query(
-                `SELECT id FROM transactions
-                 WHERE user_id = $1
-                   AND transaction_status = 'pending'
-                   AND transaction_date < NOW() - INTERVAL '${daysOld} days'`,
-                [userId]
-            );
-            return result.rows.map(r => r.id);
+            return await TransactionRepository.getPendingOlderThan(userId, daysOld);
         } catch (error) {
             logger.error('[Lifecycle] Failed to get pending transactions:', error);
             return [];
@@ -238,19 +208,7 @@ export class LifecycleService {
      */
     static async autoPostPending(userId: string, daysThreshold: number = 3): Promise<number> {
         try {
-            const result = await pool.query(
-                `UPDATE transactions
-                 SET transaction_status = 'posted',
-                     is_provisional = FALSE,
-                     updated_at = NOW()
-                 WHERE user_id = $1
-                   AND transaction_status = 'pending'
-                   AND transaction_date < NOW() - INTERVAL '${daysThreshold} days'
-                 RETURNING id`,
-                [userId]
-            );
-
-            const count = result.rows.length;
+            const count = await TransactionRepository.autoPostPending(userId, daysThreshold);
             if (count > 0) {
                 logger.info(`[Lifecycle] Auto-posted ${count} pending transactions for user ${userId}`);
             }

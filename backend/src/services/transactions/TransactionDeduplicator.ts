@@ -1,7 +1,7 @@
 import crypto from 'crypto';
-import pool from '../../lib/db';
 import { isUniqueViolationError } from '../../utils/validation/errorTypeGuards';
 import logger from '../../utils/infrastructure/logger';
+import { TransactionRepository } from '../../repositories/TransactionRepository';
 
 /**
  * Transaction fingerprint components
@@ -95,19 +95,13 @@ export class TransactionDeduplicator {
         fingerprint: string
     ): Promise<DeduplicationResult> {
         try {
-            const result = await pool.query(
-                `SELECT id, amount, merchant, transaction_date 
-         FROM transactions 
-         WHERE user_id = $1 AND txn_fingerprint = $2 
-         LIMIT 1`,
-                [userId, fingerprint]
-            );
+            const existing = await TransactionRepository.findByFingerprint(userId, fingerprint);
 
-            if (result.rows.length > 0) {
+            if (existing) {
                 return {
                     fingerprint,
                     isDuplicate: true,
-                    existingTransactionId: result.rows[0].id,
+                    existingTransactionId: existing.id,
                     confidence: 1.0
                 };
             }
@@ -145,23 +139,20 @@ export class TransactionDeduplicator {
                 (components.date instanceof Date ? components.date : new Date(components.date)).getTime() + toleranceMs
             );
 
-            const result = await pool.query(
-                `SELECT id, merchant, amount, txn_fingerprint 
-         FROM transactions 
-         WHERE user_id = $1 
-           AND amount = $2 
-           AND transaction_date BETWEEN $3 AND $4
-         LIMIT 5`,
-                [userId, components.amount, dateStart, dateEnd]
+            const potentialDuplicates = await TransactionRepository.findPotentialDuplicates(
+                userId,
+                components.amount,
+                dateStart,
+                dateEnd
             );
 
-            if (result.rows.length === 0) {
+            if (potentialDuplicates.length === 0) {
                 return { isNearDuplicate: false, matchedIds: [], confidence: 1.0 };
             }
 
             // Check merchant similarity
             const normalizedMerchant = this.normalizeMerchant(components.merchant);
-            const matches = result.rows.filter(row => {
+            const matches = potentialDuplicates.filter(row => {
                 const rowMerchant = this.normalizeMerchant(row.merchant);
                 return this.merchantSimilarity(normalizedMerchant, rowMerchant) > 0.7;
             });
@@ -280,32 +271,23 @@ export class TransactionDeduplicator {
         let hasMore = true;
 
         while (hasMore) {
-            const result = await pool.query(
-                `SELECT id, amount, merchant, transaction_date, email_sender, direction
-         FROM transactions 
-         WHERE user_id = $1 AND (txn_fingerprint IS NULL OR txn_fingerprint = '')
-         LIMIT $2`,
-                [userId, batchSize]
-            );
+            const batch = await TransactionRepository.getFingerprintCandidates(userId, batchSize);
 
-            if (result.rows.length === 0) {
+            if (batch.length === 0) {
                 hasMore = false;
                 break;
             }
 
-            for (const row of result.rows) {
+            for (const row of batch) {
                 const fingerprint = this.generateFingerprint({
-                    amount: parseFloat(row.amount),
+                    amount: Number(row.amount),
                     merchant: row.merchant,
                     date: row.transaction_date,
-                    bankDomain: row.email_sender,
-                    direction: row.direction
+                    bankDomain: row.email_sender || undefined, // Mapping from record to components
+                    direction: row.direction as 'debit' | 'credit' | undefined
                 });
 
-                await pool.query(
-                    `UPDATE transactions SET txn_fingerprint = $1 WHERE id = $2`,
-                    [fingerprint, row.id]
-                );
+                await TransactionRepository.updateFingerprint(row.id, fingerprint);
                 updated++;
             }
 
@@ -334,20 +316,14 @@ export class TransactionDeduplicator {
             const windowStart = new Date(refundDate.getTime() - windowDays * 24 * 60 * 60 * 1000);
             const normalizedMerchant = this.normalizeMerchant(merchant);
 
-            const result = await pool.query(
-                `SELECT id, merchant, amount, transaction_date
-                 FROM transactions
-                 WHERE user_id = $1
-                   AND amount = $2
-                   AND direction = 'debit'
-                   AND transaction_date BETWEEN $3 AND $4
-                   AND linked_transaction_id IS NULL
-                 ORDER BY transaction_date DESC
-                 LIMIT 5`,
-                [userId, amount, windowStart, refundDate]
+            const potentialRefunds = await TransactionRepository.findPotentialRefunds(
+                userId,
+                amount,
+                windowStart,
+                refundDate
             );
 
-            for (const row of result.rows) {
+            for (const row of potentialRefunds) {
                 const similarity = this.merchantSimilarity(normalizedMerchant, this.normalizeMerchant(row.merchant));
                 if (similarity > 0.6) {
                     return { originalTransactionId: row.id, confidence: similarity };
@@ -377,20 +353,15 @@ export class TransactionDeduplicator {
             const amountMax = amount * (1 + amountTolerance);
             const normalizedMerchant = this.normalizeMerchant(merchant);
 
-            const result = await pool.query(
-                `SELECT id, merchant, amount, transaction_date, is_provisional
-                 FROM transactions
-                 WHERE user_id = $1
-                   AND amount BETWEEN $2 AND $3
-                   AND direction = 'debit'
-                   AND transaction_date BETWEEN $4 AND $5
-                   AND (is_provisional = TRUE OR transaction_status = 'pending')
-                 ORDER BY transaction_date DESC
-                 LIMIT 5`,
-                [userId, amountMin, amountMax, windowStart, settlementDate]
+            const potentialAuths = await TransactionRepository.findPotentialAuths(
+                userId,
+                amountMin,
+                amountMax,
+                windowStart,
+                settlementDate
             );
 
-            for (const row of result.rows) {
+            for (const row of potentialAuths) {
                 const similarity = this.merchantSimilarity(normalizedMerchant, this.normalizeMerchant(row.merchant));
                 if (similarity > 0.7) {
                     return { authTransactionId: row.id, confidence: similarity };
@@ -413,13 +384,7 @@ export class TransactionDeduplicator {
         linkType: 'refund' | 'settlement' | 'partial_refund' | 'split' | 'authorization' | 'reversal'
     ): Promise<boolean> {
         try {
-            await pool.query(
-                `UPDATE transactions 
-                 SET linked_transaction_id = $1, link_type = $2, updated_at = NOW()
-                 WHERE id = $3`,
-                [linkedTransactionId, linkType, transactionId]
-            );
-            return true;
+            return await TransactionRepository.linkTransaction(transactionId, linkedTransactionId, linkType);
         } catch (error) {
             logger.error('[Deduplicator] Failed to link transactions:', error);
             return false;
@@ -434,28 +399,18 @@ export class TransactionDeduplicator {
         originalTransactionId: string
     ): Promise<{ refundIds: string[]; totalRefunded: number; remainingAmount: number }> {
         try {
-            const originalResult = await pool.query(
-                `SELECT amount FROM transactions WHERE id = $1`,
-                [originalTransactionId]
-            );
+            const original = await TransactionRepository.findById(userId, originalTransactionId);
 
-            if (originalResult.rows.length === 0) {
+            if (!original) {
                 return { refundIds: [], totalRefunded: 0, remainingAmount: 0 };
             }
 
-            const originalAmount = parseFloat(originalResult.rows[0].amount);
+            const originalAmount = Number(original.amount);
 
-            const refundsResult = await pool.query(
-                `SELECT id, amount
-                 FROM transactions
-                 WHERE user_id = $1
-                   AND linked_transaction_id = $2
-                   AND link_type IN ('refund', 'partial_refund')`,
-                [userId, originalTransactionId]
-            );
+            const refunds = await TransactionRepository.getRefundingTransactions(userId, originalTransactionId);
 
-            const refundIds = refundsResult.rows.map(r => r.id);
-            const totalRefunded = refundsResult.rows.reduce((sum, r) => sum + parseFloat(r.amount), 0);
+            const refundIds = refunds.map(r => r.id);
+            const totalRefunded = refunds.reduce((sum, r) => sum + Number(r.amount), 0);
 
             return {
                 refundIds,
@@ -477,26 +432,7 @@ export class TransactionDeduplicator {
         windowDays: number = 7
     ): Promise<Array<{ amount: number; merchant: string; transactionIds: string[]; dates: Date[] }>> {
         try {
-            const result = await pool.query(
-                `SELECT amount, merchant, 
-                        ARRAY_AGG(id) as ids,
-                        ARRAY_AGG(transaction_date) as dates
-                 FROM transactions
-                 WHERE user_id = $1
-                   AND transaction_date > NOW() - INTERVAL '${windowDays} days'
-                 GROUP BY amount, LOWER(TRIM(merchant))
-                 HAVING COUNT(*) > 1
-                 ORDER BY COUNT(*) DESC
-                 LIMIT 50`,
-                [userId]
-            );
-
-            return result.rows.map(row => ({
-                amount: parseFloat(row.amount),
-                merchant: row.merchant,
-                transactionIds: row.ids,
-                dates: row.dates
-            }));
+            return await TransactionRepository.findDuplicateClusters(userId, windowDays);
         } catch (error) {
             logger.error('[Deduplicator] Failed to find duplicate clusters:', error);
             return [];

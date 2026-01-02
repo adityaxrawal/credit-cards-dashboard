@@ -55,31 +55,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Check authentication status on mount
   useEffect(() => {
+    console.log(`[AuthContext] useEffect triggered, authCheckRef.current: ${authCheckRef.current}`);
     if (!authCheckRef.current) {
       authCheckRef.current = true;
-      console.log("🔍 AuthProvider: Checking auth status on mount");
+      console.log("[AuthContext] 🔍 Checking auth status on mount");
       checkAuth();
+    } else {
+      console.log("[AuthContext] Auth check already run, skipping");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run once on mount
 
   // Start token refresh when user is authenticated
   useEffect(() => {
+    console.log(`[AuthContext] User state changed - user: ${user ? user.email : 'null'}`);
     if (user) {
+      console.log(`[AuthContext] Starting token refresh timer for: ${user.email}`);
       startTokenRefresh(
         () => {
           // On successful refresh, just continue
-          console.log("Token refreshed successfully");
+          console.log("[AuthContext] Token refreshed successfully");
         },
         (error) => {
           // On refresh error, clear user and redirect to login
-          console.error("Token refresh failed, logging out:", error);
+          console.error("[AuthContext] Token refresh failed, logging out:", error);
           setUser(null);
           setError("Session expired. Please login again.");
+          console.log("[AuthContext] 🔄 REDIRECTING to /login after refresh failure");
           router.push("/login");
         }
       );
     } else {
+      console.log(`[AuthContext] No user, stopping token refresh timer`);
       stopTokenRefresh();
     }
 
@@ -92,57 +99,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * Check if user is authenticated by verifying httpOnly cookie
    */
   async function checkAuth() {
+    console.log(`[AuthContext] ========== checkAuth START ==========`);
+    console.log(`[AuthContext] Current authFailCount: ${authFailCount}, MAX: ${MAX_AUTH_FAILURES}`);
+    
     // Stop polling after repeated failures to prevent infinite loops
     if (authFailCount >= MAX_AUTH_FAILURES) {
-      console.log("⛔ Auth check disabled after repeated failures");
+      console.log("[AuthContext] ⛔ Auth check disabled after repeated failures");
       setLoading(false);
+      console.log(`[AuthContext] ========== checkAuth END (disabled) ==========`);
       return;
     }
 
     try {
-      console.log("📡 Making /api/auth/me request");
+      console.log("[AuthContext] 📡 Making GET /api/auth/me request...");
       // @ts-expect-error - The response type might be inconsistent (wrapped vs unwrapped)
       const response = await apiClient.get<User | ApiResponse<User>>("/api/auth/me");
+      console.log(`[AuthContext] Response received:`, JSON.stringify(response).substring(0, 200));
 
       // Handle both wrapped ApiResponse and direct User object
-
       const userData = response.data || response;
 
       if (userData && userData.id && userData.email) {
-        console.log("✅ Auth check successful:", userData.email);
+        console.log(`[AuthContext] ✅ Auth check successful: ${userData.email}`);
         setUser(userData as User);
         setAuthFailCount(0); // Reset on success
       } else {
-        console.log("❌ Auth check failed: Invalid response structure", response);
+        console.log(`[AuthContext] ❌ Auth check failed: Invalid response structure`);
         setUser(null);
         setAuthFailCount(prev => prev + 1);
       }
     } catch (error: unknown) {
+      console.log(`[AuthContext] ❌ Auth check error caught`);
       // Check if request was cancelled (duplicate prevention)
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       if (errorMessage?.includes("already in progress")) {
-        console.log("⏭️  Skipped duplicate auth check");
+        console.log("[AuthContext] ⏭️ Skipped duplicate auth check");
         return;
       }
 
-      setAuthFailCount(prev => prev + 1);
+      setAuthFailCount(prev => {
+        console.log(`[AuthContext] Incrementing authFailCount: ${prev} -> ${prev + 1}`);
+        return prev + 1;
+      });
       const axiosError = error as { response?: { status?: number; data?: { clearSession?: boolean } } };
+      console.log(`[AuthContext] Error status: ${axiosError?.response?.status}`);
+      
       if (axiosError?.response?.status === 401) {
         // Not authenticated - this is expected for logged out users
-        console.log("🔓 User not authenticated (401)");
+        console.log("[AuthContext] 🔓 User not authenticated (401)");
         setUser(null);
         // If server says to clear session, stop retrying
         if (axiosError.response?.data?.clearSession) {
-          console.log("🔒 Session cleared by server, stopping retries");
+          console.log("[AuthContext] 🔒 Session cleared by server, stopping retries");
           setAuthFailCount(MAX_AUTH_FAILURES);
         }
       } else {
-        console.error("Auth check failed:", error);
+        console.error("[AuthContext] Auth check failed with error:", error);
         setUser(null);
       }
     } finally {
       setLoading(false);
+      console.log(`[AuthContext] ========== checkAuth END ==========`);
     }
   }
 
@@ -165,9 +183,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log("✅ Login successful, redirecting to dashboard");
       
-      // Force a hard redirect to ensure cookies are properly sent to the server
-      // and middleware/layout re-runs with the new auth state
-      window.location.href = "/dashboard";
+      // Wait for browser to fully process Set-Cookie headers from the response
+      // before navigating. This ensures cookies are available for the middleware.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Use router navigation to dashboard
+      // Note: We don't use router.refresh() immediately to avoid race conditions
+      // with the redirect. The dashboard page will fetch fresh data on mount.
+      console.log("[AuthContext] 🔄 Executing router.push('/dashboard')");
+      router.push("/dashboard");
     } catch (error) {
       console.error("❌ Login failed:", error);
       throw error;

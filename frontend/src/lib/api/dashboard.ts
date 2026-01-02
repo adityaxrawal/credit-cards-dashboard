@@ -88,38 +88,51 @@ export interface SpendingInsight {
 // Dashboard API Functions
 export const dashboardApi = {
     getSummary: async (): Promise<DashboardSummary> => {
-        const response = await apiClient.get<DashboardSummary>('/api/dashboard/summary');
-        return response.data!;
+        const response = await apiClient.get<{ data: DashboardSummary }>('/api/dashboard/summary');
+        // Backend returns { data: {...} }, extract the nested object
+        return response.data?.data!;
     },
 
     getAlerts: async (): Promise<DashboardAlert[]> => {
-        const response = await apiClient.get<DashboardAlert[]>('/api/dashboard/alerts');
-        return response.data || [];
+        const response = await apiClient.get<{ data: DashboardAlert[] }>('/api/dashboard/alerts');
+        // Backend returns { data: [...] }, extract the nested array
+        const result = response.data?.data;
+        return Array.isArray(result) ? result : [];
     },
 
     getCashflow: async (months: number = 6): Promise<CashflowData[]> => {
-        const response = await apiClient.get<CashflowData[]>(`/api/dashboard/cashflow?months=${months}`);
-        return response.data || [];
+        const response = await apiClient.get<{ data: CashflowData[] }>(`/api/dashboard/cashflow?months=${months}`);
+        // Backend returns { data: [...] }, extract the nested array
+        const result = response.data?.data;
+        return Array.isArray(result) ? result : [];
     },
 
     getRecentTransactions: async (limit: number = 10): Promise<RecentTransaction[]> => {
-        const response = await apiClient.get<RecentTransaction[]>(`/api/dashboard/recent?limit=${limit}`);
-        return response.data || [];
+        const response = await apiClient.get<{ data: RecentTransaction[] }>(`/api/dashboard/recent?limit=${limit}`);
+        // Backend returns { data: [...] }, extract the nested array
+        const result = response.data?.data;
+        return Array.isArray(result) ? result : [];
     },
 
     getBudgetUsage: async (): Promise<BudgetUsageItem[]> => {
-        const response = await apiClient.get<BudgetUsageItem[]>('/api/dashboard/budget-usage');
-        return response.data || [];
+        const response = await apiClient.get<{ data: BudgetUsageItem[] }>('/api/dashboard/budget-usage');
+        // Backend returns { data: [...] }, extract the nested array
+        const result = response.data?.data;
+        return Array.isArray(result) ? result : [];
     },
 
     getGoalsProgress: async (): Promise<GoalProgress[]> => {
-        const response = await apiClient.get<GoalProgress[]>('/api/dashboard/goals-progress');
-        return response.data || [];
+        const response = await apiClient.get<{ data: GoalProgress[] }>('/api/dashboard/goals-progress');
+        // Backend returns { data: [...] }, extract the nested array
+        const result = response.data?.data;
+        return Array.isArray(result) ? result : [];
     },
 
     getSpendingInsights: async (): Promise<SpendingInsight[]> => {
-        const response = await apiClient.get<SpendingInsight[]>('/api/dashboard/insights');
-        return response.data || [];
+        const response = await apiClient.get<{ data: SpendingInsight[] }>('/api/dashboard/insights');
+        // Backend returns { data: [...] }, extract the nested array
+        const result = response.data?.data;
+        return Array.isArray(result) ? result : [];
     },
 };
 

@@ -1,0 +1,27 @@
+<h2>Bill Reminder</h2>
+
+<p>This is a reminder that your credit card bill is coming up.</p>
+
+<div style="background-color: #f9fafb; padding: 20px; border-radius: 6px; margin: 24px 0;">
+    <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 8px 0; color: #6b7280;">Card Name</td>
+            <td style="padding: 8px 0; font-weight: bold; text-align: right;">{{cardName}}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #6b7280;">Bill Date</td>
+            <td style="padding: 8px 0; font-weight: bold; text-align: right;">{{billDate}}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #6b7280;">Due Date</td>
+            <td style="padding: 8px 0; font-weight: bold; text-align: right;">{{dueDate}}</td>
+        </tr>
+        {{amountRow}}
+    </table>
+</div>
+
+<p>Please ensure you make the payment before the due date to avoid late fees.</p>
+
+<div style="text-align: center;">
+    <a href="{{dashboardUrl}}" class="button">View Bills</a>
+</div>

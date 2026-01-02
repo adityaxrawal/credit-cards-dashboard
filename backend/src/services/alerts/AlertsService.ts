@@ -1,6 +1,5 @@
-import * as alertsQueries from '../../db/queries/alerts.queries';
-import * as emailClient from '../../lib/emailClient';
-import pool from '../../lib/db';
+import { EmailService } from '../notifications/EmailService';
+import { AlertRepository } from '../../repositories/AlertRepository';
 import { invalidateAlertCache } from '../../utils/cache/cacheInvalidation';
 
 /**
@@ -16,7 +15,7 @@ export async function createAlert(
     metadata?: Record<string, unknown>;
   }
 ) {
-  const alert = await alertsQueries.createAlert(userId, type, data);
+  const alert = await AlertRepository.create(userId, type, data);
   if (alert) {
     await invalidateAlertCache(userId);
   }
@@ -46,19 +45,13 @@ export async function createBudgetAlert(
   });
 
   // Check if user has email alerts enabled
-  const userResult = await pool.query(
-    'SELECT email FROM users WHERE id = $1',
-    [userId]
-  );
+  const userEmail = await AlertRepository.getUserEmail(userId);
 
-  if (userResult.rows.length > 0) {
-    const userEmail = userResult.rows[0].email;
-    const emailSent = await emailClient.sendBudgetAlert(userEmail, budgetData);
+  if (userEmail) {
+    const emailSent = await EmailService.sendBudgetAlert(userEmail, budgetData);
 
     if (emailSent) {
-      await alertsQueries.markAlertSentViaEmail(alert.id);
-      // No extra cache invalidation needed if markAlertSentViaEmail updates the alert (though it might just log it)
-      // If it updates "is_read" or similar, we might need it. Assuming createAlert handled the main invalidation.
+      await AlertRepository.markSentViaEmail(alert.id);
     }
   }
 
@@ -85,17 +78,13 @@ export async function createBillReminder(
   });
 
   // Send email
-  const userResult = await pool.query(
-    'SELECT email FROM users WHERE id = $1',
-    [userId]
-  );
+  const userEmail = await AlertRepository.getUserEmail(userId);
 
-  if (userResult.rows.length > 0) {
-    const userEmail = userResult.rows[0].email;
-    const emailSent = await emailClient.sendBillReminder(userEmail, cardData);
+  if (userEmail) {
+    const emailSent = await EmailService.sendBillReminder(userEmail, cardData);
 
     if (emailSent) {
-      await alertsQueries.markAlertSentViaEmail(alert.id);
+      await AlertRepository.markSentViaEmail(alert.id);
     }
   }
 
@@ -118,7 +107,7 @@ export async function getUserAlerts(
   const limit = filters?.limit || 50;
   const offset = (page - 1) * limit;
 
-  const result = await alertsQueries.getUserAlerts(userId, {
+  const result = await AlertRepository.findByUserId(userId, {
     unreadOnly: filters?.unreadOnly,
     type: filters?.type,
     limit,
@@ -140,7 +129,7 @@ export async function getUserAlerts(
  * Mark alert as read
  */
 export async function markAlertAsRead(userId: string, alertId: string) {
-  const result = await alertsQueries.markAlertAsRead(userId, alertId);
+  const result = await AlertRepository.markAsRead(userId, alertId);
   if (result) {
     await invalidateAlertCache(userId);
   }
@@ -151,7 +140,7 @@ export async function markAlertAsRead(userId: string, alertId: string) {
  * Delete alert
  */
 export async function deleteAlert(userId: string, alertId: string) {
-  const result = await alertsQueries.deleteAlert(userId, alertId);
+  const result = await AlertRepository.delete(userId, alertId);
   if (result) {
     await invalidateAlertCache(userId);
   }

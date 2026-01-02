@@ -1,22 +1,15 @@
-import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import { Suspense } from "react";
 import LoginForm from "@/components/features/auth/LoginForm";
 
 /**
  * Login Page Content
- * Server-side component that checks for existing authentication
+ * Server-side component that renders the login form.
+ * Note: We intentionally do NOT redirect authenticated users here.
+ * The middleware handles all authentication redirects to avoid infinite loops
+ * that can occur when users have an expired/invalid token cookie.
  */
-async function LoginPageContent() {
-  const cookieStore = await cookies();
-  const accessToken = cookieStore.get("accessToken")?.value;
-
-  // If user has access token, redirect to dashboard
-  // The dashboard layout will verify it properly
-  if (accessToken) {
-    redirect("/dashboard");
-  }
-
+function LoginPageContent() {
+  console.log("[LoginPage] Server component rendering LoginPageContent");
   return <LoginForm />;
 }
 

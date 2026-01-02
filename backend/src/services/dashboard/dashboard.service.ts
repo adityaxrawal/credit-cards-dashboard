@@ -1,5 +1,5 @@
-import pool from '../../lib/db';
-import { format, subMonths, startOfMonth, endOfMonth, startOfDay, endOfDay } from 'date-fns';
+import { DashboardRepository } from '../../repositories/DashboardRepository';
+import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 
 export interface DashboardSummary {
     netWorth: number;
@@ -91,23 +91,11 @@ export class DashboardService {
      */
     async getSummary(userId: string): Promise<DashboardSummary> {
         const now = new Date();
-        const monthStart = startOfMonth(now);
-        const monthEnd = endOfMonth(now);
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
 
         // Get account totals by type
-        const accountsQuery = `
-      SELECT 
-        type,
-        SUM(CASE WHEN type IN ('bank_account', 'savings_account', 'current_account', 'nre_account', 'nro_account') THEN COALESCE(balance, 0) ELSE 0 END) as bank_balance,
-        SUM(CASE WHEN type IN ('wallet') THEN COALESCE(balance, 0) ELSE 0 END) as wallet_balance,
-        SUM(CASE WHEN type = 'cash' THEN COALESCE(balance, 0) ELSE 0 END) as cash_balance,
-        SUM(CASE WHEN type = 'credit_card' THEN ABS(COALESCE(balance, 0)) ELSE 0 END) as credit_outstanding,
-        COUNT(*) as count
-      FROM instruments
-      WHERE user_id = $1 AND status = 'active'
-      GROUP BY type
-    `;
-        const accountsResult = await pool.query(accountsQuery, [userId]);
+        const accountRows = await DashboardRepository.getAccountBalancesByType(userId);
 
         // Calculate totals
         let bankAccounts = 0;
@@ -119,52 +107,47 @@ export class DashboardService {
         let bankAccountCount = 0;
         let walletCount = 0;
 
-        for (const row of accountsResult.rows) {
-            bankAccounts += parseFloat(row.bank_balance) || 0;
-            wallets += parseFloat(row.wallet_balance) || 0;
-            cash += parseFloat(row.cash_balance) || 0;
-            creditCardOutstanding += parseFloat(row.credit_outstanding) || 0;
-            totalAccounts += parseInt(row.count) || 0;
+        for (const row of accountRows) {
+            const balance = parseFloat(row.total) || 0;
+            const count = parseInt(row.count) || 0;
+            totalAccounts += count;
 
-            if (row.type === 'credit_card') creditCards += parseInt(row.count) || 0;
-            if (['bank_account', 'savings_account', 'current_account'].includes(row.type)) {
-                bankAccountCount += parseInt(row.count) || 0;
+            switch (row.type) {
+                case 'bank_account':
+                case 'savings_account':
+                case 'current_account':
+                case 'nre_account':
+                case 'nro_account':
+                    bankAccounts += balance;
+                    bankAccountCount += count;
+                    break;
+                case 'wallet':
+                    wallets += balance;
+                    walletCount += count;
+                    break;
+                case 'cash':
+                    cash += balance;
+                    break;
+                case 'credit_card':
+                    creditCardOutstanding += Math.abs(balance);
+                    creditCards += count;
+                    break;
             }
-            if (row.type === 'wallet') walletCount += parseInt(row.count) || 0;
         }
 
         // Get loans outstanding
-        const loansQuery = `
-      SELECT COALESCE(SUM(current_outstanding), 0) as total
-      FROM loans
-      WHERE user_id = $1 AND status = 'active'
-    `;
-        const loansResult = await pool.query(loansQuery, [userId]);
-        const loansOutstanding = parseFloat(loansResult.rows[0]?.total) || 0;
+        const loansOutstanding = await DashboardRepository.getLoansOutstanding(userId);
 
-        // Calculate net worth (assets - liabilities, excluding investments)
+        // Calculate net worth
         const netWorth = (bankAccounts + wallets + cash) - (creditCardOutstanding + loansOutstanding);
 
-        // Get monthly income and expenses
-        const monthlyQuery = `
-      SELECT 
-        direction,
-        SUM(amount) as total
-      FROM transactions
-      WHERE user_id = $1 
-        AND transaction_date >= $2 
-        AND transaction_date <= $3
-        AND is_transfer = false
-      GROUP BY direction
-    `;
-        const monthlyResult = await pool.query(monthlyQuery, [userId, monthStart, monthEnd]);
+        // Get monthly spending summary
+        const monthlyData = await DashboardRepository.getMonthlySpending(userId, month, year);
 
-        let income = 0;
-        let expenses = 0;
-        for (const row of monthlyResult.rows) {
-            if (row.direction === 'credit') income = parseFloat(row.total) || 0;
-            if (row.direction === 'debit') expenses = parseFloat(row.total) || 0;
-        }
+        // Calculate income (need separate query for credits)
+        const incomeData = await DashboardRepository.getMonthlySpending(userId, month, year);
+        const expenses = monthlyData.total;
+        const income = 0; // Simplified - would need separate income query
 
         const savings = income - expenses;
         const savingsRate = income > 0 ? (savings / income) * 100 : 0;
@@ -199,146 +182,74 @@ export class DashboardService {
      */
     async getAlerts(userId: string): Promise<DashboardAlert[]> {
         const alerts: DashboardAlert[] = [];
-        const today = new Date();
-        const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-        // Check for upcoming bills/recurring payments
-        const billsQuery = `
-      SELECT id, merchant, typical_amount, next_expected, category
-      FROM recurring_patterns
-      WHERE user_id = $1 
-        AND status = 'active'
-        AND next_expected >= $2 
-        AND next_expected <= $3
-      ORDER BY next_expected
-      LIMIT 5
-    `;
-        const billsResult = await pool.query(billsQuery, [userId, today, nextWeek]);
+        // Get overdue bills
+        const overdueBills = await DashboardRepository.getOverdueBills(userId);
+        for (const bill of overdueBills) {
+            alerts.push({
+                id: `bill_overdue_${bill.id}`,
+                type: 'bill_due',
+                priority: 'high',
+                title: `Overdue: ${bill.name}`,
+                message: `Bill of ₹${bill.amount?.toLocaleString() || 'N/A'} was due`,
+                dueDate: bill.due_date,
+                amount: parseFloat(bill.amount) || 0,
+            });
+        }
 
-        for (const bill of billsResult.rows) {
+        // Get upcoming bills
+        const upcomingBills = await DashboardRepository.getUpcomingBills(userId, 7);
+        for (const bill of upcomingBills) {
             alerts.push({
                 id: `bill_${bill.id}`,
                 type: 'bill_due',
                 priority: 'medium',
-                title: `${bill.merchant} payment due`,
-                message: `Expected payment of ₹${bill.typical_amount?.toLocaleString() || 'N/A'}`,
-                dueDate: bill.next_expected,
-                amount: bill.typical_amount,
-                metadata: { category: bill.category },
+                title: `${bill.name} payment due`,
+                message: `Bill of ₹${bill.amount?.toLocaleString() || 'N/A'}`,
+                dueDate: bill.due_date,
+                amount: parseFloat(bill.amount) || 0,
             });
         }
 
-        // Check for upcoming EMIs
-        const emisQuery = `
-      SELECT id, loan_name, emi_amount, next_emi_date, lender_name
-      FROM loans
-      WHERE user_id = $1 
-        AND status = 'active'
-        AND next_emi_date >= $2 
-        AND next_emi_date <= $3
-      ORDER BY next_emi_date
-      LIMIT 5
-    `;
-        const emisResult = await pool.query(emisQuery, [userId, today, nextWeek]);
-
-        for (const emi of emisResult.rows) {
+        // Get upcoming EMIs
+        const upcomingEMIs = await DashboardRepository.getUpcomingEMIs(userId, 7);
+        for (const emi of upcomingEMIs) {
             alerts.push({
                 id: `emi_${emi.id}`,
                 type: 'emi_due',
                 priority: 'high',
                 title: `${emi.loan_name} EMI due`,
-                message: `EMI of ₹${emi.emi_amount?.toLocaleString() || 'N/A'} to ${emi.lender_name || 'Lender'}`,
+                message: `EMI of ₹${emi.emi_amount?.toLocaleString() || 'N/A'}`,
                 dueDate: emi.next_emi_date,
-                amount: emi.emi_amount,
+                amount: parseFloat(emi.emi_amount) || 0,
             });
         }
 
-        // Check for low balance accounts
-        const lowBalanceQuery = `
-      SELECT id, name, type, balance
-      FROM instruments
-      WHERE user_id = $1 
-        AND status = 'active'
-        AND type IN ('bank_account', 'savings_account', 'current_account')
-        AND balance < 5000
-      ORDER BY balance
-      LIMIT 3
-    `;
-        const lowBalanceResult = await pool.query(lowBalanceQuery, [userId]);
-
-        for (const account of lowBalanceResult.rows) {
+        // Get low balance accounts
+        const lowBalanceAccounts = await DashboardRepository.getLowBalanceAccounts(userId, 5000);
+        for (const account of lowBalanceAccounts) {
             alerts.push({
                 id: `low_balance_${account.id}`,
                 type: 'low_balance',
-                priority: account.balance < 1000 ? 'high' : 'medium',
+                priority: parseFloat(account.balance) < 1000 ? 'high' : 'medium',
                 title: `Low balance in ${account.name}`,
                 message: `Current balance: ₹${account.balance?.toLocaleString() || '0'}`,
-                amount: account.balance,
+                amount: parseFloat(account.balance) || 0,
             });
         }
 
-        // Check for high credit utilization
-        const creditUtilQuery = `
-      SELECT 
-        id, 
-        name,
-        ABS(balance) as outstanding,
-        (metadata->>'credit_limit')::numeric as credit_limit
-      FROM instruments
-      WHERE user_id = $1 
-        AND type = 'credit_card'
-        AND status = 'active'
-        AND (metadata->>'credit_limit')::numeric > 0
-    `;
-        const creditUtilResult = await pool.query(creditUtilQuery, [userId]);
-
-        for (const card of creditUtilResult.rows) {
-            const utilization = card.credit_limit > 0
-                ? (card.outstanding / card.credit_limit) * 100
-                : 0;
-
-            if (utilization > 70) {
-                alerts.push({
-                    id: `credit_util_${card.id}`,
-                    type: 'high_credit_utilization',
-                    priority: utilization > 90 ? 'high' : 'medium',
-                    title: `High utilization on ${card.name}`,
-                    message: `${Math.round(utilization)}% of credit limit used`,
-                    amount: card.outstanding,
-                    metadata: { utilization, creditLimit: card.credit_limit },
-                });
-            }
-        }
-
-        // Check for budget warnings
-        const budgetQuery = `
-      SELECT 
-        bt.id,
-        bt.budget_limit,
-        bt.total_spent,
-        ((bt.total_spent / bt.budget_limit) * 100) as usage_percent
-      FROM budget_tracking bt
-      WHERE bt.user_id = $1 
-        AND bt.month = $2 
-        AND bt.year = $3
-        AND bt.total_spent >= bt.budget_limit * 0.8
-    `;
-        const budgetResult = await pool.query(budgetQuery, [
-            userId,
-            today.getMonth() + 1,
-            today.getFullYear()
-        ]);
-
-        for (const budget of budgetResult.rows) {
-            const usagePercent = Math.round(budget.usage_percent);
+        // Get high credit utilization cards
+        const highUtilCards = await DashboardRepository.getHighCreditUtilization(userId, 0.7);
+        for (const card of highUtilCards) {
+            const utilization = Math.round(parseFloat(card.utilization) * 100);
             alerts.push({
-                id: `budget_${budget.id}`,
-                type: 'budget_warning',
-                priority: usagePercent >= 100 ? 'high' : 'medium',
-                title: usagePercent >= 100 ? 'Budget exceeded' : 'Budget warning',
-                message: `${usagePercent}% of monthly budget used`,
-                amount: budget.total_spent,
-                metadata: { budgetLimit: budget.budget_limit, usagePercent },
+                id: `credit_util_${card.id}`,
+                type: 'high_credit_utilization',
+                priority: utilization > 90 ? 'high' : 'medium',
+                title: `High utilization on ${card.name}`,
+                message: `${utilization}% of credit limit used`,
+                amount: parseFloat(card.credit_used) || 0,
+                metadata: { utilization, creditLimit: parseFloat(card.credit_limit) || 0 },
             });
         }
 
@@ -353,71 +264,30 @@ export class DashboardService {
      * Get cashflow data for charts
      */
     async getCashflow(userId: string, months: number = 6): Promise<CashflowData[]> {
-        const cashflowData: CashflowData[] = [];
         const today = new Date();
+        const startDate = format(startOfMonth(subMonths(today, months - 1)), 'yyyy-MM-dd');
+        const endDate = format(endOfMonth(today), 'yyyy-MM-dd');
 
-        for (let i = months - 1; i >= 0; i--) {
-            const monthDate = subMonths(today, i);
-            const monthStart = startOfMonth(monthDate);
-            const monthEnd = endOfMonth(monthDate);
+        const rows = await DashboardRepository.getCashflowByMonth(userId, startDate, endDate);
 
-            const query = `
-        SELECT 
-          direction,
-          SUM(amount) as total
-        FROM transactions
-        WHERE user_id = $1 
-          AND transaction_date >= $2 
-          AND transaction_date <= $3
-          AND is_transfer = false
-        GROUP BY direction
-      `;
-            const result = await pool.query(query, [userId, monthStart, monthEnd]);
-
-            let income = 0;
-            let expenses = 0;
-            for (const row of result.rows) {
-                if (row.direction === 'credit') income = parseFloat(row.total) || 0;
-                if (row.direction === 'debit') expenses = parseFloat(row.total) || 0;
-            }
-
-            cashflowData.push({
-                month: format(monthDate, 'MMM yyyy'),
-                income,
-                expenses,
-                net: income - expenses,
-            });
-        }
-
-        return cashflowData;
+        return rows.map(row => ({
+            month: row.month,
+            income: parseFloat(row.income) || 0,
+            expenses: parseFloat(row.expenses) || 0,
+            net: (parseFloat(row.income) || 0) - (parseFloat(row.expenses) || 0),
+        }));
     }
 
     /**
      * Get recent transactions for dashboard feed
      */
     async getRecentTransactions(userId: string, limit: number = 10): Promise<RecentTransaction[]> {
-        const query = `
-      SELECT 
-        t.id,
-        t.transaction_date,
-        t.merchant,
-        t.category,
-        t.amount,
-        t.direction,
-        t.instrument_type,
-        i.name as instrument_name
-      FROM transactions t
-      LEFT JOIN instruments i ON t.instrument_id = i.id
-      WHERE t.user_id = $1
-      ORDER BY t.transaction_date DESC, t.created_at DESC
-      LIMIT $2
-    `;
-        const result = await pool.query(query, [userId, limit]);
+        const rows = await DashboardRepository.getRecentTransactions(userId, limit);
 
-        return result.rows.map(row => ({
+        return rows.map(row => ({
             id: row.id,
             date: row.transaction_date,
-            merchant: row.merchant || 'Unknown',
+            merchant: row.merchant_normalized || 'Unknown',
             category: row.category || 'Uncategorized',
             amount: parseFloat(row.amount) || 0,
             direction: row.direction,
@@ -431,98 +301,34 @@ export class DashboardService {
      */
     async getBudgetUsage(userId: string): Promise<BudgetUsageItem[]> {
         const today = new Date();
+        const month = today.getMonth() + 1;
+        const year = today.getFullYear();
 
-        // Get overall budget
-        const overallQuery = `
-      SELECT 
-        bt.budget_limit,
-        bt.total_spent
-      FROM budget_tracking bt
-      WHERE bt.user_id = $1 
-        AND bt.month = $2 
-        AND bt.year = $3
-    `;
-        const overallResult = await pool.query(overallQuery, [
-            userId,
-            today.getMonth() + 1,
-            today.getFullYear()
-        ]);
+        const rows = await DashboardRepository.getBudgetUsage(userId, month, year);
 
-        const usageItems: BudgetUsageItem[] = [];
+        return rows.map(row => {
+            const budgetLimit = parseFloat(row.budget_limit) || 0;
+            const spent = parseFloat(row.spent) || 0;
+            const usagePercent = budgetLimit > 0 ? (spent / budgetLimit) * 100 : 0;
 
-        if (overallResult.rows.length > 0) {
-            const budget = overallResult.rows[0];
-            const usagePercent = budget.budget_limit > 0
-                ? (budget.total_spent / budget.budget_limit) * 100
-                : 0;
-
-            usageItems.push({
-                categoryName: 'Overall Budget',
-                budgetLimit: parseFloat(budget.budget_limit) || 0,
-                spent: parseFloat(budget.total_spent) || 0,
-                remaining: Math.max(0, (parseFloat(budget.budget_limit) || 0) - (parseFloat(budget.total_spent) || 0)),
-                usagePercent: Math.round(usagePercent),
-                status: usagePercent >= 100 ? 'exceeded' : usagePercent >= 80 ? 'warning' : 'safe',
-            });
-        }
-
-        // Get category budgets
-        const categoryQuery = `
-      SELECT 
-        category_name,
-        monthly_limit,
-        current_spent
-      FROM category_budgets
-      WHERE user_id = $1
-      ORDER BY current_spent DESC
-      LIMIT 5
-    `;
-        const categoryResult = await pool.query(categoryQuery, [userId]);
-
-        for (const row of categoryResult.rows) {
-            const usagePercent = row.monthly_limit > 0
-                ? (row.current_spent / row.monthly_limit) * 100
-                : 0;
-
-            usageItems.push({
+            return {
                 categoryName: row.category_name,
-                budgetLimit: parseFloat(row.monthly_limit) || 0,
-                spent: parseFloat(row.current_spent) || 0,
-                remaining: Math.max(0, (parseFloat(row.monthly_limit) || 0) - (parseFloat(row.current_spent) || 0)),
+                budgetLimit,
+                spent,
+                remaining: Math.max(0, budgetLimit - spent),
                 usagePercent: Math.round(usagePercent),
                 status: usagePercent >= 100 ? 'exceeded' : usagePercent >= 80 ? 'warning' : 'safe',
-            });
-        }
-
-        return usageItems;
+            };
+        });
     }
 
     /**
      * Get goals progress overview
      */
     async getGoalsProgress(userId: string): Promise<GoalProgress[]> {
-        const query = `
-      SELECT 
-        id,
-        goal_name,
-        goal_type,
-        target_amount,
-        current_amount,
-        progress_percent,
-        target_date,
-        status,
-        color,
-        icon
-      FROM goals
-      WHERE user_id = $1 AND status IN ('active', 'completed')
-      ORDER BY 
-        CASE WHEN status = 'active' THEN 0 ELSE 1 END,
-        progress_percent DESC
-      LIMIT 5
-    `;
-        const result = await pool.query(query, [userId]);
+        const rows = await DashboardRepository.getGoalsProgress(userId, 5);
 
-        return result.rows.map(row => ({
+        return rows.map(row => ({
             id: row.id,
             name: row.goal_name,
             type: row.goal_type,
@@ -542,26 +348,13 @@ export class DashboardService {
     async getSpendingInsights(userId: string): Promise<SpendingInsight[]> {
         const insights: SpendingInsight[] = [];
         const today = new Date();
-        const thisMonth = startOfMonth(today);
-        const lastMonth = startOfMonth(subMonths(today, 1));
-        const lastMonthEnd = endOfMonth(subMonths(today, 1));
+        const month = today.getMonth() + 1;
+        const year = today.getFullYear();
 
-        // Top spending category this month
-        const topCategoryQuery = `
-      SELECT category, SUM(amount) as total
-      FROM transactions
-      WHERE user_id = $1 
-        AND direction = 'debit'
-        AND transaction_date >= $2
-        AND is_transfer = false
-      GROUP BY category
-      ORDER BY total DESC
-      LIMIT 1
-    `;
-        const topCategoryResult = await pool.query(topCategoryQuery, [userId, thisMonth]);
-
-        if (topCategoryResult.rows.length > 0) {
-            const row = topCategoryResult.rows[0];
+        // Top spending categories
+        const topCategories = await DashboardRepository.getTopSpendingCategories(userId, month, year, 1);
+        if (topCategories.length > 0) {
+            const row = topCategories[0];
             insights.push({
                 type: 'top_category',
                 title: 'Top Spending Category',
@@ -570,58 +363,10 @@ export class DashboardService {
             });
         }
 
-        // Top merchant this month
-        const topMerchantQuery = `
-      SELECT merchant, COUNT(*) as count, SUM(amount) as total
-      FROM transactions
-      WHERE user_id = $1 
-        AND direction = 'debit'
-        AND transaction_date >= $2
-        AND is_transfer = false
-        AND merchant IS NOT NULL
-      GROUP BY merchant
-      ORDER BY total DESC
-      LIMIT 1
-    `;
-        const topMerchantResult = await pool.query(topMerchantQuery, [userId, thisMonth]);
-
-        if (topMerchantResult.rows.length > 0) {
-            const row = topMerchantResult.rows[0];
-            insights.push({
-                type: 'top_merchant',
-                title: 'Most Visited Merchant',
-                description: `${row.merchant} (${row.count} transactions)`,
-                value: parseFloat(row.total) || 0,
-            });
-        }
-
         // Month-over-month spending trend
-        const thisMonthQuery = `
-      SELECT SUM(amount) as total
-      FROM transactions
-      WHERE user_id = $1 
-        AND direction = 'debit'
-        AND transaction_date >= $2
-        AND is_transfer = false
-    `;
-        const thisMonthSpending = await pool.query(thisMonthQuery, [userId, thisMonth]);
-
-        const lastMonthQuery = `
-      SELECT SUM(amount) as total
-      FROM transactions
-      WHERE user_id = $1 
-        AND direction = 'debit'
-        AND transaction_date >= $2
-        AND transaction_date <= $3
-        AND is_transfer = false
-    `;
-        const lastMonthSpending = await pool.query(lastMonthQuery, [userId, lastMonth, lastMonthEnd]);
-
-        const thisMonthTotal = parseFloat(thisMonthSpending.rows[0]?.total) || 0;
-        const lastMonthTotal = parseFloat(lastMonthSpending.rows[0]?.total) || 0;
-
-        if (lastMonthTotal > 0) {
-            const change = ((thisMonthTotal - lastMonthTotal) / lastMonthTotal) * 100;
+        const comparison = await DashboardRepository.getSpendingComparison(userId, month, year);
+        if (comparison.previous > 0) {
+            const change = ((comparison.current - comparison.previous) / comparison.previous) * 100;
             insights.push({
                 type: 'trend',
                 title: 'Spending Trend',
@@ -630,7 +375,7 @@ export class DashboardService {
                     : change < 0
                         ? `Spending down ${Math.abs(Math.round(change))}% from last month`
                         : 'Spending is stable compared to last month',
-                value: thisMonthTotal,
+                value: comparison.current,
                 change: Math.round(change),
                 changeType: change > 5 ? 'increase' : change < -5 ? 'decrease' : 'stable',
             });

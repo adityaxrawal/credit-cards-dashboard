@@ -17,13 +17,12 @@ import { TransactionExtractorFactory } from '../extraction/TransactionExtractorF
 import { InstrumentService } from '../../cards/instruments/InstrumentService';
 import { ManualReviewService } from '../../infrastructure/error-recovery/ManualReviewService';
 import { ErrorRecoveryManager } from '../../infrastructure/error-recovery/ErrorRecoveryManager';
-import * as transactionsQueries from '../../../db/queries/transactions.queries';
-import * as scannedEmailsQueries from '../../../db/queries/scanned_emails.queries';
 import { StatementParserFactory } from '../../statements/StatementParserFactory';
 import { StatementReconciler } from '../../statements/StatementReconciler';
 import { featureFlags } from '../../../config/featureFlags';
 import { MerchantEnricher } from '../enrichment/MerchantEnricher';
 import { UnclassifiedRepository } from '../../manual-review/UnclassifiedRepository'; // NEW IMPORT
+import { UserProfileService } from '../../user/UserProfileService'; // NEW IMPORT
 
 
 export interface IPipelineDependencies {
@@ -37,8 +36,6 @@ export interface IPipelineDependencies {
     instrumentService: typeof InstrumentService;
     manualReview: typeof ManualReviewService;
     errorRecovery: typeof ErrorRecoveryManager;
-    transactionsQueries: typeof transactionsQueries;
-    scannedEmailsQueries: typeof scannedEmailsQueries;
     statementParserFactory: typeof StatementParserFactory;
     statementReconciler: typeof StatementReconciler;
 }
@@ -105,16 +102,11 @@ export class UniversalTransactionPipeline {
                 // Fetch user instruments & profile to generate passwords
                 const instruments = await this.deps.instrumentService.getUserInstruments(userId);
 
-                // MOCK PROFILE DATA (In real app, fetch from UserProfileService)
-                // For now, we infer from what we have or user ID?
-                // We'll rely on the resolver's default + instrument based logic
-                const passwordContext = {
-                    userName: 'ADITYA', // TODO: Fetch from DB
-                    userDob: new Date('2000-01-01'), // TODO: Fetch from DB
-                    instruments: instruments
-                };
+                // Fetch real profile context for password generation
+                const profileContext = await UserProfileService.getPasswordContext(userId);
 
                 const candidatePasswords: string[] = [];
+                const dob = profileContext?.dob || new Date('2000-01-01'); // Fallback purely for safety, though won't match if real DOB different
 
                 // 1. Generate from context
                 // We just map instruments to context format simply
@@ -123,17 +115,15 @@ export class UniversalTransactionPipeline {
                     const last4 = inst.account_number_masked?.slice(-4);
                     if (last4) {
                         candidatePasswords.push(`ADIT${last4}`); // Keep the specific pattern user liked
+                        if (profileContext?.firstName) {
+                            candidatePasswords.push(`${profileContext.firstName}${last4}`);
+                        }
                     }
                 }
 
                 // 2. Use Resolver with Expanded Context
-                // Combine mocked/inferred data with instruments
-                // TODO: Integrate real UserProfileService when available
-                // We create multiple permutations for DOB as that's common (DDMMYYYY, DDMMYY, MMDDYYYY)
-                const dob = new Date('2000-05-23'); // Placeholder
-
                 const context = {
-                    firstName: 'ADITYA', // Placeholder
+                    firstName: profileContext?.firstName || 'User',
                     dob: dob,
                     instruments: instruments
                 };
@@ -152,8 +142,14 @@ export class UniversalTransactionPipeline {
                 candidatePasswords.push(`${dd}${mm}${yy}`);
 
                 // 4. Name + Date Combinations (Common: ADIT1234)
-                candidatePasswords.push(`ADIT${dd}${mm}`); // First 4 name + DDMM
-                candidatePasswords.push(`ADIT${yyyy}`);    // First 4 name + YYYY
+                if (profileContext?.firstName) {
+                    const prefix = profileContext.firstName.substring(0, 4).toUpperCase();
+                    candidatePasswords.push(`${prefix}${dd}${mm}`); // First 4 name + DDMM
+                    candidatePasswords.push(`${prefix}${yyyy}`);    // First 4 name + YYYY
+                } else {
+                    candidatePasswords.push(`ADIT${dd}${mm}`); // Fallback
+                    candidatePasswords.push(`ADIT${yyyy}`);
+                }
 
                 // Add explicit user-provided passwords if any (e.g. from a text file or settings)
                 // candidatePasswords.push(...userSettings.customPasswords);
@@ -590,8 +586,6 @@ export const universalPipeline = new UniversalTransactionPipeline({
     instrumentService: InstrumentService,
     manualReview: ManualReviewService,
     errorRecovery: ErrorRecoveryManager,
-    transactionsQueries: transactionsQueries,
-    scannedEmailsQueries: scannedEmailsQueries,
     statementParserFactory: StatementParserFactory,
     statementReconciler: StatementReconciler
 });

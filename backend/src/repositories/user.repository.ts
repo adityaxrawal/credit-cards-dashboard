@@ -7,6 +7,7 @@ export interface User {
   name: string;
   picture: string;
   google_refresh_token?: string;
+  date_of_birth?: Date;
   created_at: Date;
   updated_at: Date;
 }
@@ -32,13 +33,40 @@ export class UserRepository {
     return result.rows[0];
   }
 
-  static async update(googleId: string, data: { name: string; picture: string }): Promise<User> {
+  static async update(
+    googleId: string,
+    data: { name?: string; picture?: string; dateOfBirth?: Date }
+  ): Promise<User> {
+    const updates: string[] = [];
+    const values: any[] = [googleId];
+    let paramIndex = 2;
+
+    if (data.name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      values.push(data.name);
+    }
+    if (data.picture !== undefined) {
+      updates.push(`picture = $${paramIndex++}`);
+      values.push(data.picture);
+    }
+    if (data.dateOfBirth !== undefined) {
+      updates.push(`date_of_birth = $${paramIndex++}`);
+      values.push(data.dateOfBirth);
+    }
+
+    if (updates.length === 0) {
+      // Just return current
+      return (await this.findByGoogleId(googleId))!;
+    }
+
+    updates.push(`updated_at = NOW()`);
+
     const result = await query(
       `UPDATE users 
-       SET name = $2, picture = $3, updated_at = NOW() 
+       SET ${updates.join(', ')} 
        WHERE google_id = $1 
        RETURNING *`,
-      [googleId, data.name, data.picture]
+      values
     );
     return result.rows[0];
   }
@@ -48,5 +76,9 @@ export class UserRepository {
       `UPDATE users SET google_refresh_token = $2 WHERE id = $1`,
       [id, refreshToken]
     );
+  }
+  static async findAll(): Promise<User[]> {
+    const result = await query('SELECT * FROM users');
+    return result.rows;
   }
 }

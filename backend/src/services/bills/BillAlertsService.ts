@@ -1,4 +1,4 @@
-import pool from '../../lib/db';
+import { BillAlertsRepository } from '../../repositories/BillAlertsRepository';
 import logger from '../../utils/infrastructure/logger';
 
 export class BillAlertsService {
@@ -9,17 +9,10 @@ export class BillAlertsService {
         let alertCount = 0;
         try {
             // 1. Check Overdue Bills
-            const overdueResult = await pool.query(
-                `SELECT b.id, b.user_id, b.name, b.amount, b.due_date 
-                 FROM bills b
-                 LEFT JOIN alerts a ON a.metadata->>'bill_id' = b.id::text AND a.alert_type = 'bill_overdue'
-                 WHERE b.status = 'pending' 
-                   AND b.due_date < CURRENT_DATE
-                   AND a.id IS NULL` // Avoid duplicate alerts
-            );
+            const overdueBills = await BillAlertsRepository.getOverdueBillsWithoutAlerts();
 
-            for (const bill of overdueResult.rows) {
-                await this.createAlert(
+            for (const bill of overdueBills) {
+                await BillAlertsRepository.createAlert(
                     bill.user_id,
                     'bill_overdue',
                     'high',
@@ -31,17 +24,10 @@ export class BillAlertsService {
             }
 
             // 2. Check Upcoming Bills (Due in 3 days)
-            const upcomingResult = await pool.query(
-                `SELECT b.id, b.user_id, b.name, b.amount, b.due_date 
-                 FROM bills b
-                 LEFT JOIN alerts a ON a.metadata->>'bill_id' = b.id::text AND a.alert_type = 'bill_upcoming'
-                 WHERE b.status = 'pending' 
-                   AND b.due_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '3 days')
-                   AND a.id IS NULL`
-            );
+            const upcomingBills = await BillAlertsRepository.getUpcomingBillsWithoutAlerts(3);
 
-            for (const bill of upcomingResult.rows) {
-                await this.createAlert(
+            for (const bill of upcomingBills) {
+                await BillAlertsRepository.createAlert(
                     bill.user_id,
                     'bill_upcoming',
                     'medium',
@@ -66,22 +52,10 @@ export class BillAlertsService {
         let alertCount = 0;
         try {
             // Check active subscriptions renewing in 2 days
-            const renewalsResult = await pool.query(
-                `SELECT id, user_id, merchant_normalized, typical_amount, next_expected
-                 FROM recurring_patterns
-                 WHERE status = 'active'
-                   AND is_subscription = true
-                   AND next_expected BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '2 days')
-                   AND NOT EXISTS (
-                       SELECT 1 FROM alerts 
-                       WHERE metadata->>'subscription_id' = recurring_patterns.id::text 
-                         AND alert_type = 'subscription_renewal'
-                         AND created_at > (CURRENT_DATE - INTERVAL '5 days')
-                   )`
-            );
+            const renewals = await BillAlertsRepository.getUpcomingSubscriptionRenewals(2);
 
-            for (const sub of renewalsResult.rows) {
-                await this.createAlert(
+            for (const sub of renewals) {
+                await BillAlertsRepository.createAlert(
                     sub.user_id,
                     'subscription_renewal',
                     'low',
@@ -97,21 +71,5 @@ export class BillAlertsService {
             logger.error('[BillAlerts] Failed to check subscription alerts:', error);
             return 0;
         }
-    }
-
-    private static async createAlert(
-        userId: string,
-        type: string,
-        priority: string,
-        title: string,
-        message: string,
-        metadata: any
-    ) {
-        await pool.query(
-            `INSERT INTO alerts (
-                user_id, alert_type, priority, title, message, metadata, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-            [userId, type, priority, title, message, JSON.stringify(metadata)]
-        );
     }
 }

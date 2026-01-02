@@ -12,6 +12,14 @@ export class InstrumentRepository {
         return result.rows.map(this.mapRowToInstrument);
     }
 
+    static async findActiveByUserId(userId: UUID): Promise<Instrument[]> {
+        const result = await query(
+            'SELECT * FROM instruments WHERE user_id = $1 AND status = \'active\' ORDER BY created_at DESC',
+            [userId]
+        );
+        return result.rows.map(this.mapRowToInstrument);
+    }
+
     static async findById(id: UUID): Promise<Instrument | null> {
         const result = await query('SELECT * FROM instruments WHERE id = $1', [id]);
         return result.rows[0] ? this.mapRowToInstrument(result.rows[0]) : null;
@@ -61,6 +69,11 @@ export class InstrumentRepository {
         await query('DELETE FROM instruments WHERE id = $1', [id]);
     }
 
+    static async getOpeningBalance(id: UUID): Promise<number | null> {
+        const result = await query('SELECT opening_balance FROM instruments WHERE id = $1', [id]);
+        return result.rows[0] ? parseFloat(result.rows[0].opening_balance || '0') : null;
+    }
+
     private static mapRowToInstrument(row: any): Instrument {
         return {
             id: row.id,
@@ -78,5 +91,61 @@ export class InstrumentRepository {
             createdAt: row.created_at,
             updatedAt: row.updated_at
         };
+    }
+    static async findByBankNameAndLast4(userId: UUID, bankName: string, last4: string): Promise<Instrument | null> {
+        const result = await query(
+            `SELECT i.* FROM instruments i
+             WHERE i.user_id = $1 AND i.last4 = $2 
+             AND EXISTS (
+               SELECT 1 FROM banks b WHERE b.id = i.bank_id 
+               AND LOWER(b.name) = LOWER($3)
+             )`,
+            [userId, last4, bankName]
+        );
+        return result.rows[0] ? this.mapRowToInstrument(result.rows[0]) : null;
+    }
+
+    static async createSuggestion(data: {
+        userId: string,
+        bankId: string | null,
+        type: string,
+        name: string,
+        last4: string
+    }): Promise<void> {
+        await query(
+            `INSERT INTO instruments (
+              user_id, bank_id, type, name, last4, status, needs_input
+            ) VALUES ($1, $2, $3, $4, $5, 'active', true)
+            ON CONFLICT (user_id, bank_id, type, last4) DO NOTHING`,
+            [data.userId, data.bankId, data.type, data.name, data.last4]
+        );
+    }
+
+    static async findIncomplete(userId: string): Promise<any[]> {
+        const result = await query(
+            `SELECT 
+        i.id, i.name, i.last4, i.type, b.name as bank_name,
+        (SELECT COUNT(*) FROM transactions t WHERE t.instrument_id = i.id) as transaction_count
+      FROM instruments i
+      LEFT JOIN banks b ON i.bank_id = b.id
+      WHERE i.user_id = $1 AND i.needs_input = true
+      ORDER BY i.created_at DESC`,
+            [userId]
+        );
+        return result.rows;
+    }
+    static async calculateNetWorth(userId: string): Promise<{ assets: number; liabilities: number; netWorth: number }> {
+        const result = await query(
+            `SELECT 
+        COALESCE(SUM(CASE WHEN type NOT IN ('credit_card') THEN balance ELSE 0 END), 0) as assets,
+        COALESCE(SUM(CASE WHEN type = 'credit_card' THEN ABS(balance) ELSE 0 END), 0) as liabilities
+       FROM instruments 
+       WHERE user_id = $1 AND is_active = true AND deleted_at IS NULL`,
+            [userId]
+        );
+
+        const assets = parseFloat(result.rows[0].assets);
+        const liabilities = parseFloat(result.rows[0].liabilities);
+        return { assets, liabilities, netWorth: assets - liabilities };
     }
 }

@@ -1,4 +1,4 @@
-import pool from '../../lib/db';
+import { AuditTrailRepository, AuditTrailRow } from '../../repositories/AuditTrailRepository';
 import dayjs from 'dayjs';
 
 /**
@@ -69,24 +69,16 @@ export class AuditTrailService {
      * use ActivityLoggingService.
      */
     async log(input: AuditLogInput): Promise<string> {
-        const { rows } = await pool.query(
-            `INSERT INTO transaction_audit_log 
-       (user_id, transaction_id, action, previous_data, new_data, changes, ip_address, user_agent, changed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-       RETURNING id`,
-            [
-                input.userId,
-                input.entityId,
-                `${input.entityType}:${input.action}`,
-                input.previousData ? JSON.stringify(input.previousData) : null,
-                input.newData ? JSON.stringify(input.newData) : null,
-                input.metadata ? JSON.stringify(input.metadata) : null,
-                input.ipAddress,
-                input.userAgent,
-            ]
-        );
-
-        return rows[0].id;
+        return AuditTrailRepository.create({
+            userId: input.userId,
+            entityId: input.entityId,
+            action: `${input.entityType}:${input.action}`,
+            previousData: input.previousData,
+            newData: input.newData,
+            changes: input.metadata,
+            ipAddress: input.ipAddress,
+            userAgent: input.userAgent,
+        });
     }
 
     /**
@@ -101,18 +93,13 @@ export class AuditTrailService {
     ): Promise<void> {
         const changes = this.calculateChanges(previousData, newData);
 
-        await pool.query(
-            `INSERT INTO transaction_audit_log 
-       (user_id, transaction_id, action, previous_data, new_data, changes, changed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-            [
-                userId,
-                transactionId,
-                action,
-                previousData ? JSON.stringify(previousData) : null,
-                newData ? JSON.stringify(newData) : null,
-                JSON.stringify(changes),
-            ]
+        await AuditTrailRepository.logTransactionChange(
+            userId,
+            transactionId,
+            action,
+            previousData,
+            newData,
+            changes
         );
     }
 
@@ -135,16 +122,7 @@ export class AuditTrailService {
      * Get audit history for a specific entity
      */
     async getEntityHistory(userId: string, entityType: AuditEntity, entityId: string): Promise<AuditEntry[]> {
-        const { rows } = await pool.query(
-            `SELECT * FROM transaction_audit_log 
-       WHERE user_id = $1 
-       AND transaction_id = $2
-       AND action LIKE $3
-       ORDER BY changed_at DESC
-       LIMIT 100`,
-            [userId, entityId, `${entityType}:%`]
-        );
-
+        const rows = await AuditTrailRepository.getEntityHistory(userId, entityId, entityType);
         return rows.map(row => this.mapAuditRow(row));
     }
 
@@ -161,38 +139,13 @@ export class AuditTrailService {
             limit?: number;
         }
     ): Promise<AuditEntry[]> {
-        let query = `SELECT * FROM transaction_audit_log WHERE user_id = $1`;
-        const params: any[] = [userId];
-        let paramIndex = 2;
-
-        if (filters?.startDate) {
-            query += ` AND changed_at >= $${paramIndex}`;
-            params.push(filters.startDate);
-            paramIndex++;
-        }
-
-        if (filters?.endDate) {
-            query += ` AND changed_at <= $${paramIndex}`;
-            params.push(filters.endDate);
-            paramIndex++;
-        }
-
-        if (filters?.action) {
-            query += ` AND action LIKE $${paramIndex}`;
-            params.push(`%:${filters.action}`);
-            paramIndex++;
-        }
-
-        if (filters?.entityType) {
-            query += ` AND action LIKE $${paramIndex}`;
-            params.push(`${filters.entityType}:%`);
-            paramIndex++;
-        }
-
-        query += ` ORDER BY changed_at DESC LIMIT $${paramIndex}`;
-        params.push(filters?.limit || 100);
-
-        const { rows } = await pool.query(query, params);
+        const rows = await AuditTrailRepository.findByUserId(userId, {
+            startDate: filters?.startDate,
+            endDate: filters?.endDate,
+            action: filters?.action,
+            entityType: filters?.entityType,
+            limit: filters?.limit,
+        });
         return rows.map(row => this.mapAuditRow(row));
     }
 
@@ -207,27 +160,8 @@ export class AuditTrailService {
     }> {
         const startDate = dayjs().subtract(days, 'day').format('YYYY-MM-DD');
 
-        const { rows: countRows } = await pool.query(
-            `SELECT 
-        COUNT(*) as total,
-        action,
-        COUNT(*) FILTER (WHERE action LIKE 'transaction:%') as transactions,
-        COUNT(*) FILTER (WHERE action LIKE 'account:%') as accounts,
-        COUNT(*) FILTER (WHERE action LIKE 'loan:%') as loans,
-        COUNT(*) FILTER (WHERE action LIKE 'goal:%') as goals
-       FROM transaction_audit_log 
-       WHERE user_id = $1 AND changed_at >= $2
-       GROUP BY action`,
-            [userId, startDate]
-        );
-
-        const { rows: recentRows } = await pool.query(
-            `SELECT * FROM transaction_audit_log 
-       WHERE user_id = $1 AND changed_at >= $2
-       ORDER BY changed_at DESC
-       LIMIT 10`,
-            [userId, startDate]
-        );
+        const countRows = await AuditTrailRepository.getActivityCounts(userId, startDate);
+        const recentRows = await AuditTrailRepository.getRecent(userId, startDate, 10);
 
         const byAction: Record<string, number> = {};
         const byEntity: Record<string, number> = {};
@@ -272,7 +206,7 @@ export class AuditTrailService {
         return changes;
     }
 
-    private mapAuditRow(row: any): AuditEntry {
+    private mapAuditRow(row: AuditTrailRow): AuditEntry {
         const [entityType, action] = (row.action || ':').split(':');
 
         return {
@@ -280,12 +214,12 @@ export class AuditTrailService {
             userId: row.user_id,
             action: action as AuditAction,
             entityType: entityType as AuditEntity,
-            entityId: row.transaction_id,
+            entityId: row.transaction_id ?? undefined,
             previousData: row.previous_data,
             newData: row.new_data,
             metadata: row.changes,
-            ipAddress: row.ip_address,
-            userAgent: row.user_agent,
+            ipAddress: row.ip_address ?? undefined,
+            userAgent: row.user_agent ?? undefined,
             createdAt: row.changed_at,
         };
     }

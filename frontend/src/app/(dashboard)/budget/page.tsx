@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api-client";
+import { AppLayout } from "@/components/layout";
 import {
   Card,
   CardContent,
@@ -23,6 +24,7 @@ import {
   TabsTrigger,
   Progress,
 } from "@/components/ui";
+
 import {
   AlertCircle,
   CheckCircle,
@@ -31,6 +33,10 @@ import {
   DollarSign,
   Settings,
   Plus,
+  Calendar,
+  CreditCard,
+  PieChart as PieChartIcon,
+  BarChart as BarChartIcon,
 } from "lucide-react";
 import {
   LineChart,
@@ -43,6 +49,9 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 
 interface CategoryBudget {
@@ -135,9 +144,11 @@ export default function BudgetDashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
+      <AppLayout title="Budget Management">
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-green"></div>
+        </div>
+      </AppLayout>
     );
   }
 
@@ -147,90 +158,91 @@ export default function BudgetDashboardPage() {
   const recommendations = analytics?.recommendations || [];
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Budget Management</h1>
-          <p className="text-gray-600 mt-1">
-            Track and manage your spending budgets
-          </p>
+    <AppLayout title="Budget Management">
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-primary-text">Budget Management</h1>
+            <p className="text-muted-text mt-1">
+              Track and manage your spending budgets
+            </p>
+          </div>
+          <Button>
+            <Settings className="w-4 h-4 mr-2" />
+            Budget Settings
+          </Button>
         </div>
-        <Button>
-          <Settings className="w-4 h-4 mr-2" />
-          Budget Settings
-        </Button>
-      </div>
 
       {/* Budget Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        <Card className="bg-card-bg border-muted-text/10">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-sm font-medium text-primary-text">
               Monthly Budget
             </CardTitle>
-            <DollarSign className="h-4 w-4 text-gray-600" />
+            <DollarSign className="h-4 w-4 text-muted-text" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-primary-text">
               ₹{overview.budgetLimit?.toLocaleString()}
             </div>
-            <p className="text-xs text-gray-600 mt-1">Budget limit set</p>
+            <p className="text-xs text-muted-text mt-1">Budget limit set</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-card-bg border-muted-text/10">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
-            <TrendingUp className="h-4 w-4 text-red-600" />
+            <CardTitle className="text-sm font-medium text-primary-text">Total Spent</CardTitle>
+            <TrendingUp className="h-4 w-4 text-error" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-primary-text">
               ₹{overview.totalSpent?.toLocaleString()}
             </div>
-            <p className="text-xs text-gray-600 mt-1">
+            <p className="text-xs text-muted-text mt-1">
               {overview.percentage?.toFixed(1)}% of budget
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-card-bg border-muted-text/10">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Remaining</CardTitle>
-            <TrendingDown className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm font-medium text-primary-text">Remaining</CardTitle>
+            <TrendingDown className="h-4 w-4 text-primary-green" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-primary-text">
               ₹{overview.remaining?.toLocaleString()}
             </div>
-            <p className="text-xs text-gray-600 mt-1">Available to spend</p>
+            <p className="text-xs text-muted-text mt-1">Available to spend</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-card-bg border-muted-text/10">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Status</CardTitle>
+            <CardTitle className="text-sm font-medium text-primary-text">Status</CardTitle>
             {overview.status === "safe" ? (
-              <CheckCircle className="h-4 w-4 text-green-600" />
+              <CheckCircle className="h-4 w-4 text-primary-green" />
             ) : (
-              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertCircle className="h-4 w-4 text-error" />
             )}
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold capitalize">
+            <div className="text-2xl font-bold capitalize text-primary-text">
               {overview.status}
             </div>
             <Progress
               value={overview.percentage}
-              className="mt-2"
+              className="mt-2 bg-hover-bg"
               indicatorClassName={
                 overview.status === "exceeded"
-                  ? "bg-red-600"
+                  ? "bg-error"
                   : overview.status === "critical"
-                  ? "bg-orange-600"
+                  ? "bg-accent-orange"
                   : overview.status === "warning"
-                  ? "bg-yellow-600"
-                  : "bg-green-600"
+                  ? "bg-warning"
+                  : "bg-primary-green"
               }
             />
           </CardContent>
@@ -239,10 +251,10 @@ export default function BudgetDashboardPage() {
 
       {/* Recommendations */}
       {recommendations.length > 0 && (
-        <Card>
+        <Card className="bg-card-bg border-muted-text/10">
           <CardHeader>
-            <CardTitle>Budget Recommendations</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-primary-text">Budget Recommendations</CardTitle>
+            <CardDescription className="text-muted-text">
               Smart insights to help you manage your budget better
             </CardDescription>
           </CardHeader>
@@ -253,30 +265,30 @@ export default function BudgetDashboardPage() {
                   key={index}
                   className={`p-4 rounded-lg border-l-4 ${
                     rec.priority === "high"
-                      ? "bg-red-50 border-red-500"
+                      ? "bg-error/10 border-error"
                       : rec.priority === "medium"
-                      ? "bg-yellow-50 border-yellow-500"
-                      : "bg-blue-50 border-blue-500"
+                      ? "bg-warning/10 border-warning"
+                      : "bg-accent-blue/10 border-accent-blue"
                   }`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <h4 className="font-semibold text-sm">{rec.title}</h4>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <h4 className="font-semibold text-sm text-primary-text">{rec.title}</h4>
+                      <p className="text-sm text-muted-text mt-1">
                         {rec.message}
                       </p>
                       {rec.action && (
-                        <p className="text-sm text-gray-700 mt-2 font-medium">
+                        <p className="text-sm text-primary-text mt-2 font-medium">
                           → {rec.action}
                         </p>
                       )}
                     </div>
                     {rec.potentialSavings && (
                       <div className="ml-4 text-right">
-                        <p className="text-xs text-gray-600">
+                        <p className="text-xs text-muted-text">
                           Potential Savings
                         </p>
-                        <p className="text-lg font-bold text-green-600">
+                        <p className="text-lg font-bold text-primary-green">
                           ₹{rec.potentialSavings.toLocaleString()}
                         </p>
                       </div>
@@ -291,7 +303,7 @@ export default function BudgetDashboardPage() {
 
       {/* Tabs for different views */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
+        <TabsList className="bg-card-bg border-muted-text/10">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
           <TabsTrigger value="cards">Cards</TabsTrigger>
@@ -303,28 +315,30 @@ export default function BudgetDashboardPage() {
         <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Spending Trend */}
-            <Card>
+            <Card className="bg-card-bg border-muted-text/10">
               <CardHeader>
-                <CardTitle>Spending Trend</CardTitle>
-                <CardDescription>Last 6 months</CardDescription>
+                <CardTitle className="text-primary-text">Spending Trend</CardTitle>
+                <CardDescription className="text-muted-text">Last 6 months</CardDescription>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={trends.historicalSpending || []}>
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                     <XAxis
                       dataKey="month"
+                      stroke="#888"
                       tickFormatter={(value) =>
                         new Date(2024, value - 1).toLocaleString("default", {
                           month: "short",
                         })
                       }
                     />
-                    <YAxis />
+                    <YAxis stroke="#888" />
                     <Tooltip
                       formatter={(value: number) =>
                         `₹${value.toLocaleString()}`
                       }
+                      contentStyle={{ backgroundColor: '#1a1a1a', border: 'none' }}
                     />
                     <Legend />
                     <Line
@@ -348,26 +362,28 @@ export default function BudgetDashboardPage() {
             </Card>
 
             {/* Current Month Weekly Breakdown */}
-            <Card>
+            <Card className="bg-card-bg border-muted-text/10">
               <CardHeader>
-                <CardTitle>Weekly Breakdown</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-primary-text">Weekly Breakdown</CardTitle>
+                <CardDescription className="text-muted-text">
                   Current month spending pattern
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={currentBudget?.breakdown?.byWeek || []}>
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                     <XAxis
                       dataKey="week"
-                      label={{ value: "Week", position: "insideBottom" }}
+                      stroke="#888"
+                      label={{ value: "Week", position: "insideBottom", fill: "#888" }}
                     />
-                    <YAxis />
+                    <YAxis stroke="#888" />
                     <Tooltip
                       formatter={(value: number) =>
                         `₹${value.toLocaleString()}`
                       }
+                      contentStyle={{ backgroundColor: '#1a1a1a', border: 'none' }}
                     />
                     <Bar dataKey="spent" fill="#3b82f6" />
                   </BarChart>
@@ -407,6 +423,7 @@ export default function BudgetDashboardPage() {
         </TabsContent>
       </Tabs>
     </div>
+    </AppLayout>
   );
 }
 

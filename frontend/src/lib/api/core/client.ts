@@ -6,6 +6,48 @@
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+// CSRF Token Management
+let csrfToken: string | null = null;
+let csrfTokenPromise: Promise<string | null> | null = null;
+
+/**
+ * Fetch CSRF token from backend
+ */
+async function fetchCsrfToken(): Promise<string | null> {
+  if (csrfToken) return csrfToken;
+  if (csrfTokenPromise) return csrfTokenPromise;
+
+  console.log("📡 Fetching new CSRF token");
+  csrfTokenPromise = fetch(`${API_URL}/api/csrf-token`, {
+    method: "GET",
+    credentials: "include",
+  })
+    .then(async (response) => {
+      if (response.ok) {
+        const data = await response.json();
+        csrfToken = data.data?.csrfToken || null;
+        console.log("✅ CSRF token fetched successfully");
+      }
+      csrfTokenPromise = null;
+      return csrfToken;
+    })
+    .catch((err) => {
+      console.error("❌ Failed to fetch CSRF token:", err);
+      csrfTokenPromise = null;
+      return null;
+    });
+
+  return csrfTokenPromise;
+}
+
+/**
+ * Clear CSRF token (call on CSRF errors)
+ */
+export function clearCsrfToken(): void {
+  csrfToken = null;
+  csrfTokenPromise = null;
+}
+
 /**
  * Base API response interface
  */
@@ -37,6 +79,7 @@ interface RequestOptions extends RequestInit {
   retry?: boolean;
   csrfToken?: string;
   timeout?: number;
+  skipCsrf?: boolean;
 }
 
 /**
@@ -64,21 +107,23 @@ async function refreshAccessToken(): Promise<boolean> {
  * Make an API request with automatic retry on 401
  * Uses httpOnly cookies for authentication (no tokens in JS)
  * Automatically refreshes token on 401 and retries once
+ * Automatically includes CSRF token for state-changing requests
  * 
  * @param endpoint - API endpoint (e.g., "/api/cards")
  * @param options - Request options
  * @returns Parsed response data
  */
-async function makeRequest<T>(
+export async function makeRequest<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { retry = true, csrfToken, timeout = 45000, ...fetchOptions } = options;
+  const { retry = true, csrfToken: providedCsrfToken, timeout = 45000, skipCsrf = false, ...fetchOptions } = options;
 
   const url = `${API_URL}${endpoint}`;
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    // Only set Content-Type to JSON if not FormData
+    ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
   };
 
   // Merge custom headers
@@ -89,15 +134,18 @@ async function makeRequest<T>(
     });
   }
 
-  // Add CSRF token for state-changing requests
-  if (
-    csrfToken &&
-    (fetchOptions.method === "POST" ||
-      fetchOptions.method === "PUT" ||
-      fetchOptions.method === "DELETE" ||
-      fetchOptions.method === "PATCH")
-  ) {
-    headers["X-CSRF-Token"] = csrfToken;
+  // Add CSRF token for state-changing requests (auto-fetch if not provided)
+  const isStateChanging =
+    fetchOptions.method === "POST" ||
+    fetchOptions.method === "PUT" ||
+    fetchOptions.method === "DELETE" ||
+    fetchOptions.method === "PATCH";
+
+  if (isStateChanging && !skipCsrf && !endpoint.includes("/api/csrf-token") && !endpoint.includes("/api/auth/google")) {
+    const token = providedCsrfToken || await fetchCsrfToken();
+    if (token) {
+      headers["X-CSRF-Token"] = token;
+    }
   }
 
   // Create abort controller for timeout
@@ -114,20 +162,40 @@ async function makeRequest<T>(
 
     clearTimeout(timeoutId);
 
+    // Handle CSRF errors
+    if (response.status === 403) {
+      const data = await response.clone().json().catch(() => ({}));
+      if (data.error?.code === "CSRF_ERROR") {
+        console.warn("🔐 CSRF error detected, refreshing token...");
+        clearCsrfToken();
+      }
+    }
+
     // Handle 401 Unauthorized - try to refresh token and retry
     if (response.status === 401 && retry && typeof window !== "undefined") {
-      console.log("Access token expired, attempting refresh...");
+      console.log("[ApiClient] 401 received, attempting token refresh...");
+      console.log(`[ApiClient] Current path: ${window.location.pathname}`);
 
       const refreshSuccess = await refreshAccessToken();
 
       if (refreshSuccess) {
-        console.log("Token refreshed successfully, retrying request...");
+        console.log("[ApiClient] ✅ Token refreshed successfully, retrying request...");
         // Retry with new token (disable retry to prevent infinite loop)
         return makeRequest<T>(endpoint, { ...options, retry: false });
       } else {
-        // Refresh failed, redirect to login
-        console.log("Token refresh failed, redirecting to login...");
-        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+        console.log("[ApiClient] ❌ Token refresh failed");
+
+        // IMPORTANT: Don't redirect if already on login page - this causes infinite loops
+        const currentPath = window.location.pathname;
+        if (currentPath === "/login") {
+          console.log("[ApiClient] Already on login page, NOT redirecting (prevents infinite loop)");
+          throw new ApiError(401, "Session expired. Please login again.", null);
+        }
+
+        // Redirect to login with next param
+        const nextParam = encodeURIComponent(currentPath);
+        console.log(`[ApiClient] 🔄 Redirecting to /login?next=${nextParam}`);
+        window.location.href = `/login?next=${nextParam}`;
         throw new ApiError(401, "Session expired. Please login again.", null);
       }
     }
@@ -155,7 +223,7 @@ async function makeRequest<T>(
     // Parse response
     const data: ApiResponse<T> = await response.json();
 
-    if (!data.success && data.error) {
+    if (data.success === false && data.error) {
       throw new ApiError(
         response.status,
         data.error || data.message || "Request failed",
@@ -163,10 +231,15 @@ async function makeRequest<T>(
       );
     }
 
-    return data.data as T;
+    // Return data.data if it exists AND success is defined (standard envelope), 
+    // otherwise return the whole response (custom format like TransactionListResponse)
+    if (data.success !== undefined && data.data !== undefined) {
+      return data.data as T;
+    }
+    return data as T;
   } catch (error) {
     clearTimeout(timeoutId);
-    
+
     if (error instanceof ApiError) {
       throw error;
     }

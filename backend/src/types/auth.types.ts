@@ -23,6 +23,9 @@ import { Request } from 'express';
 export interface User {
     id: string;
     email: string;
+    name?: string;
+    picture?: string;
+    is_admin?: boolean;
     created_at?: Date;
     updated_at?: Date;
     google_refresh_token?: string;

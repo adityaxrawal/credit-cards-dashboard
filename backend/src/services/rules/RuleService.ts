@@ -1,5 +1,5 @@
 
-import pool from '../../lib/db';
+import { RuleRepository, RuleRow } from '../../repositories/RuleRepository';
 import { ClassificationRule, RuleCriteria, RuleMatchResult } from '../../types/rules.types';
 import { Transaction } from '../../types/transaction.types';
 
@@ -9,33 +9,22 @@ export class RuleService {
      * Create a new rule
      */
     async createRule(userId: string, data: Partial<ClassificationRule>): Promise<ClassificationRule> {
-        const { rows } = await pool.query(
-            `INSERT INTO classification_rules (
-                user_id, name, priority, is_active, criteria, action
-            ) VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING *`,
-            [
-                userId,
-                data.name,
-                data.priority || 0,
-                data.isActive ?? true,
-                JSON.stringify(data.criteria),
-                JSON.stringify(data.action)
-            ]
+        const row = await RuleRepository.create(
+            userId,
+            data.name || 'Unnamed Rule',
+            data.priority || 0,
+            data.isActive ?? true,
+            data.criteria,
+            data.action
         );
-        return this.mapRule(rows[0]);
+        return this.mapRule(row);
     }
 
     /**
      * Get user rules
      */
     async getRules(userId: string): Promise<ClassificationRule[]> {
-        const { rows } = await pool.query(
-            `SELECT * FROM classification_rules 
-             WHERE user_id = $1 
-             ORDER BY priority DESC, created_at DESC`,
-            [userId]
-        );
+        const rows = await RuleRepository.findByUserId(userId);
         return rows.map(this.mapRule);
     }
 
@@ -56,26 +45,15 @@ export class RuleService {
 
         if (updates.length === 0) return null;
 
-        values.push(ruleId, userId);
-        const { rows } = await pool.query(
-            `UPDATE classification_rules 
-             SET ${updates.join(', ')}, updated_at = NOW()
-             WHERE id = $${idx++} AND user_id = $${idx++}
-             RETURNING *`,
-            values
-        );
-        return rows[0] ? this.mapRule(rows[0]) : null;
+        const row = await RuleRepository.update(ruleId, userId, updates, values);
+        return row ? this.mapRule(row) : null;
     }
 
     /**
      * Delete rule
      */
     async deleteRule(userId: string, ruleId: string): Promise<boolean> {
-        const { rowCount } = await pool.query(
-            'DELETE FROM classification_rules WHERE id = $1 AND user_id = $2',
-            [ruleId, userId]
-        );
-        return (rowCount || 0) > 0;
+        return RuleRepository.delete(ruleId, userId);
     }
 
     /**
@@ -138,7 +116,7 @@ export class RuleService {
         }
     }
 
-    private mapRule(row: any): ClassificationRule {
+    private mapRule(row: RuleRow): ClassificationRule {
         return {
             id: row.id,
             userId: row.user_id,

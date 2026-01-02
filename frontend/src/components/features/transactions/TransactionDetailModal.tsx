@@ -20,8 +20,8 @@ export function TransactionDetailModal({
 }: TransactionDetailModalProps) {
   if (!transaction) return null;
 
-  const gmailLink = transaction.gmail_message_id
-    ? GmailUtils.getMailLink(transaction.gmail_message_id)
+  const gmailLink = transaction.email_message_id
+    ? GmailUtils.getMailLink(transaction.email_message_id)
     : undefined;
 
   const gmailThreadLink = transaction.gmail_thread_id
@@ -93,7 +93,7 @@ export function TransactionDetailModal({
 
           {/* Bank */}
           <DetailRow label="Bank" icon={<Building2 className="w-4 h-4" />}>
-            <span>{transaction.card?.bank_name || transaction.bank_name || "Unknown Bank"}</span>
+            <span>{transaction.card?.bank_name || transaction.instrument_details?.bank_name || "Unknown Bank"}</span>
           </DetailRow>
 
           {/* Category */}
@@ -168,10 +168,10 @@ export function TransactionDetailModal({
             
             <div className="space-y-4">
               {/* Detection Method */}
-              {transaction.detection_method && (
+              {transaction.classification_method && (
                 <DetailRow label="Detection Method">
                   <Badge 
-                    label={transaction.detection_method === 'rule-based' ? 'Rule-based Pattern' : 'System Extracted'}
+                    label={transaction.classification_method === 'rule-based' ? 'Rule-based Pattern' : 'System Extracted'}
                     variant="secondary"
                   />
                 </DetailRow>
@@ -208,12 +208,8 @@ export function TransactionDetailModal({
                 </DetailRow>
               )}
 
-              {/* Pipeline Job */}
-              {transaction.scan_job_id && (
-                <DetailRow label="Pipeline Job">
-                  <span className="text-xs text-secondary-text font-mono">{transaction.scan_job_id.substring(0, 8)}...</span>
-                </DetailRow>
-              )}
+              {/* Pipeline Job (Deprecated/Metadata only) */}
+              {/* ScanJobId removed from core interface. If critical access via metadata */}
 
               {/* Manual Review Actions */}
               {transaction.needs_review && (

@@ -57,4 +57,13 @@ export class BankRepository {
         );
         return result.rows[0];
     }
+
+    static async findByNameNormalized(name: string): Promise<Bank | null> {
+        const result = await query('SELECT * FROM banks WHERE LOWER(name) = LOWER($1)', [name]);
+        return result.rows[0] || null;
+    }
+
+    static async delete(id: UUID): Promise<void> {
+        await query('DELETE FROM banks WHERE id = $1', [id]);
+    }
 }

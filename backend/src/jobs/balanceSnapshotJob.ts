@@ -1,5 +1,9 @@
-import pool from '../lib/db';
 import dayjs from 'dayjs';
+import { UserRepository } from '../repositories/UserRepository';
+import { InstrumentRepository } from '../repositories/InstrumentRepository';
+import { BalanceHistoryRepository } from '../repositories/BalanceHistoryRepository';
+import { DashboardRepository } from '../repositories/DashboardRepository';
+import { TransactionRepository } from '../repositories/TransactionRepository';
 
 /**
  * Balance Snapshot Scheduler
@@ -11,9 +15,7 @@ export async function runBalanceSnapshotJob() {
 
     try {
         // Get all active users
-        const { rows: users } = await pool.query(
-            'SELECT id FROM users WHERE is_active = true'
-        );
+        const users = await UserRepository.getAllActiveUsers();
 
         console.log(`[BalanceSnapshotJob] Processing ${users.length} users`);
 
@@ -23,65 +25,28 @@ export async function runBalanceSnapshotJob() {
         for (const user of users) {
             try {
                 // Get all active accounts for the user
-                const { rows: accounts } = await pool.query(
-                    `SELECT id, balance FROM instruments 
-           WHERE user_id = $1 AND is_active = true AND deleted_at IS NULL`,
-                    [user.id]
-                );
+                const accounts = await InstrumentRepository.findActiveByUserId(user.id);
 
                 for (const account of accounts) {
-                    // Check if snapshot already exists for today
-                    const { rows: existing } = await pool.query(
-                        `SELECT id FROM accounts_balance_history 
-             WHERE account_id = $1 AND snapshot_date = $2`,
-                        [account.id, snapshotDate]
+                    await BalanceHistoryRepository.recordSnapshot(
+                        user.id,
+                        account.id,
+                        snapshotDate,
+                        account.balance || 0,
+                        'daily'
                     );
-
-                    if (existing.length === 0) {
-                        // Create new snapshot
-                        await pool.query(
-                            `INSERT INTO accounts_balance_history 
-               (account_id, balance, snapshot_date, snapshot_type)
-               VALUES ($1, $2, $3, 'daily')`,
-                            [account.id, account.balance, snapshotDate]
-                        );
-                        totalSnapshots++;
-                    } else {
-                        // Update existing snapshot with latest balance
-                        await pool.query(
-                            `UPDATE accounts_balance_history 
-               SET balance = $2 WHERE id = $1`,
-                            [existing[0].id, account.balance]
-                        );
-                    }
+                    totalSnapshots++;
                 }
 
                 // Also capture net worth snapshot
-                const { rows: netWorthResult } = await pool.query(
-                    `SELECT 
-            COALESCE(SUM(CASE WHEN type NOT IN ('credit_card') THEN balance ELSE 0 END), 0) as assets,
-            COALESCE(SUM(CASE WHEN type = 'credit_card' THEN ABS(balance) ELSE 0 END), 0) as liabilities
-           FROM instruments 
-           WHERE user_id = $1 AND is_active = true AND deleted_at IS NULL`,
-                    [user.id]
-                );
-
-                const assets = parseFloat(netWorthResult[0].assets);
-                const liabilities = parseFloat(netWorthResult[0].liabilities);
-                const netWorth = assets - liabilities;
+                const netWorthData = await InstrumentRepository.calculateNetWorth(user.id);
 
                 // Store net worth in dashboard_snapshots
-                await pool.query(
-                    `INSERT INTO dashboard_snapshots 
-           (user_id, snapshot_date, snapshot_type, data)
-           VALUES ($1, $2, 'net_worth', $3)
-           ON CONFLICT (user_id, snapshot_date, snapshot_type)
-           DO UPDATE SET data = $3, created_at = NOW()`,
-                    [
-                        user.id,
-                        snapshotDate,
-                        JSON.stringify({ assets, liabilities, netWorth })
-                    ]
+                await DashboardRepository.saveSnapshot(
+                    user.id,
+                    snapshotDate,
+                    'net_worth',
+                    netWorthData
                 );
 
             } catch (error) {
@@ -104,9 +69,7 @@ export async function runMonthlySummarySnapshot() {
     console.log('[MonthlySummarySnapshot] Starting...');
 
     try {
-        const { rows: users } = await pool.query(
-            'SELECT id FROM users WHERE is_active = true'
-        );
+        const users = await UserRepository.getAllActiveUsers();
 
         const lastMonth = dayjs().subtract(1, 'month');
         const monthStart = lastMonth.startOf('month').format('YYYY-MM-DD');
@@ -116,54 +79,26 @@ export async function runMonthlySummarySnapshot() {
         for (const user of users) {
             try {
                 // Calculate monthly income and expenses
-                const { rows: summary } = await pool.query(
-                    `SELECT 
-            COALESCE(SUM(CASE WHEN direction = 'credit' AND category != 'Transfer' THEN amount ELSE 0 END), 0) as income,
-            COALESCE(SUM(CASE WHEN direction = 'debit' AND category != 'Transfer' THEN amount ELSE 0 END), 0) as expenses,
-            COUNT(DISTINCT id) as transaction_count
-           FROM transactions 
-           WHERE user_id = $1 
-           AND transaction_date BETWEEN $2 AND $3
-           AND is_transfer IS NOT TRUE`,
-                    [user.id, monthStart, monthEnd]
-                );
+                const summary = await TransactionRepository.getMonthlySummary(user.id, monthStart, monthEnd);
 
                 // Get category breakdown
-                const { rows: categories } = await pool.query(
-                    `SELECT category, 
-            SUM(amount) as total,
-            COUNT(*) as count
-           FROM transactions 
-           WHERE user_id = $1 
-           AND transaction_date BETWEEN $2 AND $3
-           AND direction = 'debit'
-           AND is_transfer IS NOT TRUE
-           GROUP BY category
-           ORDER BY total DESC`,
-                    [user.id, monthStart, monthEnd]
-                );
+                const categories = await TransactionRepository.getCategoryBreakdown(user.id, monthStart, monthEnd);
 
-                await pool.query(
-                    `INSERT INTO dashboard_snapshots 
-           (user_id, snapshot_date, snapshot_type, data)
-           VALUES ($1, $2, 'monthly_summary', $3)
-           ON CONFLICT (user_id, snapshot_date, snapshot_type)
-           DO UPDATE SET data = $3`,
-                    [
-                        user.id,
-                        snapshotDate,
-                        JSON.stringify({
-                            income: parseFloat(summary[0].income),
-                            expenses: parseFloat(summary[0].expenses),
-                            savings: parseFloat(summary[0].income) - parseFloat(summary[0].expenses),
-                            transactionCount: parseInt(summary[0].transaction_count),
-                            categoryBreakdown: categories.map(c => ({
-                                category: c.category,
-                                total: parseFloat(c.total),
-                                count: parseInt(c.count)
-                            }))
-                        })
-                    ]
+                await DashboardRepository.saveSnapshot(
+                    user.id,
+                    snapshotDate,
+                    'monthly_summary',
+                    {
+                        income: summary.income,
+                        expenses: summary.expenses,
+                        savings: summary.income - summary.expenses,
+                        transactionCount: summary.transaction_count,
+                        categoryBreakdown: categories.map(c => ({
+                            category: c.category,
+                            total: c.total,
+                            count: c.count
+                        }))
+                    }
                 );
 
             } catch (error) {

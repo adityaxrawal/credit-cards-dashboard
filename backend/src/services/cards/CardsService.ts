@@ -129,8 +129,8 @@ export async function getCardStatement(
   const billingPeriod = getBillingPeriodForMonth(card.bill_date, card.due_date, month, year);
 
   // Get transactions for this billing period
-  const transactionsQueries = await import('../../db/queries/transactions.queries');
-  const { data: transactions } = await transactionsQueries.listTransactions(userId, {
+  const { TransactionRepository } = await import('../../repositories/TransactionRepository');
+  const { data: transactions } = await TransactionRepository.list(userId, {
     cardId,
     from: billingPeriod.start,
     to: billingPeriod.end,

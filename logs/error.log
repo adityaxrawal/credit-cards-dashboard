@@ -1,0 +1,4 @@
+2026-01-01T20:30:36.935+05:30 [31merror[39m: [31mError executing query[39m {
+  "text": "-- Create notification_queue table\nCREATE TABLE IF NOT EXISTS notification_queue (\n    id UUID PRIMA",
+  "error": "Tenant or user not found"
+}

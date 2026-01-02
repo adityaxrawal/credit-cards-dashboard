@@ -1,4 +1,4 @@
-import pool from '../../../lib/db';
+import { LogRepository } from '../../../repositories/LogRepository';
 import logger from '../../../utils/infrastructure/logger';
 
 interface PeriodStats {
@@ -24,40 +24,17 @@ export class TransactionMonitor {
         const startDate = this.getPeriodStart(period);
 
         try {
-            const stats = await pool.query(
-                `SELECT 
-                    COUNT(*) as total_processed,
-                    SUM(CASE WHEN processing_status = 'terminated' THEN 1 ELSE 0 END) as terminated,
-                    COUNT(DISTINCT status_category) FILTER (WHERE processing_status = 'terminated') as termination_types,
-                    array_agg(DISTINCT status_category) FILTER (WHERE processing_status = 'terminated') as termination_categories
-                FROM email_processing_log
-                WHERE user_id = $1 AND processed_at >= $2`,
-                [userId, startDate]
-            );
+            const row = await LogRepository.getProcessingStats(userId, startDate);
 
             // Get classifier breakdown
-            const classifierStats = await pool.query(
-                `SELECT 
-                    classification_method,
-                    COUNT(*) as total,
-                    AVG(CAST(confidence_score AS FLOAT)) as avg_confidence
-                FROM email_processing_log
-                WHERE user_id = $1 
-                  AND processed_at >= $2
-                  AND processing_status != 'terminated'
-                  AND classification_method IS NOT NULL
-                GROUP BY classification_method
-                ORDER BY total DESC`,
-                [userId, startDate]
-            );
+            const classifierStatsRows = await LogRepository.getClassifierStats(userId, startDate);
 
-            const row = stats.rows[0];
             return {
                 totalProcessed: parseInt(row.total_processed, 10),
                 terminated: parseInt(row.terminated, 10),
                 terminationTypes: parseInt(row.termination_types, 10) || 0,
                 terminationCategories: row.termination_categories || [],
-                classifierStats: classifierStats.rows.map(r => ({
+                classifierStats: classifierStatsRows.map(r => ({
                     classification_method: r.classification_method,
                     total: parseInt(r.total, 10),
                     avg_confidence: parseFloat(r.avg_confidence)
@@ -81,22 +58,9 @@ export class TransactionMonitor {
         const startDate = this.getPeriodStart(period);
 
         try {
-            const stats = await pool.query(
-                `SELECT 
-                    classification_method,
-                    COUNT(*) as total,
-                    AVG(CAST(confidence_score AS FLOAT)) as avg_confidence,
-                    SUM(CASE WHEN processing_status = 'success' THEN 1 ELSE 0 END)::FLOAT / COUNT(*) as success_rate
-                FROM email_processing_log
-                WHERE processing_status IN ('success', 'failed')
-                  AND processed_at >= $1
-                  AND classification_method IS NOT NULL
-                GROUP BY classification_method
-                ORDER BY total DESC`,
-                [startDate]
-            );
+            const rows = await LogRepository.getClassifierAccuracy(startDate);
 
-            return stats.rows.map(r => ({
+            return rows.map(r => ({
                 classification_method: r.classification_method,
                 total: parseInt(r.total, 10),
                 avg_confidence: parseFloat(r.avg_confidence) || 0,
@@ -121,22 +85,10 @@ export class TransactionMonitor {
         totalTerminated: number;
     }> {
         try {
-            const result = await pool.query(
-                `SELECT 
-                    status_category,
-                    COUNT(*) as count,
-                    array_agg(reason) as reasons
-                FROM email_processing_log
-                WHERE user_id = $1 
-                  AND processing_status = 'terminated'
-                  AND processed_at BETWEEN $2 AND $3
-                GROUP BY status_category
-                ORDER BY count DESC`,
-                [userId, startDate, endDate]
-            );
+            const rows = await LogRepository.getTerminationReport(userId, startDate, endDate);
 
             // Limit examples in JS
-            const categories = result.rows.map(row => ({
+            const categories = rows.map(row => ({
                 status_category: row.status_category,
                 count: parseInt(row.count, 10),
                 examples: (row.reasons || []).slice(0, 5)

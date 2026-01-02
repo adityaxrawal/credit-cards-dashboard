@@ -1,5 +1,25 @@
 [
   {
+    "id": "9824bac2-581e-48e8-b52e-f1c91a9ebc83",
+    "emailId": "19b4c34331049eab",
+    "from": "HDFC Bank InstaAlerts <alerts@hdfcbank.net>",
+    "subject": "❗  You have done a UPI txn. Check details!",
+    "bodySnippet": "HDFC BANK --> @media screen and (min-device-width: 320px) and (max-device-width: 768px) { table { width: 100%; } .td { padding: 0px 25px; text-align: left; } .heading { text-align: center; padding: 0p",
+    "receivedAt": "2025-12-23T17:14:06.000Z",
+    "analyzedAt": "2026-01-01T21:55:30.607Z",
+    "potentialCategory": "Extraction Failed: bank_upi_debit"
+  },
+  {
+    "id": "02080964-ce2a-4dbf-9168-2234c8be9b9d",
+    "emailId": "19b56532becb2ed3",
+    "from": "HDFC Bank InstaAlerts <alerts@hdfcbank.net>",
+    "subject": "Rs.212.00 debited via Credit Card **0364",
+    "bodySnippet": "HDFC BANK --> @media screen and (min-device-width: 320px) and (max-device-width: 768px) { table { width: 100%; } .td { padding: 0px 25px; text-align: left; } .heading { text-align: center; padding: 0p",
+    "receivedAt": "2025-12-25T16:24:09.000Z",
+    "analyzedAt": "2026-01-01T21:30:22.005Z",
+    "potentialCategory": "Extraction Failed: cc_spend"
+  },
+  {
     "id": "7d9d9b63-621a-4c31-8c61-1b496a5315bb",
     "emailId": "182684ee65b5a011",
     "from": "The Google Account Team <google-noreply@google.com>",

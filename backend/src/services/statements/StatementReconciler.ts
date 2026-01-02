@@ -31,8 +31,8 @@ export class StatementReconciler {
 
         // 2. Fetch existing transactions
         const existingResult = await TransactionService.listTransactions(userId, {
-            from: fromDate,
-            to: toDate,
+            from: dayjs(firstDate).subtract(5, 'day').toDate(),
+            to: dayjs(lastDate).add(5, 'day').toDate(),
             limit: 1000 // Reasonable limit for a monthly statement
         });
 

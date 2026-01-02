@@ -1,4 +1,4 @@
-import pool from '../../lib/db';
+import { AccountsRepository, AccountRow, BalanceHistoryRow } from '../../repositories/AccountsRepository';
 
 export interface AccountInput {
     type: string;
@@ -64,89 +64,44 @@ export class AccountsService {
         userId: string,
         filters: { type?: string; status?: string } = {}
     ): Promise<Account[]> {
-        let query = `
-      SELECT 
-        i.*,
-        b.name as bank_name,
-        b.logo_url as bank_logo
-      FROM instruments i
-      LEFT JOIN banks b ON i.bank_id = b.id
-      WHERE i.user_id = $1
-    `;
-        const params: unknown[] = [userId];
-        let paramIndex = 2;
-
-        if (filters.type) {
-            query += ` AND i.type = $${paramIndex++}`;
-            params.push(filters.type);
-        }
-
-        if (filters.status) {
-            query += ` AND i.status = $${paramIndex++}`;
-            params.push(filters.status);
-        } else {
-            query += ` AND i.status != 'closed'`;
-        }
-
-        query += ` ORDER BY i.is_primary DESC, i.name ASC`;
-
-        const result = await pool.query(query, params);
-        return result.rows.map(this.mapToAccount);
+        const rows = await AccountsRepository.findAll(userId, filters);
+        return rows.map(this.mapToAccount);
     }
 
     /**
      * Get account by ID
      */
     async getById(userId: string, accountId: string): Promise<Account | null> {
-        const query = `
-      SELECT 
-        i.*,
-        b.name as bank_name,
-        b.logo_url as bank_logo
-      FROM instruments i
-      LEFT JOIN banks b ON i.bank_id = b.id
-      WHERE i.id = $1 AND i.user_id = $2
-    `;
-        const result = await pool.query(query, [accountId, userId]);
-
-        if (result.rows.length === 0) return null;
-        return this.mapToAccount(result.rows[0]);
+        const row = await AccountsRepository.findById(userId, accountId);
+        if (!row) return null;
+        return this.mapToAccount(row);
     }
 
     /**
      * Create a new account
      */
     async create(userId: string, input: AccountInput): Promise<Account> {
-        const query = `
-      INSERT INTO instruments (
-        user_id, type, bank_id, name, identifier, last4, 
-        balance, available_balance, currency, interest_rate,
-        opening_balance, provider_name, metadata, status
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'active'
-      )
-      RETURNING *
-    `;
-        const result = await pool.query(query, [
+        const row = await AccountsRepository.create({
             userId,
-            input.type,
-            input.bankId || null,
-            input.name,
-            input.identifier || null,
-            input.last4 || null,
-            input.balance || 0,
-            input.availableBalance || input.balance || 0,
-            input.currency || 'INR',
-            input.interestRate || null,
-            input.openingBalance || input.balance || 0,
-            input.providerName || null,
-            JSON.stringify(input.metadata || {}),
-        ]);
+            type: input.type,
+            name: input.name,
+            bankId: input.bankId,
+            identifier: input.identifier,
+            last4: input.last4,
+            balance: input.balance || 0,
+            availableBalance: input.availableBalance || input.balance || 0,
+            currency: input.currency || 'INR',
+            interestRate: input.interestRate,
+            openingBalance: input.openingBalance || input.balance || 0,
+            providerName: input.providerName,
+            metadata: input.metadata || {},
+        });
 
         // Create initial balance history entry
-        await this.createBalanceSnapshot(userId, result.rows[0].id, input.balance || 0);
+        const today = new Date().toISOString().split('T')[0];
+        await AccountsRepository.upsertBalanceSnapshot(row.id, userId, today, input.balance || 0);
 
-        return this.mapToAccount(result.rows[0]);
+        return this.mapToAccount(row);
     }
 
     /**
@@ -160,46 +115,25 @@ export class AccountsService {
         const existing = await this.getById(userId, accountId);
         if (!existing) return null;
 
-        const query = `
-      UPDATE instruments SET
-        name = COALESCE($3, name),
-        bank_id = COALESCE($4, bank_id),
-        identifier = COALESCE($5, identifier),
-        last4 = COALESCE($6, last4),
-        currency = COALESCE($7, currency),
-        interest_rate = COALESCE($8, interest_rate),
-        provider_name = COALESCE($9, provider_name),
-        metadata = COALESCE($10::jsonb, metadata),
-        updated_at = NOW()
-      WHERE id = $1 AND user_id = $2
-      RETURNING *
-    `;
-        const result = await pool.query(query, [
-            accountId,
-            userId,
-            input.name,
-            input.bankId,
-            input.identifier,
-            input.last4,
-            input.currency,
-            input.interestRate,
-            input.providerName,
-            input.metadata ? JSON.stringify(input.metadata) : null,
-        ]);
+        const row = await AccountsRepository.update(accountId, userId, {
+            name: input.name,
+            bankId: input.bankId,
+            identifier: input.identifier,
+            last4: input.last4,
+            currency: input.currency,
+            interestRate: input.interestRate,
+            providerName: input.providerName,
+            metadata: input.metadata,
+        });
 
-        return this.mapToAccount(result.rows[0]);
+        return row ? this.mapToAccount(row) : null;
     }
 
     /**
      * Soft delete an account
      */
     async delete(userId: string, accountId: string): Promise<void> {
-        const query = `
-      UPDATE instruments 
-      SET status = 'closed', closed_at = NOW(), updated_at = NOW()
-      WHERE id = $1 AND user_id = $2
-    `;
-        await pool.query(query, [accountId, userId]);
+        await AccountsRepository.softDelete(accountId, userId);
     }
 
     /**
@@ -211,25 +145,21 @@ export class AccountsService {
         newBalance: number,
         notes?: string
     ): Promise<{ account: Account; snapshot: BalanceHistoryEntry }> {
-        // Update balance
-        const updateQuery = `
-      UPDATE instruments 
-      SET balance = $3, available_balance = $3, updated_at = NOW()
-      WHERE id = $1 AND user_id = $2
-      RETURNING *
-    `;
-        const result = await pool.query(updateQuery, [accountId, userId, newBalance]);
+        const row = await AccountsRepository.updateBalance(accountId, userId, newBalance);
 
-        if (result.rows.length === 0) {
+        if (!row) {
             throw new Error('Account not found');
         }
 
         // Create balance history entry
-        const snapshot = await this.createBalanceSnapshot(userId, accountId, newBalance, notes);
+        const today = new Date().toISOString().split('T')[0];
+        const snapshotRow = await AccountsRepository.upsertBalanceSnapshot(
+            accountId, userId, today, newBalance, notes
+        );
 
         return {
-            account: this.mapToAccount(result.rows[0]),
-            snapshot,
+            account: this.mapToAccount(row),
+            snapshot: this.mapToBalanceHistory(snapshotRow),
         };
     }
 
@@ -241,35 +171,8 @@ export class AccountsService {
         accountId: string,
         options: { startDate?: string; endDate?: string } = {}
     ): Promise<BalanceHistoryEntry[]> {
-        let query = `
-      SELECT * FROM accounts_balance_history
-      WHERE instrument_id = $1 AND user_id = $2
-    `;
-        const params: unknown[] = [accountId, userId];
-        let paramIndex = 3;
-
-        if (options.startDate) {
-            query += ` AND snapshot_date >= $${paramIndex++}`;
-            params.push(options.startDate);
-        }
-
-        if (options.endDate) {
-            query += ` AND snapshot_date <= $${paramIndex++}`;
-            params.push(options.endDate);
-        }
-
-        query += ` ORDER BY snapshot_date DESC LIMIT 100`;
-
-        const result = await pool.query(query, params);
-        return result.rows.map(row => ({
-            id: row.id,
-            snapshotDate: row.snapshot_date,
-            balance: parseFloat(row.balance),
-            availableBalance: row.available_balance ? parseFloat(row.available_balance) : undefined,
-            isReconciled: row.is_reconciled,
-            reconciledAt: row.reconciled_at,
-            notes: row.notes,
-        }));
+        const rows = await AccountsRepository.getBalanceHistory(accountId, userId, options);
+        return rows.map(this.mapToBalanceHistory);
     }
 
     /**
@@ -282,50 +185,15 @@ export class AccountsService {
         notes?: string
     ): Promise<BalanceHistoryEntry> {
         const snapshotDate = date || new Date().toISOString().split('T')[0];
-
-        const query = `
-      INSERT INTO accounts_balance_history (
-        instrument_id, user_id, snapshot_date, balance, available_balance,
-        is_reconciled, reconciled_at, notes
-      )
-      SELECT 
-        $1, $2, $3, balance, available_balance, true, NOW(), $4
-      FROM instruments WHERE id = $1
-      ON CONFLICT (instrument_id, snapshot_date) 
-      DO UPDATE SET 
-        is_reconciled = true, 
-        reconciled_at = NOW(),
-        notes = COALESCE($4, accounts_balance_history.notes)
-      RETURNING *
-    `;
-        const result = await pool.query(query, [accountId, userId, snapshotDate, notes]);
-
-        const row = result.rows[0];
-        return {
-            id: row.id,
-            snapshotDate: row.snapshot_date,
-            balance: parseFloat(row.balance),
-            availableBalance: row.available_balance ? parseFloat(row.available_balance) : undefined,
-            isReconciled: row.is_reconciled,
-            reconciledAt: row.reconciled_at,
-            notes: row.notes,
-        };
+        const row = await AccountsRepository.reconcile(accountId, userId, snapshotDate, notes);
+        return this.mapToBalanceHistory(row);
     }
 
     /**
      * Get accounts summary with totals by type
      */
     async getSummary(userId: string): Promise<AccountsSummary> {
-        const query = `
-      SELECT 
-        type,
-        COUNT(*) as count,
-        SUM(COALESCE(balance, 0)) as total_balance
-      FROM instruments
-      WHERE user_id = $1 AND status = 'active'
-      GROUP BY type
-    `;
-        const result = await pool.query(query, [userId]);
+        const summaryRows = await AccountsRepository.getSummary(userId);
 
         const byType: Record<string, { count: number; totalBalance: number }> = {};
         let totalAccounts = 0;
@@ -334,7 +202,7 @@ export class AccountsService {
 
         const liabilityTypes = ['credit_card'];
 
-        for (const row of result.rows) {
+        for (const row of summaryRows) {
             const count = parseInt(row.count);
             const balance = parseFloat(row.total_balance) || 0;
 
@@ -349,12 +217,7 @@ export class AccountsService {
         }
 
         // Get loans outstanding
-        const loansQuery = `
-      SELECT COALESCE(SUM(current_outstanding), 0) as total
-      FROM loans WHERE user_id = $1 AND status = 'active'
-    `;
-        const loansResult = await pool.query(loansQuery, [userId]);
-        const loansOutstanding = parseFloat(loansResult.rows[0]?.total) || 0;
+        const loansOutstanding = await AccountsRepository.getLoansOutstanding(userId);
         totalLiabilities += loansOutstanding;
 
         return {
@@ -374,85 +237,60 @@ export class AccountsService {
         accountId: string,
         freeze: boolean
     ): Promise<Account> {
-        const query = `
-      UPDATE instruments 
-      SET is_frozen = $3, updated_at = NOW()
-      WHERE id = $1 AND user_id = $2
-      RETURNING *
-    `;
-        const result = await pool.query(query, [accountId, userId, freeze]);
+        const row = await AccountsRepository.toggleFreeze(accountId, userId, freeze);
 
-        if (result.rows.length === 0) {
+        if (!row) {
             throw new Error('Account not found');
         }
 
-        return this.mapToAccount(result.rows[0]);
-    }
-
-    /**
-     * Create a balance snapshot entry
-     */
-    private async createBalanceSnapshot(
-        userId: string,
-        accountId: string,
-        balance: number,
-        notes?: string
-    ): Promise<BalanceHistoryEntry> {
-        const today = new Date().toISOString().split('T')[0];
-
-        const query = `
-      INSERT INTO accounts_balance_history (
-        instrument_id, user_id, snapshot_date, balance, notes
-      ) VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (instrument_id, snapshot_date) 
-      DO UPDATE SET balance = $4, notes = COALESCE($5, accounts_balance_history.notes)
-      RETURNING *
-    `;
-        const result = await pool.query(query, [accountId, userId, today, balance, notes]);
-
-        const row = result.rows[0];
-        return {
-            id: row.id,
-            snapshotDate: row.snapshot_date,
-            balance: parseFloat(row.balance),
-            availableBalance: row.available_balance ? parseFloat(row.available_balance) : undefined,
-            isReconciled: row.is_reconciled,
-            reconciledAt: row.reconciled_at,
-            notes: row.notes,
-        };
+        return this.mapToAccount(row);
     }
 
     /**
      * Map database row to Account interface
      */
-    private mapToAccount(row: Record<string, unknown>): Account {
+    private mapToAccount(row: AccountRow): Account {
         return {
-            id: row.id as string,
-            userId: row.user_id as string,
-            type: row.type as string,
-            bankId: row.bank_id as string | undefined,
-            name: row.name as string,
-            identifier: row.identifier as string | undefined,
-            last4: row.last4 as string | undefined,
-            balance: parseFloat(row.balance as string) || 0,
+            id: row.id,
+            userId: row.user_id,
+            type: row.type,
+            bankId: row.bank_id ?? undefined,
+            name: row.name,
+            identifier: row.identifier ?? undefined,
+            last4: row.last4 ?? undefined,
+            balance: parseFloat(String(row.balance)) || 0,
             availableBalance: row.available_balance
-                ? parseFloat(row.available_balance as string)
+                ? parseFloat(String(row.available_balance))
                 : undefined,
-            currency: (row.currency as string) || 'INR',
-            status: row.status as string,
-            isPrimary: row.is_primary as boolean,
+            currency: row.currency || 'INR',
+            status: row.status,
+            isPrimary: row.is_primary || false,
             interestRate: row.interest_rate
-                ? parseFloat(row.interest_rate as string)
+                ? parseFloat(String(row.interest_rate))
                 : undefined,
             openingBalance: row.opening_balance
-                ? parseFloat(row.opening_balance as string)
+                ? parseFloat(String(row.opening_balance))
                 : undefined,
-            providerName: row.provider_name as string | undefined,
-            isFrozen: row.is_frozen as boolean || false,
-            closedAt: row.closed_at as Date | undefined,
-            metadata: row.metadata as Record<string, unknown> | undefined,
-            createdAt: row.created_at as Date,
-            updatedAt: row.updated_at as Date,
+            providerName: row.provider_name ?? undefined,
+            isFrozen: row.is_frozen || false,
+            closedAt: row.closed_at ?? undefined,
+            metadata: row.metadata ?? undefined,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+        };
+    }
+
+    private mapToBalanceHistory(row: BalanceHistoryRow): BalanceHistoryEntry {
+        return {
+            id: row.id,
+            snapshotDate: row.snapshot_date,
+            balance: parseFloat(String(row.balance)),
+            availableBalance: row.available_balance
+                ? parseFloat(String(row.available_balance))
+                : undefined,
+            isReconciled: row.is_reconciled,
+            reconciledAt: row.reconciled_at ?? undefined,
+            notes: row.notes ?? undefined,
         };
     }
 }

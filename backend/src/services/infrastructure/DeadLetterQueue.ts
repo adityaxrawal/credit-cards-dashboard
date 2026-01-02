@@ -1,10 +1,4 @@
-
-/**
- * Dead Letter Queue (DLQ)
- * Stores failed jobs/messages for manual review or later retry.
- */
-
-import pool from '../../lib/db';
+import { DlqRepository } from '../../repositories/DlqRepository';
 
 export interface DeadLetterMessage {
     id: string;
@@ -22,32 +16,20 @@ export class DeadLetterQueue {
      */
     static async push(source: string, payload: any, error: any) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-
-        await pool.query(
-            `INSERT INTO dead_letter_queue (source, payload, error, status, created_at)
-             VALUES ($1, $2, $3, 'PENDING', NOW())`,
-            [source, JSON.stringify(payload), errorMsg]
-        );
+        await DlqRepository.create(source, payload, errorMsg);
     }
 
     /**
      * Get pending messages for review
      */
     static async getPending(limit: number = 50) {
-        const res = await pool.query(
-            `SELECT * FROM dead_letter_queue WHERE status = 'PENDING' ORDER BY created_at DESC LIMIT $1`,
-            [limit]
-        );
-        return res.rows;
+        return await DlqRepository.getPending(limit);
     }
 
     /**
      * Mark message as resolved
      */
     static async resolve(id: string) {
-        await pool.query(
-            `UPDATE dead_letter_queue SET status = 'RESOLVED', updated_at = NOW() WHERE id = $1`,
-            [id]
-        );
+        await DlqRepository.markResolved(id);
     }
 }

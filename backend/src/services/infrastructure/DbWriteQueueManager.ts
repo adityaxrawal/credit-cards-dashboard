@@ -2,22 +2,21 @@
  * DbWriteQueueManager - High-performance, fault-tolerant DB write queue
  * 
  * Design:
- * - 5 independent queues for different write types
+ * - Independent queues for different write types (extensible via Strategy Pattern)
  * - Max batch size: 40 rows per bulk write (Supabase Free Tier safe)
  * - Flush on: size >= 40 OR timer expiry (250ms)
  * - Retry buffer with exponential backoff for failed batches
  * - Never blocks processing pipeline
+ * 
+ * Refactored: Issue #9 - Uses Strategy Pattern for table-specific flushing
  */
 
-import pool from '../../lib/db';
 import logger from '../../utils/infrastructure/logger';
 import { randomUUID } from 'crypto';
-import { createTransactionsBulk } from '../../db/queries/transactions.queries';
+import { FlushStrategy, defaultStrategies } from './strategies';
 
 // Queue types
 export type DbWriteTable = 'scanned_emails' | 'transactions' | 'terminations' | 'job_stats' | 'scanned_email_updates' | 'processing_logs';
-
-
 
 export interface DbWriteJob {
     id: string;
@@ -160,19 +159,33 @@ class DbWriteQueue {
 
 /**
  * Main Queue Manager - Singleton
+ * 
+ * Uses Strategy Pattern for table-specific flush implementations.
+ * Strategies are injected via constructor, enabling:
+ * - Open/Closed Principle: Add new tables without modifying this class
+ * - Testability: Mock strategies for unit testing queue mechanics
+ * - Low coupling: Queue infrastructure decoupled from data models
  */
 export class DbWriteQueueManager {
     private queues: Map<DbWriteTable, DbWriteQueue> = new Map();
+    private strategies: Map<DbWriteTable, FlushStrategy> = new Map();
     private static instance: DbWriteQueueManager;
 
-    private constructor() {
-        // Initialize queues with their flush functions
-        this.queues.set('scanned_emails', new DbWriteQueue('scanned_emails', this.flushScannedEmails.bind(this)));
-        this.queues.set('transactions', new DbWriteQueue('transactions', this.flushTransactions.bind(this)));
-        this.queues.set('terminations', new DbWriteQueue('terminations', this.flushTerminations.bind(this)));
-        this.queues.set('job_stats', new DbWriteQueue('job_stats', this.flushJobStats.bind(this)));
-        this.queues.set('scanned_email_updates', new DbWriteQueue('scanned_email_updates', this.flushScannedEmailUpdates.bind(this)));
-        this.queues.set('processing_logs', new DbWriteQueue('processing_logs', this.flushProcessingLogs.bind(this)));
+    private constructor(strategies: FlushStrategy[] = defaultStrategies) {
+        // Register all provided strategies
+        strategies.forEach(s => this.registerStrategy(s));
+    }
+
+    /**
+     * Register a flush strategy for a table
+     * Creates the corresponding queue with the strategy's flush function
+     */
+    registerStrategy(strategy: FlushStrategy): void {
+        this.strategies.set(strategy.table, strategy);
+        this.queues.set(strategy.table, new DbWriteQueue(
+            strategy.table,
+            strategy.flush.bind(strategy)
+        ));
     }
 
     static getInstance(): DbWriteQueueManager {
@@ -183,12 +196,19 @@ export class DbWriteQueueManager {
     }
 
     /**
+     * Create a new instance with custom strategies (for testing)
+     */
+    static createWithStrategies(strategies: FlushStrategy[]): DbWriteQueueManager {
+        return new DbWriteQueueManager(strategies);
+    }
+
+    /**
      * Enqueue a write job - returns immediately, never blocks
      */
     enqueue(table: DbWriteTable, data: Record<string, unknown>, callbacks?: { onComplete?: () => void; onError?: (err: Error) => void }): string {
         const queue = this.queues.get(table);
         if (!queue) {
-            throw new Error(`Unknown table: ${table}`);
+            throw new Error(`Unknown table: ${table}. No strategy registered.`);
         }
 
         const jobId = randomUUID();
@@ -279,294 +299,11 @@ export class DbWriteQueueManager {
         }));
     }
 
-    // ========================================
-    // FLUSH IMPLEMENTATIONS
-    // ========================================
-
-    private async flushScannedEmails(jobs: DbWriteJob[]): Promise<void> {
-        if (jobs.length === 0) return;
-
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-
-            const values: unknown[] = [];
-            const placeholders: string[] = [];
-            let paramIndex = 1;
-
-            for (const job of jobs) {
-                const d = job.data;
-                placeholders.push(
-                    `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, NOW())`
-                );
-                values.push(
-                    d.id, // Explicit ID from client
-                    d.userId,
-                    d.messageId,
-                    d.internalDate,
-                    d.snippet || '',
-                    d.jobId
-                );
-                paramIndex += 6;
-            }
-
-            await client.query(
-                `INSERT INTO gmail_scanned_emails (id, user_id, message_id, internal_date, raw_snippet, scan_job_id, scanned_at)
-         VALUES ${placeholders.join(', ')}
-         ON CONFLICT(user_id, message_id) DO UPDATE SET scan_job_id = EXCLUDED.scan_job_id`,
-                values
-            );
-
-            await client.query('COMMIT');
-            logger.debug(`[DbWriteQueue:scanned_emails] Flushed ${jobs.length} items`);
-        } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-        } finally {
-            client.release();
-        }
-    }
-
-    private async flushProcessingLogs(jobs: DbWriteJob[]): Promise<void> {
-        if (jobs.length === 0) return;
-
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-
-            const values: unknown[] = [];
-            const placeholders: string[] = [];
-            let paramIndex = 1;
-
-            for (const job of jobs) {
-                const d = job.data;
-                placeholders.push(
-                    `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, NOW())`
-                );
-                values.push(
-                    d.userId,
-                    d.emailMessageId,
-                    d.reason,
-                    d.stage,
-                    d.statusCategory,
-                    d.processingStatus,
-                    d.scanJobId,
-                    d.rawEmailId || null
-                );
-                paramIndex += 8;
-            }
-
-            await client.query(
-                `INSERT INTO email_processing_log 
-                 (user_id, email_message_id, reason, stage, status_category, 
-                  processing_status, scan_job_id, raw_email_id, processed_at)
-                 VALUES ${placeholders.join(', ')}
-                 ON CONFLICT (email_message_id) DO UPDATE SET 
-                    scan_job_id = EXCLUDED.scan_job_id,
-                    reason = EXCLUDED.reason,
-                    processed_at = NOW()`,
-                values
-            );
-
-            await client.query('COMMIT');
-            logger.debug(`[DbWriteQueue:processing_logs] Flushed ${jobs.length} items`);
-        } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-        } finally {
-            client.release();
-        }
-    }
-
-
-
-    private async flushTransactions(jobs: DbWriteJob[]): Promise<void> {
-        if (jobs.length === 0) return;
-
-        try {
-            // Map jobs to the expected format for createTransactionsBulk
-            const transactionsData = jobs.map(job => {
-                const d = job.data;
-                // Ensure explicit casting/conversion where necessary
-                return {
-                    id: d.id as string,
-                    userId: d.userId as string,
-                    instrumentType: d.instrumentType as string | undefined,
-                    instrumentId: d.instrumentId as string | undefined,
-                    cardId: d.cardId as string | undefined,
-                    transactionDate: new Date(d.transactionDate as string | number | Date),
-                    merchant: d.merchant as string,
-                    category: d.category as string,
-                    amount: Number(d.amount),
-                    transactionType: d.transactionType as string,
-                    direction: d.direction as string | undefined,
-                    counterpartyName: d.counterpartyName as string | undefined,
-                    counterpartyIdentifier: d.counterpartyIdentifier as string | undefined,
-                    referenceNumber: d.referenceNumber as string | undefined,
-                    description: d.description as string | undefined,
-                    billMonth: d.billMonth as number | undefined,
-                    billYear: d.billYear as number | undefined,
-                    emailMessageId: d.emailMessageId as string | undefined,
-                    emailSubject: d.emailSubject as string | undefined,
-                    emailSender: d.emailSender as string | undefined,
-                    txnFingerprint: d.txnFingerprint as string | undefined,
-                    isManuallyAdded: d.isManuallyAdded as boolean | undefined,
-                    metadata: d.metadata as any,
-                    exactTimestamp: d.exactTimestamp ? new Date(d.exactTimestamp as string | number | Date) : undefined,
-                    gmailThreadId: d.gmailThreadId as string | undefined,
-                    gmailAccountIndex: d.gmailAccountIndex as number | undefined,
-                    currencyCode: d.currencyCode as string | undefined,
-                    originalAmount: d.originalAmount as number | undefined,
-                    transactionSubtype: d.transactionSubtype as string | undefined,
-                    classificationMethod: d.classificationMethod as string | undefined,
-                    confidenceScore: d.confidenceScore as number | undefined,
-                    needsReview: d.needsReview as boolean | undefined,
-                    reviewReason: d.reviewReason as string | undefined,
-                    rawExtraction: d.rawExtraction as any,
-                    scanJobId: d.scanJobId as string | undefined,
-                    rawEmailId: d.rawEmailId as string | undefined,
-                };
-            });
-
-            await createTransactionsBulk(transactionsData);
-
-            logger.debug(`[DbWriteQueue:transactions] Flushed ${jobs.length} items via bulk insert`);
-        } catch (error) {
-            // Re-throw to trigger retry logic in base class
-            throw error;
-        }
-    }
-
-    private async flushTerminations(jobs: DbWriteJob[]): Promise<void> {
-        if (jobs.length === 0) return;
-
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-
-            const values: unknown[] = [];
-            const placeholders: string[] = [];
-            let paramIndex = 1;
-
-            for (const job of jobs) {
-                const d = job.data;
-                placeholders.push(
-                    `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, NOW())`
-                );
-                values.push(
-                    d.userId,
-                    d.emailId,
-                    d.reason,
-                    d.stage,
-                    d.type,
-                    d.scanJobId,
-                    d.rawEmailId || null
-                );
-                paramIndex += 7;
-            }
-
-            await client.query(
-                `INSERT INTO terminated_emails (user_id, email_id, reason, stage, type, scan_job_id, raw_email_id, created_at)
-         VALUES ${placeholders.join(', ')}
-         ON CONFLICT DO NOTHING`,
-                values
-            );
-
-            await client.query('COMMIT');
-            logger.debug(`[DbWriteQueue:terminations] Flushed ${jobs.length} items`);
-        } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-        } finally {
-            client.release();
-        }
-    }
-
-    private async flushJobStats(jobs: DbWriteJob[]): Promise<void> {
-        // Job stats are UPDATE operations, not INSERT
-        // Take the latest update for each jobId and apply it
-        const latestByJob = new Map<string, DbWriteJob>();
-        for (const job of jobs) {
-            latestByJob.set(job.data.jobId as string, job);
-        }
-
-        const jobs_arr = Array.from(latestByJob.values());
-        for (const job of jobs_arr) {
-            const d = job.data;
-            try {
-                await pool.query(
-                    `UPDATE gmail_sync_jobs 
-           SET total_messages = $1, 
-               emails_fetched = $1,
-               processed_count = $2,
-               progress = $3,
-               rule_based_success = $4, 
-               rule_based_failure = $5,
-               queued_for_gpt = $6,
-               terminated_count = $7, 
-               errors = $8::jsonb,
-               last_update_at = NOW()
-           WHERE id = $9`,
-                    [
-                        d.total,
-                        d.processed,
-                        d.progress,
-                        d.success,
-                        d.failed,
-                        d.needsReview,
-                        d.terminated,
-                        JSON.stringify(d.errors || []),
-                        d.jobId
-                    ]
-                );
-            } catch (error) {
-                logger.error(`[DbWriteQueue:job_stats] Failed to update job ${d.jobId}`, error);
-            }
-        }
-        logger.debug(`[DbWriteQueue:job_stats] Flushed ${latestByJob.size} job updates`);
-    }
-
-    private async flushScannedEmailUpdates(jobs: DbWriteJob[]): Promise<void> {
-        if (jobs.length === 0) return;
-
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-
-            // Group updates by userId for efficient batch updates
-            const updatesByUser = new Map<string, Array<{ messageId: string; transactionId?: string }>>();
-
-            for (const job of jobs) {
-                const d = job.data;
-                const userId = d.userId as string;
-                if (!updatesByUser.has(userId)) {
-                    updatesByUser.set(userId, []);
-                }
-                updatesByUser.get(userId)!.push({
-                    messageId: d.messageId as string,
-                    transactionId: d.transactionId as string | undefined,
-                });
-            }
-
-            const entries = Array.from(updatesByUser.entries());
-            for (const [userId, updates] of entries) {
-                const messageIds = updates.map(u => u.messageId);
-                await client.query(
-                    `UPDATE gmail_scanned_emails 
-           SET processed = true, processed_at = NOW()
-           WHERE user_id = $1 AND message_id = ANY($2)`,
-                    [userId, messageIds]
-                );
-            }
-
-            await client.query('COMMIT');
-            logger.debug(`[DbWriteQueue:scanned_email_updates] Flushed ${jobs.length} items`);
-        } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-        } finally {
-            client.release();
-        }
+    /**
+     * Get registered strategies (for debugging/introspection)
+     */
+    getRegisteredTables(): DbWriteTable[] {
+        return Array.from(this.strategies.keys());
     }
 }
 

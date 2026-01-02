@@ -48,7 +48,7 @@ export default function GoalsClient() {
         goalsApi.getAll({ status: filter === "all" ? undefined : filter }),
         goalsApi.getSummary(),
       ]);
-      setGoals(goalsData);
+      setGoals(Array.isArray(goalsData) ? goalsData : []);
       setSummary(summaryData);
     } catch (error) {
       console.error("Failed to load goals:", error);
@@ -128,7 +128,7 @@ export default function GoalsClient() {
 
         {/* Goals Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {goals.map((goal) => {
+          {Array.isArray(goals) && goals.map((goal) => {
             const config = goalTypeConfig[goal.goalType] || goalTypeConfig.other;
             const IconComponent = config.icon;
             const color = goal.color || config.color;

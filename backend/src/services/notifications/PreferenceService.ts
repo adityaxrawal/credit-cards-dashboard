@@ -3,8 +3,12 @@
  * Manages user notification preferences and settings
  */
 
-import pool from '../../lib/db';
+import { NotificationRepository, NotificationPreferenceRow } from '../../repositories/NotificationRepository';
+import { NotificationQueueRepository } from '../../repositories/NotificationQueueRepository';
 import logger from '../../utils/infrastructure/logger';
+import { EmailService } from './EmailService';
+import { PushNotificationService } from './PushNotificationService';
+import dayjs from 'dayjs';
 
 export interface NotificationPreferences {
     id: string;
@@ -25,38 +29,22 @@ export class PreferenceService {
      * Get user notification preferences
      */
     static async getPreferences(userId: string): Promise<NotificationPreferences | null> {
-        const result = await pool.query(
-            `SELECT * FROM notification_preferences WHERE user_id = $1`,
-            [userId]
-        );
+        const row = await NotificationRepository.getPreferences(userId);
 
-        if (result.rows.length === 0) {
+        if (!row) {
             // Create default preferences
             return this.createDefaultPreferences(userId);
         }
 
-        return this.mapRowToPreferences(result.rows[0]);
+        return this.mapRowToPreferences(row);
     }
 
     /**
      * Create default preferences for a user
      */
     static async createDefaultPreferences(userId: string): Promise<NotificationPreferences> {
-        const result = await pool.query(
-            `INSERT INTO notification_preferences (
-                user_id, 
-                email_enabled, 
-                push_enabled, 
-                large_transaction_threshold,
-                budget_warning_threshold,
-                bill_reminder_days
-            ) VALUES ($1, true, true, 10000, 80, 3)
-            ON CONFLICT (user_id) DO UPDATE SET updated_at = NOW()
-            RETURNING *`,
-            [userId]
-        );
-
-        return this.mapRowToPreferences(result.rows[0]);
+        const row = await NotificationRepository.createDefaultPreferences(userId);
+        return this.mapRowToPreferences(row);
     }
 
     /**
@@ -101,20 +89,18 @@ export class PreferenceService {
 
         setClause.push('updated_at = NOW()');
 
-        const result = await pool.query(
-            `UPDATE notification_preferences 
-             SET ${setClause.join(', ')} 
-             WHERE user_id = $1 
-             RETURNING *`,
+        const row = await NotificationRepository.updatePreferences(
+            userId,
+            setClause.join(', '),
             params
         );
 
-        if (result.rows.length === 0) {
+        if (!row) {
             // Create if doesn't exist
             return this.createDefaultPreferences(userId);
         }
 
-        return this.mapRowToPreferences(result.rows[0]);
+        return this.mapRowToPreferences(row);
     }
 
     /**
@@ -156,7 +142,7 @@ export class PreferenceService {
     /**
      * Map database row to preferences object
      */
-    private static mapRowToPreferences(row: any): NotificationPreferences {
+    private static mapRowToPreferences(row: NotificationPreferenceRow): NotificationPreferences {
         return {
             id: row.id,
             userId: row.user_id,
@@ -198,8 +184,11 @@ export class PreferenceService {
 
         // Check if in quiet hours
         if (await this.isQuietHours(userId)) {
-            logger.info(`Skipping alert for user ${userId} - quiet hours active`);
-            // Queue for later instead (not implemented yet)
+            logger.info(`Queuing alert for user ${userId} - quiet hours active`);
+            await NotificationQueueRepository.addToQueue(userId, 'large_transaction', {
+                transaction,
+                prefs
+            });
             return { emailSent: false, pushSent: false };
         }
 
@@ -238,28 +227,15 @@ export class PreferenceService {
         prefs: NotificationPreferences
     ): Promise<boolean> {
         try {
-            // Get user email
-            const userResult = await pool.query(
-                `SELECT email FROM users WHERE id = $1`,
-                [userId]
-            );
+            const email = await NotificationRepository.getUserEmail(userId);
+            if (!email) return false;
 
-            if (userResult.rows.length === 0) return false;
-
-            const email = userResult.rows[0].email;
-            const formattedAmount = `₹${transaction.amount.toLocaleString('en-IN')}`;
-
-            // Log for now - in production, integrate with email service
-            logger.info(`[EMAIL ALERT] To: ${email} - Large transaction of ${formattedAmount} at ${transaction.merchant}`);
-
-            // TODO: Integrate with actual email service (SendGrid, AWS SES, etc.)
-            // await emailService.send({
-            //     to: email,
-            //     subject: `Large Transaction Alert: ${formattedAmount}`,
-            //     body: `A transaction of ${formattedAmount} was made at ${transaction.merchant}`
-            // });
-
-            return true;
+            return await EmailService.sendLargeTransactionAlert(email, {
+                amount: transaction.amount,
+                merchant: transaction.merchant,
+                date: transaction.transactionDate,
+                threshold: prefs.largeTransactionThreshold
+            });
         } catch (error) {
             logger.error('Failed to send large transaction email', error);
             return false;
@@ -275,29 +251,10 @@ export class PreferenceService {
         prefs: NotificationPreferences
     ): Promise<boolean> {
         try {
-            // Get user's push subscriptions
-            const subsResult = await pool.query(
-                `SELECT endpoint, p256dh_key, auth_key FROM push_subscriptions WHERE user_id = $1`,
-                [userId]
-            );
-
-            if (subsResult.rows.length === 0) return false;
-
-            const formattedAmount = `₹${transaction.amount.toLocaleString('en-IN')}`;
-
-            // Log for now - in production, use web-push library
-            logger.info(`[PUSH ALERT] User: ${userId} - Large transaction of ${formattedAmount} at ${transaction.merchant}`);
-
-            // TODO: Integrate with web-push
-            // for (const sub of subsResult.rows) {
-            //     await webpush.sendNotification(sub, JSON.stringify({
-            //         title: 'Large Transaction Alert',
-            //         body: `${formattedAmount} at ${transaction.merchant}`,
-            //         icon: '/icons/alert.png'
-            //     }));
-            // }
-
-            return true;
+            return await PushNotificationService.sendLargeTransactionAlert(userId, {
+                amount: transaction.amount,
+                merchant: transaction.merchant
+            });
         } catch (error) {
             logger.error('Failed to send large transaction push', error);
             return false;
@@ -313,16 +270,10 @@ export class PreferenceService {
         details: Record<string, any>
     ): Promise<void> {
         try {
-            await pool.query(
-                `INSERT INTO notification_logs (user_id, alert_type, details, created_at)
-                 VALUES ($1, $2, $3, NOW())
-                 ON CONFLICT DO NOTHING`,
-                [userId, alertType, JSON.stringify(details)]
-            );
+            await NotificationRepository.logAlert(userId, alertType, details);
         } catch (error) {
             // Non-critical - just log the error
             logger.warn('Failed to log alert', error);
         }
     }
 }
-

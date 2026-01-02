@@ -42,7 +42,7 @@ export default function LoansClient() {
         loansApi.getAll({ status: filter === "all" ? undefined : filter }),
         loansApi.getSummary(),
       ]);
-      setLoans(loansData);
+      setLoans(Array.isArray(loansData) ? loansData : []);
       setSummary(summaryData);
     } catch (error) {
       console.error("Failed to load loans:", error);
@@ -99,7 +99,7 @@ export default function LoansClient() {
         )}
 
         {/* Upcoming EMIs */}
-        {summary && summary.upcomingEmis.length > 0 && (
+        {summary?.upcomingEmis && summary.upcomingEmis.length > 0 && (
           <div className="bg-card-bg rounded-xl p-5 border border-muted-text/10">
             <h3 className="text-lg font-semibold text-primary-text mb-4 flex items-center gap-2">
               <Clock className="w-5 h-5 text-accent-orange" />
@@ -144,7 +144,7 @@ export default function LoansClient() {
 
         {/* Loans List */}
         <div className="space-y-4">
-          {loans.map((loan) => {
+          {Array.isArray(loans) && loans.map((loan) => {
             const config = loanTypeConfig[loan.loanType] || loanTypeConfig.other;
             const IconComponent = config.icon;
             const progressPercent = loan.principalAmount > 0 

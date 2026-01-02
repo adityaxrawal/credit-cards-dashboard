@@ -1,4 +1,4 @@
-import pool from '../../lib/db';
+import { ActivityLogRepository, ActivityLogRow } from '../../repositories/ActivityLogRepository';
 import dayjs from 'dayjs';
 
 /**
@@ -53,33 +53,24 @@ export class ActivityLoggingService {
      * For data mutation auditing (Changes to transactions, accounts, etc.), 
      * use AuditTrailService.
      */
-    /**
-     * Log an activity
-     */
     async logActivity(input: ActivityLogInput): Promise<string> {
         // Parse device info from user agent
         const deviceInfo = this.parseUserAgent(input.userAgent);
 
-        const { rows } = await pool.query(
-            `INSERT INTO user_activity_log 
-       (user_id, activity_type, description, metadata, ip_address, user_agent, device_info, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-       RETURNING id`,
-            [
-                input.userId,
-                input.activityType,
-                input.description,
-                input.metadata ? JSON.stringify(input.metadata) : null,
-                input.ipAddress,
-                input.userAgent,
-                deviceInfo ? JSON.stringify(deviceInfo) : null,
-            ]
-        );
+        const id = await ActivityLogRepository.create({
+            userId: input.userId,
+            activityType: input.activityType,
+            description: input.description,
+            metadata: input.metadata,
+            ipAddress: input.ipAddress,
+            userAgent: input.userAgent,
+            deviceInfo,
+        });
 
         // Check for suspicious patterns
         await this.checkSuspiciousActivity(input);
 
-        return rows[0].id;
+        return id;
     }
 
     /**
@@ -97,10 +88,10 @@ export class ActivityLoggingService {
 
         // Track failed login attempts
         if (!success) {
-            await this.trackFailedLogin(userId, ipAddress);
+            await ActivityLogRepository.trackFailedLogin(userId, ipAddress);
         } else {
             // Clear failed login counter on success
-            await this.clearFailedLogins(userId, ipAddress);
+            await ActivityLogRepository.clearFailedLogins(userId, ipAddress);
         }
     }
 
@@ -170,32 +161,12 @@ export class ActivityLoggingService {
             limit?: number;
         }
     ): Promise<ActivityLog[]> {
-        let query = `SELECT * FROM user_activity_log WHERE user_id = $1`;
-        const params: any[] = [userId];
-        let paramIndex = 2;
-
-        if (filters?.activityType) {
-            query += ` AND activity_type = $${paramIndex}`;
-            params.push(filters.activityType);
-            paramIndex++;
-        }
-
-        if (filters?.startDate) {
-            query += ` AND created_at >= $${paramIndex}`;
-            params.push(filters.startDate);
-            paramIndex++;
-        }
-
-        if (filters?.endDate) {
-            query += ` AND created_at <= $${paramIndex}`;
-            params.push(filters.endDate);
-            paramIndex++;
-        }
-
-        query += ` ORDER BY created_at DESC LIMIT $${paramIndex}`;
-        params.push(filters?.limit || 50);
-
-        const { rows } = await pool.query(query, params);
+        const rows = await ActivityLogRepository.findByUserId(userId, {
+            activityType: filters?.activityType,
+            startDate: filters?.startDate,
+            endDate: filters?.endDate,
+            limit: filters?.limit,
+        });
         return rows.map(row => this.mapActivityRow(row));
     }
 
@@ -203,14 +174,7 @@ export class ActivityLoggingService {
      * Get login history
      */
     async getLoginHistory(userId: string, limit: number = 10): Promise<ActivityLog[]> {
-        const { rows } = await pool.query(
-            `SELECT * FROM user_activity_log 
-       WHERE user_id = $1 AND activity_type IN ('login', 'failed_login', 'logout')
-       ORDER BY created_at DESC
-       LIMIT $2`,
-            [userId, limit]
-        );
-
+        const rows = await ActivityLogRepository.getLoginHistory(userId, limit);
         return rows.map(row => this.mapActivityRow(row));
     }
 
@@ -218,20 +182,7 @@ export class ActivityLoggingService {
      * Get active sessions (based on login/logout pattern)
      */
     async getActiveSessions(userId: string): Promise<any[]> {
-        const { rows } = await pool.query(
-            `WITH login_events AS (
-        SELECT id, ip_address, user_agent, device_info, created_at,
-               ROW_NUMBER() OVER (PARTITION BY ip_address ORDER BY created_at DESC) as rn
-        FROM user_activity_log
-        WHERE user_id = $1 AND activity_type = 'login'
-        AND created_at >= NOW() - INTERVAL '7 days'
-      )
-      SELECT * FROM login_events
-      WHERE rn = 1
-      ORDER BY created_at DESC`,
-            [userId]
-        );
-
+        const rows = await ActivityLogRepository.getActiveLoginSessions(userId);
         return rows.map(row => ({
             id: row.id,
             ipAddress: row.ip_address,
@@ -252,20 +203,7 @@ export class ActivityLoggingService {
         uniqueIps: number;
     }> {
         const startDate = dayjs().subtract(days, 'day').format('YYYY-MM-DD');
-
-        const { rows } = await pool.query(
-            `SELECT 
-        COUNT(*) as total,
-        COUNT(DISTINCT ip_address) as unique_ips,
-        COUNT(*) FILTER (WHERE activity_type = 'login') as logins,
-        COUNT(*) FILTER (WHERE activity_type = 'failed_login') as failed_logins,
-        activity_type,
-        COUNT(*) as type_count
-       FROM user_activity_log
-       WHERE user_id = $1 AND created_at >= $2
-       GROUP BY activity_type`,
-            [userId, startDate]
-        );
+        const rows = await ActivityLogRepository.getActivitySummary(userId, startDate);
 
         const byType: Record<string, number> = {};
         let totalActivities = 0;
@@ -296,20 +234,14 @@ export class ActivityLoggingService {
     private async checkSuspiciousActivity(input: ActivityLogInput): Promise<void> {
         // Check for multiple failed logins
         if (input.activityType === 'failed_login') {
-            const { rows } = await pool.query(
-                `SELECT COUNT(*) as count FROM user_activity_log
-         WHERE user_id = $1 
-         AND activity_type = 'failed_login'
-         AND created_at >= NOW() - INTERVAL '15 minutes'`,
-                [input.userId]
-            );
+            const count = await ActivityLogRepository.countFailedLoginsInWindow(input.userId, 15);
 
-            if (parseInt(rows[0].count) >= 5) {
+            if (count >= 5) {
                 await this.logActivity({
                     userId: input.userId,
                     activityType: 'suspicious_activity',
                     description: 'Multiple failed login attempts detected',
-                    metadata: { failedAttempts: rows[0].count, timeWindow: '15 minutes' },
+                    metadata: { failedAttempts: count, timeWindow: '15 minutes' },
                     ipAddress: input.ipAddress,
                 });
             }
@@ -317,15 +249,9 @@ export class ActivityLoggingService {
 
         // Check for unusual location (new IP)
         if (input.activityType === 'login' && input.ipAddress) {
-            const { rows } = await pool.query(
-                `SELECT COUNT(*) as count FROM user_activity_log
-         WHERE user_id = $1 
-         AND ip_address = $2
-         AND activity_type = 'login'`,
-                [input.userId, input.ipAddress]
-            );
+            const count = await ActivityLogRepository.countLoginsFromIp(input.userId, input.ipAddress);
 
-            if (parseInt(rows[0].count) === 0) {
+            if (count === 0) {
                 await this.logActivity({
                     userId: input.userId,
                     activityType: 'suspicious_activity',
@@ -335,23 +261,6 @@ export class ActivityLoggingService {
                 });
             }
         }
-    }
-
-    private async trackFailedLogin(userId: string, ipAddress?: string): Promise<void> {
-        await pool.query(
-            `INSERT INTO failed_login_attempts (user_id, ip_address, attempted_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT DO NOTHING`,
-            [userId, ipAddress]
-        );
-    }
-
-    private async clearFailedLogins(userId: string, ipAddress?: string): Promise<void> {
-        await pool.query(
-            `DELETE FROM failed_login_attempts 
-       WHERE user_id = $1 AND (ip_address = $2 OR ip_address IS NULL)`,
-            [userId, ipAddress]
-        );
     }
 
     private parseUserAgent(userAgent?: string): any {
@@ -384,15 +293,15 @@ export class ActivityLoggingService {
         return 'Unknown';
     }
 
-    private mapActivityRow(row: any): ActivityLog {
+    private mapActivityRow(row: ActivityLogRow): ActivityLog {
         return {
             id: row.id,
             userId: row.user_id,
-            activityType: row.activity_type,
+            activityType: row.activity_type as ActivityType,
             description: row.description,
             metadata: row.metadata,
-            ipAddress: row.ip_address,
-            userAgent: row.user_agent,
+            ipAddress: row.ip_address ?? undefined,
+            userAgent: row.user_agent ?? undefined,
             deviceInfo: row.device_info,
             createdAt: row.created_at,
         };

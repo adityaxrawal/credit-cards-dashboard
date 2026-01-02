@@ -1,4 +1,6 @@
-import pool from '../../lib/db';
+import { ImportRepository } from '../../repositories/ImportRepository';
+import { InstrumentRepository } from '../../repositories/InstrumentRepository';
+import { TransactionRepository } from '../../repositories/TransactionRepository';
 import { format, parse, isValid } from 'date-fns';
 
 export interface ImportTemplate {
@@ -50,50 +52,30 @@ export class ImportService {
      * Create or update import template
      */
     async saveTemplate(userId: string, template: Partial<ImportTemplate>): Promise<ImportTemplate> {
-        const query = template.id
-            ? `UPDATE import_templates SET 
-          template_name = $2, source = $3, date_column = $4, amount_column = $5,
-          description_column = $6, merchant_column = $7, category_column = $8,
-          direction_column = $9, date_format = $10, column_mapping = $11
-         WHERE id = $1 AND user_id = $12 RETURNING *`
-            : `INSERT INTO import_templates (
-          user_id, template_name, source, date_column, amount_column,
-          description_column, merchant_column, category_column,
-          direction_column, date_format, column_mapping
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`;
-
-        const values = template.id
-            ? [
-                template.id, template.templateName, template.source, template.dateColumn,
-                template.amountColumn, template.descriptionColumn, template.merchantColumn,
-                template.categoryColumn, template.directionColumn, template.dateFormat,
-                JSON.stringify(template.columnMapping || {}), userId
-            ]
-            : [
-                userId, template.templateName, template.source, template.dateColumn,
-                template.amountColumn, template.descriptionColumn, template.merchantColumn,
-                template.categoryColumn, template.directionColumn, template.dateFormat,
-                JSON.stringify(template.columnMapping || {})
-            ];
-
-        const result = await pool.query(query, values);
-        return this.mapTemplateRow(result.rows[0]);
+        const result = await ImportRepository.upsertTemplate(userId, {
+            id: template.id,
+            templateName: template.templateName || 'Untitled Template',
+            source: template.source || 'csv',
+            dateColumn: template.dateColumn,
+            amountColumn: template.amountColumn,
+            descriptionColumn: template.descriptionColumn,
+            merchantColumn: template.merchantColumn,
+            categoryColumn: template.categoryColumn,
+            directionColumn: template.directionColumn,
+            dateFormat: template.dateFormat,
+            columnMapping: template.columnMapping
+        });
+        return this.mapTemplateRow(result);
     }
 
     /**
      * Get user's templates
      */
     async getTemplates(userId: string): Promise<ImportTemplate[]> {
-        const result = await pool.query(
-            'SELECT * FROM import_templates WHERE user_id = $1 ORDER BY created_at DESC',
-            [userId]
-        );
-        return result.rows.map(row => this.mapTemplateRow(row));
+        const rows = await ImportRepository.getTemplates(userId);
+        return rows.map(row => this.mapTemplateRow(row));
     }
 
-    /**
-     * Parse CSV content and return preview
-     */
     /**
      * Parse CSV content and return preview
      */
@@ -341,115 +323,107 @@ export class ImportService {
     /**
      * Execute import job
      */
+    /**
+     * Execute import job
+     */
     async executeImport(
         userId: string,
         instrumentId: string,
         transactions: ParsedTransaction[],
         options: { skipDuplicates?: boolean } = {}
     ): Promise<ImportJob> {
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
+        // Get instrument to determine type
+        const instrument = await InstrumentRepository.findById(instrumentId);
+        const instrumentType = instrument?.type || 'credit_card'; // Default fallback
 
-            // Create import job
-            const jobResult = await client.query(
-                `INSERT INTO import_jobs (
-          user_id, file_name, status, total_rows, processed_rows, 
-          imported_rows, skipped_rows, duplicate_rows, error_rows
-        ) VALUES ($1, 'manual_import', 'processing', $2, 0, 0, 0, 0, 0)
-        RETURNING *`,
-                [userId, transactions.length]
-            );
+        // Create import job
+        const job = await ImportRepository.createJob(userId, 'manual_import');
 
-            const jobId = jobResult.rows[0].id;
-            let importedRows = 0;
-            let duplicateRows = 0;
-            let errorRows = 0;
-            const errors: any[] = [];
+        let importedRows = 0;
+        let duplicateRows = 0;
+        let errorRows = 0;
+        const errors: any[] = [];
 
-            for (const txn of transactions) {
-                try {
-                    // Check for duplicates
-                    if (options.skipDuplicates) {
-                        const dupCheck = await client.query(
-                            `SELECT id FROM transactions 
-               WHERE user_id = $1 AND instrument_id = $2 
-               AND amount = $3 AND transaction_date = $4
-               AND description = $5 LIMIT 1`,
-                            [userId, instrumentId, txn.amount, txn.date, txn.description]
-                        );
-
-                        if (dupCheck.rows.length > 0) {
-                            duplicateRows++;
-                            continue;
-                        }
-                    }
-
-                    // Insert transaction
-                    await client.query(
-                        `INSERT INTO transactions (
-              user_id, instrument_id, amount, direction, 
-              description, transaction_date, category, type
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual')`,
-                        [
-                            userId, instrumentId, txn.amount, txn.direction,
-                            txn.description, txn.date, txn.category || 'Uncategorized'
-                        ]
+        for (const txn of transactions) {
+            try {
+                // Check for duplicates
+                if (options.skipDuplicates) {
+                    const duplicateId = await TransactionRepository.findExactDuplicate(
+                        userId,
+                        instrumentId,
+                        txn.amount,
+                        txn.date,
+                        txn.description
                     );
 
-                    importedRows++;
-                } catch (error: any) {
-                    errorRows++;
-                    errors.push({
-                        rowIndex: txn.rowIndex,
-                        error: error.message,
-                    });
+                    if (duplicateId) {
+                        duplicateRows++;
+                        continue;
+                    }
                 }
+
+                // Prepare date variables
+                const txnDate = new Date(txn.date);
+                const billMonth = txnDate.getMonth() + 1;
+                const billYear = txnDate.getFullYear();
+
+                // Insert transaction
+                await TransactionRepository.create({
+                    userId,
+                    instrumentId,
+                    instrumentType,
+                    transactionDate: txnDate,
+                    merchant: txn.merchant || 'Unknown',
+                    category: txn.category || 'Uncategorized',
+                    amount: txn.amount,
+                    direction: txn.direction,
+                    billMonth,
+                    billYear,
+                    description: txn.description,
+                    isManuallyAdded: true,
+                    classificationMethod: 'manual'
+                });
+
+                importedRows++;
+            } catch (error: any) {
+                errorRows++;
+                errors.push({
+                    rowIndex: txn.rowIndex,
+                    error: error.message,
+                });
             }
-
-            // Update job status
-            await client.query(
-                `UPDATE import_jobs SET 
-          status = 'completed', processed_rows = $2, imported_rows = $3,
-          duplicate_rows = $4, error_rows = $5, errors = $6, completed_at = NOW()
-         WHERE id = $1`,
-                [jobId, transactions.length, importedRows, duplicateRows, errorRows, JSON.stringify(errors)]
-            );
-
-            await client.query('COMMIT');
-
-            return {
-                id: jobId,
-                userId,
-                fileName: 'manual_import',
-                status: 'completed',
-                totalRows: transactions.length,
-                processedRows: transactions.length,
-                importedRows,
-                skippedRows: 0,
-                duplicateRows,
-                errorRows,
-                errors,
-                createdAt: new Date(),
-                completedAt: new Date(),
-            };
-        } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-        } finally {
-            client.release();
         }
+
+        // Update job status
+        await ImportRepository.updateJob(job.id, {
+            status: 'completed',
+            processedRows: transactions.length,
+            importedRows,
+            duplicateRows,
+            errorRows,
+            errors
+        });
+
+        return {
+            ...job,
+            status: 'completed',
+            totalRows: transactions.length,
+            processedRows: transactions.length,
+            importedRows,
+            skippedRows: 0,
+            duplicateRows,
+            errorRows,
+            errors,
+            completedAt: new Date(),
+        };
     }
 
     /**
      * Get import history
      */
     async getImportHistory(userId: string, limit: number = 20): Promise<ImportJob[]> {
-        const result = await pool.query(
-            'SELECT * FROM import_jobs WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2',
-            [userId, limit]
-        );
-        return result.rows.map(row => this.mapJobRow(row));
+        const rows = await ImportRepository.getImportHistory(userId, limit);
+        return rows.map(row => this.mapJobRow(row));
     }
 
     private detectDelimiter(line: string): string {

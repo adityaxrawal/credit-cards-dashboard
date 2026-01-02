@@ -1,5 +1,5 @@
-import pool from '../../lib/db';
-import * as budgetQueries from '../../db/queries/budget.queries';
+import { BudgetRepository } from '../../repositories/BudgetRepository';
+import { TransactionRepository } from '../../repositories/TransactionRepository';
 import { invalidateBudgetCache } from '../../utils/cache/cacheInvalidation';
 import dayjs from 'dayjs';
 
@@ -12,21 +12,12 @@ export async function getCurrentBudgetStatus(userId: string) {
   const year = now.year();
 
   // Get user's monthly budget
-  const userResult = await pool.query(
-    'SELECT monthly_budget FROM users WHERE id = $1',
-    [userId]
-  );
-
-  if (userResult.rows.length === 0) {
-    throw new Error('User not found');
-  }
-
-  const monthlyBudget = parseFloat(userResult.rows[0].monthly_budget || '0');
+  const monthlyBudget = await BudgetRepository.getUserMonthlyBudget(userId);
 
   // Get current month spending
-  const spent = await budgetQueries.getCurrentMonthSpending(userId, month, year);
+  const spent = await TransactionRepository.getCurrentMonthSpending(userId, month, year);
 
-  const ratio = spent / monthlyBudget;
+  const ratio = (monthlyBudget > 0) ? (spent / monthlyBudget) : 0;
 
   const status =
     ratio >= 1
@@ -38,10 +29,10 @@ export async function getCurrentBudgetStatus(userId: string) {
           : 'safe';
 
   // Get or create budget tracking record
-  await budgetQueries.getOrCreateBudgetTracking(userId, month, year, monthlyBudget);
+  await BudgetRepository.getOrCreateBudgetTracking(userId, month, year, monthlyBudget);
 
   // Update spending
-  await budgetQueries.updateBudgetTracking(userId, month, year, {
+  await BudgetRepository.updateBudgetTracking(userId, month, year, {
     totalSpent: spent,
   });
 
@@ -60,11 +51,7 @@ export async function getCurrentBudgetStatus(userId: string) {
  * Update monthly budget
  */
 export async function updateMonthlyBudget(userId: string, newBudget: number) {
-  await pool.query(
-    'UPDATE users SET monthly_budget = $1, updated_at = NOW() WHERE id = $2',
-    [newBudget, userId]
-  );
-
+  await BudgetRepository.updateUserMonthlyBudget(userId, newBudget);
   await invalidateBudgetCache(userId);
   return { monthlyBudget: newBudget };
 }
@@ -73,7 +60,7 @@ export async function updateMonthlyBudget(userId: string, newBudget: number) {
  * Get budget history
  */
 export async function getBudgetHistory(userId: string, limit: number = 12) {
-  const history = await budgetQueries.getBudgetHistory(userId, limit);
+  const history = await BudgetRepository.getHistory(userId, limit);
 
   return history.map(record => ({
     month: record.month,
@@ -87,7 +74,7 @@ export async function getBudgetHistory(userId: string, limit: number = 12) {
 
 
 export async function markAlertSent(userId: string, month: number, year: number) {
-  await budgetQueries.updateBudgetTracking(userId, month, year, {
+  await BudgetRepository.updateBudgetTracking(userId, month, year, {
     alertSent: true,
   });
 }
@@ -97,13 +84,11 @@ export async function markAlertSent(userId: string, month: number, year: number)
  * (Simple implementation: Stores goal ID in user settings or rules)
  */
 export async function linkBudgetToSavings(userId: string, categoryId: string, goalId: string) {
-  // This would typically involve a junction table "budget_savings_link"
-  // For now, we simulate by checking existence and logging/storing as rule.
-  await pool.query(
-    `INSERT INTO budget_rules (user_id, name, type, config, is_enabled)
-         VALUES ($1, 'Savings Link', 'SAVINGS_LINK', $2, true)
-         ON CONFLICT (id) DO NOTHING`, // Simplification: In real app, upsert based on unique constraint
-    [userId, JSON.stringify({ categoryId, goalId })]
+  await BudgetRepository.createBudgetRule(
+    userId,
+    'Savings Link',
+    'SAVINGS_LINK',
+    { categoryId, goalId }
   );
   return true;
 }
@@ -153,4 +138,3 @@ export async function getRolloverStatus(userId: string) {
 export async function setRolloverRule(userId: string, enabled: boolean) {
   return BudgetRulesService.setRolloverRule(userId, enabled);
 }
-

@@ -112,10 +112,10 @@ export default function RulesPageClient() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+            <h1 className="text-2xl font-bold tracking-tight text-primary-text">
               Classification Rules
             </h1>
-            <p className="text-gray-500 mt-1">
+            <p className="text-muted-text mt-1">
               Automate transaction categorization with custom rules.
             </p>
           </div>
@@ -127,10 +127,10 @@ export default function RulesPageClient() {
         {/* Rules List */}
         <div className="grid gap-4">
           {rules.length === 0 && !isLoading ? (
-            <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-              <Zap className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No rules configured</h3>
-              <p className="mt-1 text-sm text-gray-500">Get started by creating a new classification rule.</p>
+            <div className="text-center py-12 bg-card-bg rounded-lg border border-dashed border-muted-text/20">
+              <Zap className="mx-auto h-12 w-12 text-muted-text" />
+              <h3 className="mt-2 text-sm font-medium text-primary-text">No rules configured</h3>
+              <p className="mt-1 text-sm text-muted-text">Get started by creating a new classification rule.</p>
               <div className="mt-6">
                 <Button onClick={() => handleOpenModal()}>
                   <Plus className="mr-2 h-4 w-4" /> New Rule
@@ -139,30 +139,30 @@ export default function RulesPageClient() {
             </div>
           ) : (
             rules.map((rule) => (
-              <Card key={rule.id} className="p-4 flex items-center justify-between hover:shadow-md transition-shadow">
+              <Card key={rule.id} className="p-4 flex items-center justify-between hover:shadow-md transition-shadow bg-card-bg border-muted-text/10">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-gray-900">{rule.name}</span>
+                    <span className="font-medium text-primary-text">{rule.name}</span>
                     <Badge variant={rule.isActive ? "success" : "secondary"}>
                       {rule.isActive ? "Active" : "Inactive"}
                     </Badge>
-                    <Badge variant="outline">Priority: {rule.priority}</Badge>
+                    <Badge variant="outline" className="text-muted-text border-muted-text/20">Priority: {rule.priority}</Badge>
                   </div>
-                  <div className="text-sm text-gray-600 flex gap-4">
+                  <div className="text-sm text-muted-text flex gap-4">
                     <div className="flex items-center gap-1">
-                      <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-700">
+                      <span className="font-mono text-xs bg-hover-bg px-2 py-0.5 rounded text-primary-text">
                         IF {rule.criteria.field} {rule.criteria.operator} "{rule.criteria.value}"
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="text-gray-400">THEN</span>
+                      <span className="text-muted-text">THEN</span>
                       {rule.action.category && (
-                        <span className="font-mono text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
+                        <span className="font-mono text-xs bg-accent-blue/10 text-accent-blue px-2 py-0.5 rounded">
                           Set Category: {rule.action.category}
                         </span>
                       )}
                       {rule.action.merchantRename && (
-                        <span className="font-mono text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded">
+                        <span className="font-mono text-xs bg-accent-purple/10 text-accent-purple px-2 py-0.5 rounded">
                           Rename: {rule.action.merchantRename}
                         </span>
                       )}
@@ -171,10 +171,10 @@ export default function RulesPageClient() {
                 </div>
                 <div className="flex items-center gap-2 ml-4">
                   <Button variant="ghost" size="sm" onClick={() => handleOpenModal(rule)}>
-                    <Edit2 className="h-4 w-4 text-gray-500" />
+                    <Edit2 className="h-4 w-4 text-muted-text hover:text-primary-text" />
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => deleteRule.mutate(rule.id)}>
-                    <Trash2 className="h-4 w-4 text-red-500" />
+                    <Trash2 className="h-4 w-4 text-error" />
                   </Button>
                 </div>
               </Card>

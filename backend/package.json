@@ -47,7 +47,6 @@
     "node-cache": "^5.1.2",
     "node-cron": "^3.0.3",
     "nodemailer": "^7.0.11",
-
     "opossum": "^9.0.0",
     "p-limit": "^3.1.0",
     "pdf-parse": "^2.4.5",
@@ -56,6 +55,7 @@
     "piscina": "^5.1.4",
     "socket.io": "^4.8.1",
     "uuid": "^13.0.0",
+    "web-push": "^3.6.7",
     "winston": "^3.18.3",
     "zod": "^3.25.76"
   },
@@ -75,6 +75,7 @@
     "@types/opossum": "^8.1.9",
     "@types/pg": "^8.15.6",
     "@types/uuid": "^10.0.0",
+    "@types/web-push": "^3.6.4",
     "@typescript-eslint/eslint-plugin": "^7.3.1",
     "@typescript-eslint/parser": "^7.3.1",
     "concurrently": "^8.2.2",

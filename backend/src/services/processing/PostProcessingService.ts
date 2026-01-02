@@ -1,6 +1,9 @@
-import pool from '../../lib/db';
 import logger from '../../utils/infrastructure/logger';
 import dayjs from 'dayjs';
+import { InstrumentRepository } from '../../repositories/InstrumentRepository';
+import { TransactionRepository } from '../../repositories/TransactionRepository';
+import { BillRepository } from '../../repositories/BillRepository';
+import { BankRepository } from '../../repositories/BankRepository';
 
 /**
  * PostProcessingService - Runs after Gmail sync to compute derived data
@@ -36,41 +39,10 @@ export class PostProcessingService {
         console.log(`[POST-PROC-BILLS] Generating bills...`);
 
         // Find all card+month combinations with transactions but no bill
-        const result = await pool.query(
-            `WITH transaction_aggregates AS (
-        SELECT 
-          t.instrument_id,
-          t.bill_month,
-          t.bill_year,
-          SUM(CASE WHEN t.direction = 'debit' THEN t.amount ELSE 0 END) as total_debits,
-          SUM(CASE WHEN t.direction = 'credit' THEN t.amount ELSE 0 END) as total_credits,
-          COUNT(*) as transaction_count
-        FROM transactions t
-        INNER JOIN instruments i ON t.instrument_id = i.id
-        WHERE t.user_id = $1 
-          AND t.instrument_id IS NOT NULL
-          AND t.bill_month IS NOT NULL
-          AND t.bill_year IS NOT NULL
-          AND i.type = 'credit_card'
-        GROUP BY t.instrument_id, t.bill_month, t.bill_year
-        HAVING SUM(CASE WHEN t.direction = 'debit' THEN t.amount ELSE 0 END) > 0
-      )
-      SELECT ta.*, 
-        COALESCE((i.metadata->>'bill_date')::int, 1) as bill_date,
-        COALESCE((i.metadata->>'due_date')::int, 15) as due_date
-      FROM transaction_aggregates ta
-      INNER JOIN instruments i ON ta.instrument_id = i.id
-      WHERE NOT EXISTS (
-        SELECT 1 FROM bill_payments bp 
-        WHERE bp.instrument_id = ta.instrument_id 
-          AND bp.bill_month = ta.bill_month 
-          AND bp.bill_year = ta.bill_year
-      )`,
-            [userId]
-        );
+        const aggregates = await TransactionRepository.findBillableAggregates(userId);
 
         let created = 0;
-        for (const row of result.rows) {
+        for (const row of aggregates) {
             try {
                 // Calculate bill date and due date
                 const billDate = dayjs()
@@ -90,22 +62,15 @@ export class PostProcessingService {
                 const isPastDue = dayjs().isAfter(dueDate);
                 const paymentStatus = isPastDue ? 'overdue' : 'pending';
 
-                await pool.query(
-                    `INSERT INTO bill_payments (
-            instrument_id, bill_month, bill_year, bill_amount,
-            bill_date, due_date, payment_status
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-          ON CONFLICT (instrument_id, bill_month, bill_year) DO NOTHING`,
-                    [
-                        row.instrument_id,
-                        row.bill_month,
-                        row.bill_year,
-                        Math.max(0, billAmount),
-                        billDate,
-                        dueDate,
-                        paymentStatus
-                    ]
-                );
+                await BillRepository.createBillPayment({
+                    instrumentId: row.instrument_id,
+                    billMonth: row.bill_month,
+                    billYear: row.bill_year,
+                    billAmount: Math.max(0, billAmount),
+                    billDate,
+                    dueDate,
+                    paymentStatus
+                });
                 created++;
             } catch (err) {
                 logger.warn(`[PostProcessing] Failed to create bill for ${row.instrument_id}/${row.bill_month}/${row.bill_year}:`, err);
@@ -124,62 +89,30 @@ export class PostProcessingService {
         logger.info(`[PostProcessing] Creating instrument suggestions for user ${userId}`);
 
         // Find distinct card identifiers from transactions that aren't linked to instruments
-        const result = await pool.query(
-            `SELECT DISTINCT
-        t.metadata->>'bankName' as bank_name,
-        t.metadata->>'last4' as last4,
-        t.instrument_type,
-        COUNT(*) as transaction_count,
-        SUM(t.amount) as total_amount
-      FROM transactions t
-      WHERE t.user_id = $1 
-        AND t.instrument_id IS NULL
-        AND t.metadata->>'last4' IS NOT NULL
-        AND t.metadata->>'bankName' IS NOT NULL
-      GROUP BY t.metadata->>'bankName', t.metadata->>'last4', t.instrument_type
-      HAVING COUNT(*) >= 2`,
-            [userId]
-        );
+        const aggregates = await TransactionRepository.findUnmappedSubtotals(userId);
 
         let created = 0;
-        for (const row of result.rows) {
+        for (const row of aggregates) {
             try {
                 // Check if instrument already exists with these identifiers
-                const existing = await pool.query(
-                    `SELECT id FROM instruments 
-           WHERE user_id = $1 AND last4 = $2 
-           AND EXISTS (
-             SELECT 1 FROM banks b WHERE b.id = bank_id 
-             AND LOWER(b.name) = LOWER($3)
-           )`,
-                    [userId, row.last4, row.bank_name]
-                );
+                const existing = await InstrumentRepository.findByBankNameAndLast4(userId, row.bank_name, row.last4);
 
-                if (existing.rows.length === 0) {
-                    // Get or create bank
+                if (!existing) {
+                    // Get or create bank (find only)
                     let bankId = null;
-                    const bankResult = await pool.query(
-                        `SELECT id FROM banks WHERE LOWER(name) = LOWER($1)`,
-                        [row.bank_name]
-                    );
-                    if (bankResult.rows.length > 0) {
-                        bankId = bankResult.rows[0].id;
+                    const bank = await BankRepository.findByNameNormalized(row.bank_name);
+                    if (bank) {
+                        bankId = bank.id;
                     }
 
                     // Create instrument with 'needs_input' status
-                    await pool.query(
-                        `INSERT INTO instruments (
-              user_id, bank_id, type, name, last4, status, needs_input
-            ) VALUES ($1, $2, $3, $4, $5, 'active', true)
-            ON CONFLICT (user_id, bank_id, type, last4) DO NOTHING`,
-                        [
-                            userId,
-                            bankId,
-                            row.instrument_type || 'credit_card',
-                            `${row.bank_name} ending ${row.last4}`,
-                            row.last4
-                        ]
-                    );
+                    await InstrumentRepository.createSuggestion({
+                        userId,
+                        bankId,
+                        type: row.instrument_type || 'credit_card',
+                        name: `${row.bank_name} ending ${row.last4}`,
+                        last4: row.last4
+                    });
                     created++;
                 }
             } catch (err) {
@@ -196,16 +129,6 @@ export class PostProcessingService {
      * Get all incomplete instruments (needs_input = true) for a user
      */
     static async getIncompleteInstruments(userId: string) {
-        const result = await pool.query(
-            `SELECT 
-        i.id, i.name, i.last4, i.type, b.name as bank_name,
-        (SELECT COUNT(*) FROM transactions t WHERE t.instrument_id = i.id) as transaction_count
-      FROM instruments i
-      LEFT JOIN banks b ON i.bank_id = b.id
-      WHERE i.user_id = $1 AND i.needs_input = true
-      ORDER BY i.created_at DESC`,
-            [userId]
-        );
-        return result.rows;
+        return await InstrumentRepository.findIncomplete(userId);
     }
 }

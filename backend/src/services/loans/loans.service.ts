@@ -1,4 +1,4 @@
-import pool from '../../lib/db';
+import { LoansRepository, LoanRow, LoanPaymentRow } from '../../repositories/LoansRepository';
 import { addMonths, format, differenceInDays } from 'date-fns';
 
 export interface LoanInput {
@@ -126,35 +126,17 @@ export class LoansService {
         userId: string,
         filters: { status?: string; type?: string } = {}
     ): Promise<Loan[]> {
-        let query = `SELECT * FROM loans WHERE user_id = $1`;
-        const params: unknown[] = [userId];
-        let paramIndex = 2;
-
-        if (filters.status) {
-            query += ` AND status = $${paramIndex++}`;
-            params.push(filters.status);
-        }
-
-        if (filters.type) {
-            query += ` AND loan_type = $${paramIndex++}`;
-            params.push(filters.type);
-        }
-
-        query += ` ORDER BY next_emi_date ASC NULLS LAST, created_at DESC`;
-
-        const result = await pool.query(query, params);
-        return result.rows.map(this.mapToLoan);
+        const rows = await LoansRepository.findAll(userId, filters);
+        return rows.map(this.mapToLoan);
     }
 
     /**
      * Get loan by ID
      */
     async getById(userId: string, loanId: string): Promise<Loan | null> {
-        const query = `SELECT * FROM loans WHERE id = $1 AND user_id = $2`;
-        const result = await pool.query(query, [loanId, userId]);
-
-        if (result.rows.length === 0) return null;
-        return this.mapToLoan(result.rows[0]);
+        const row = await LoansRepository.findById(userId, loanId);
+        if (!row) return null;
+        return this.mapToLoan(row);
     }
 
     /**
@@ -189,42 +171,30 @@ export class LoansService {
             nextEmiDate = addMonths(nextEmiDate, 1);
         }
 
-        const query = `
-      INSERT INTO loans (
-        user_id, loan_name, loan_type, lender_name, loan_account_number,
-        principal_amount, current_outstanding, interest_rate, interest_type,
-        emi_amount, tenure_months, emi_day_of_month, start_date, end_date,
-        remaining_emis, next_emi_date, is_auto_debit, auto_debit_account_id,
-        notes, metadata, status
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'active'
-      )
-      RETURNING *
-    `;
-        const result = await pool.query(query, [
+        const row = await LoansRepository.create({
             userId,
-            input.loanName,
-            input.loanType,
-            input.lenderName || null,
-            input.loanAccountNumber || null,
-            input.principalAmount,
-            input.principalAmount, // current_outstanding starts at principal
-            input.interestRate,
-            input.interestType || 'fixed',
+            loanName: input.loanName,
+            loanType: input.loanType,
+            lenderName: input.lenderName,
+            loanAccountNumber: input.loanAccountNumber,
+            principalAmount: input.principalAmount,
+            currentOutstanding: input.principalAmount,
+            interestRate: input.interestRate,
+            interestType: input.interestType || 'fixed',
             emiAmount,
             tenureMonths,
-            input.emiDayOfMonth || startDate.getDate(),
-            input.startDate,
-            format(endDate, 'yyyy-MM-dd'),
-            tenureMonths,
-            format(nextEmiDate, 'yyyy-MM-dd'),
-            input.isAutoDebit || false,
-            input.autoDebitAccountId || null,
-            input.notes || null,
-            JSON.stringify(input.metadata || {}),
-        ]);
+            emiDayOfMonth: input.emiDayOfMonth || startDate.getDate(),
+            startDate: input.startDate,
+            endDate: format(endDate, 'yyyy-MM-dd'),
+            remainingEmis: tenureMonths,
+            nextEmiDate: format(nextEmiDate, 'yyyy-MM-dd'),
+            isAutoDebit: input.isAutoDebit || false,
+            autoDebitAccountId: input.autoDebitAccountId,
+            notes: input.notes,
+            metadata: input.metadata || {},
+        });
 
-        return this.mapToLoan(result.rows[0]);
+        return this.mapToLoan(row);
     }
 
     /**
@@ -238,50 +208,27 @@ export class LoansService {
         const existing = await this.getById(userId, loanId);
         if (!existing) return null;
 
-        const query = `
-      UPDATE loans SET
-        loan_name = COALESCE($3, loan_name),
-        lender_name = COALESCE($4, lender_name),
-        loan_account_number = COALESCE($5, loan_account_number),
-        interest_rate = COALESCE($6, interest_rate),
-        emi_amount = COALESCE($7, emi_amount),
-        emi_day_of_month = COALESCE($8, emi_day_of_month),
-        is_auto_debit = COALESCE($9, is_auto_debit),
-        auto_debit_account_id = COALESCE($10, auto_debit_account_id),
-        notes = COALESCE($11, notes),
-        metadata = COALESCE($12::jsonb, metadata),
-        updated_at = NOW()
-      WHERE id = $1 AND user_id = $2
-      RETURNING *
-    `;
-        const result = await pool.query(query, [
-            loanId,
-            userId,
-            input.loanName,
-            input.lenderName,
-            input.loanAccountNumber,
-            input.interestRate,
-            input.emiAmount,
-            input.emiDayOfMonth,
-            input.isAutoDebit,
-            input.autoDebitAccountId,
-            input.notes,
-            input.metadata ? JSON.stringify(input.metadata) : null,
-        ]);
+        const row = await LoansRepository.update(loanId, userId, {
+            loanName: input.loanName,
+            lenderName: input.lenderName,
+            loanAccountNumber: input.loanAccountNumber,
+            interestRate: input.interestRate,
+            emiAmount: input.emiAmount,
+            emiDayOfMonth: input.emiDayOfMonth,
+            isAutoDebit: input.isAutoDebit,
+            autoDebitAccountId: input.autoDebitAccountId,
+            notes: input.notes,
+            metadata: input.metadata,
+        });
 
-        return this.mapToLoan(result.rows[0]);
+        return row ? this.mapToLoan(row) : null;
     }
 
     /**
      * Close a loan
      */
     async close(userId: string, loanId: string): Promise<void> {
-        const query = `
-      UPDATE loans 
-      SET status = 'closed', updated_at = NOW()
-      WHERE id = $1 AND user_id = $2
-    `;
-        await pool.query(query, [loanId, userId]);
+        await LoansRepository.close(loanId, userId);
     }
 
     /**
@@ -292,13 +239,7 @@ export class LoansService {
         if (!loan) throw new Error('Loan not found');
 
         // Get existing payments
-        const paymentsQuery = `
-      SELECT * FROM loan_payments 
-      WHERE loan_id = $1 AND status = 'completed'
-      ORDER BY payment_date
-    `;
-        const paymentsResult = await pool.query(paymentsQuery, [loanId]);
-        const payments = paymentsResult.rows;
+        const payments = await LoansRepository.getPayments(loanId, 'completed');
 
         const schedule: AmortizationEntry[] = [];
         const monthlyRate = loan.interestRate / 100 / 12;
@@ -366,33 +307,22 @@ export class LoansService {
         }
 
         // Insert payment
-        const insertQuery = `
-      INSERT INTO loan_payments (
-        loan_id, user_id, payment_date, payment_amount,
-        principal_component, interest_component, fees_component,
-        outstanding_after, payment_type, payment_mode, reference_number,
-        status, is_on_time, days_late, notes
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'completed', $12, $13, $14
-      )
-      RETURNING *
-    `;
-        const paymentResult = await pool.query(insertQuery, [
+        const paymentRow = await LoansRepository.createPayment({
             loanId,
             userId,
-            input.paymentDate,
-            input.paymentAmount,
+            paymentDate: input.paymentDate,
+            paymentAmount: input.paymentAmount,
             principalComponent,
             interestComponent,
-            input.feesComponent || 0,
+            feesComponent: input.feesComponent || 0,
             outstandingAfter,
-            input.paymentType || 'emi',
-            input.paymentMode || null,
-            input.referenceNumber || null,
-            daysLate === 0,
+            paymentType: input.paymentType || 'emi',
+            paymentMode: input.paymentMode,
+            referenceNumber: input.referenceNumber,
+            isOnTime: daysLate === 0,
             daysLate,
-            input.notes || null,
-        ]);
+            notes: input.notes,
+        });
 
         // Update loan
         const nextEmiDate = loan.nextEmiDate
@@ -400,45 +330,25 @@ export class LoansService {
             : null;
         const remainingEmis = Math.max(0, (loan.remainingEmis || 0) - 1);
 
-        const updateQuery = `
-      UPDATE loans SET
-        current_outstanding = $3,
-        total_paid = total_paid + $4,
-        total_principal_paid = total_principal_paid + $5,
-        total_interest_paid = total_interest_paid + $6,
-        remaining_emis = $7,
-        next_emi_date = $8,
-        last_payment_date = $9,
-        status = CASE WHEN $3 <= 0 THEN 'closed' ELSE status END,
-        updated_at = NOW()
-      WHERE id = $1 AND user_id = $2
-    `;
-        await pool.query(updateQuery, [
-            loanId,
-            userId,
-            outstandingAfter,
-            input.paymentAmount,
+        await LoansRepository.updateAfterPayment(loanId, userId, {
+            currentOutstanding: outstandingAfter,
+            paymentAmount: input.paymentAmount,
             principalComponent,
             interestComponent,
-            outstandingAfter <= 0 ? 0 : remainingEmis,
-            outstandingAfter <= 0 ? null : nextEmiDate,
-            input.paymentDate,
-        ]);
+            remainingEmis: outstandingAfter <= 0 ? 0 : remainingEmis,
+            nextEmiDate: outstandingAfter <= 0 ? null : nextEmiDate,
+            paymentDate: input.paymentDate,
+        });
 
-        return this.mapToPayment(paymentResult.rows[0]);
+        return this.mapToPayment(paymentRow);
     }
 
     /**
      * Get payment history
      */
     async getPaymentHistory(userId: string, loanId: string): Promise<LoanPayment[]> {
-        const query = `
-      SELECT * FROM loan_payments
-      WHERE loan_id = $1 AND user_id = $2
-      ORDER BY payment_date DESC
-    `;
-        const result = await pool.query(query, [loanId, userId]);
-        return result.rows.map(this.mapToPayment);
+        const rows = await LoansRepository.getPaymentHistory(loanId, userId);
+        return rows.map(this.mapToPayment);
     }
 
     /**
@@ -453,7 +363,6 @@ export class LoansService {
         if (!loan) throw new Error('Loan not found');
 
         const newOutstanding = Math.max(0, loan.currentOutstanding - options.amount);
-        const monthlyRate = loan.interestRate / 100 / 12;
 
         // Calculate interest saved
         const remainingMonths = loan.remainingEmis || 0;
@@ -509,24 +418,7 @@ export class LoansService {
      * Get loans summary
      */
     async getSummary(userId: string): Promise<LoansSummary> {
-        const query = `
-      SELECT 
-        loan_type,
-        status,
-        COUNT(*) as count,
-        SUM(current_outstanding) as outstanding,
-        SUM(emi_amount) as monthly_emi,
-        json_agg(json_build_object(
-          'loanId', id,
-          'loanName', loan_name,
-          'emiAmount', emi_amount,
-          'dueDate', next_emi_date
-        )) FILTER (WHERE next_emi_date IS NOT NULL AND status = 'active') as upcoming
-      FROM loans
-      WHERE user_id = $1
-      GROUP BY loan_type, status
-    `;
-        const result = await pool.query(query, [userId]);
+        const rows = await LoansRepository.getSummary(userId);
 
         const byType: Record<string, { count: number; outstanding: number; monthlyEmi: number }> = {};
         let totalLoans = 0;
@@ -535,7 +427,7 @@ export class LoansService {
         let totalMonthlyEmi = 0;
         const upcomingEmis: LoansSummary['upcomingEmis'] = [];
 
-        for (const row of result.rows) {
+        for (const row of rows) {
             const count = parseInt(row.count);
             const outstanding = parseFloat(row.outstanding) || 0;
             const monthlyEmi = parseFloat(row.monthly_emi) || 0;
@@ -605,57 +497,57 @@ export class LoansService {
         return (emi * months) - principal;
     }
 
-    private mapToLoan(row: Record<string, unknown>): Loan {
+    private mapToLoan(row: LoanRow): Loan {
         return {
-            id: row.id as string,
-            userId: row.user_id as string,
-            loanName: row.loan_name as string,
-            loanType: row.loan_type as string,
-            lenderName: row.lender_name as string | undefined,
-            loanAccountNumber: row.loan_account_number as string | undefined,
-            principalAmount: parseFloat(row.principal_amount as string) || 0,
-            currentOutstanding: parseFloat(row.current_outstanding as string) || 0,
-            interestRate: parseFloat(row.interest_rate as string) || 0,
-            interestType: row.interest_type as string || 'fixed',
-            emiAmount: row.emi_amount ? parseFloat(row.emi_amount as string) : undefined,
-            tenureMonths: row.tenure_months as number | undefined,
-            emiDayOfMonth: row.emi_day_of_month as number | undefined,
-            startDate: row.start_date as string,
-            endDate: row.end_date as string | undefined,
-            totalPaid: parseFloat(row.total_paid as string) || 0,
-            totalInterestPaid: parseFloat(row.total_interest_paid as string) || 0,
-            totalPrincipalPaid: parseFloat(row.total_principal_paid as string) || 0,
-            remainingEmis: row.remaining_emis as number | undefined,
-            nextEmiDate: row.next_emi_date as string | undefined,
-            lastPaymentDate: row.last_payment_date as string | undefined,
-            status: row.status as string,
-            isAutoDebit: row.is_auto_debit as boolean || false,
-            autoDebitAccountId: row.auto_debit_account_id as string | undefined,
-            notes: row.notes as string | undefined,
-            metadata: row.metadata as Record<string, unknown> | undefined,
-            createdAt: row.created_at as Date,
-            updatedAt: row.updated_at as Date,
+            id: row.id,
+            userId: row.user_id,
+            loanName: row.loan_name,
+            loanType: row.loan_type,
+            lenderName: row.lender_name ?? undefined,
+            loanAccountNumber: row.loan_account_number ?? undefined,
+            principalAmount: parseFloat(String(row.principal_amount)) || 0,
+            currentOutstanding: parseFloat(String(row.current_outstanding)) || 0,
+            interestRate: parseFloat(String(row.interest_rate)) || 0,
+            interestType: row.interest_type || 'fixed',
+            emiAmount: row.emi_amount ? parseFloat(String(row.emi_amount)) : undefined,
+            tenureMonths: row.tenure_months ?? undefined,
+            emiDayOfMonth: row.emi_day_of_month ?? undefined,
+            startDate: row.start_date,
+            endDate: row.end_date ?? undefined,
+            totalPaid: parseFloat(String(row.total_paid)) || 0,
+            totalInterestPaid: parseFloat(String(row.total_interest_paid)) || 0,
+            totalPrincipalPaid: parseFloat(String(row.total_principal_paid)) || 0,
+            remainingEmis: row.remaining_emis ?? undefined,
+            nextEmiDate: row.next_emi_date ?? undefined,
+            lastPaymentDate: row.last_payment_date ?? undefined,
+            status: row.status,
+            isAutoDebit: row.is_auto_debit || false,
+            autoDebitAccountId: row.auto_debit_account_id ?? undefined,
+            notes: row.notes ?? undefined,
+            metadata: row.metadata ?? undefined,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
         };
     }
 
-    private mapToPayment(row: Record<string, unknown>): LoanPayment {
+    private mapToPayment(row: LoanPaymentRow): LoanPayment {
         return {
-            id: row.id as string,
-            loanId: row.loan_id as string,
-            paymentDate: row.payment_date as string,
-            paymentAmount: parseFloat(row.payment_amount as string) || 0,
-            principalComponent: parseFloat(row.principal_component as string) || 0,
-            interestComponent: parseFloat(row.interest_component as string) || 0,
-            feesComponent: parseFloat(row.fees_component as string) || 0,
-            outstandingAfter: parseFloat(row.outstanding_after as string) || 0,
-            paymentType: row.payment_type as string,
-            paymentMode: row.payment_mode as string | undefined,
-            referenceNumber: row.reference_number as string | undefined,
-            status: row.status as string,
-            isOnTime: row.is_on_time as boolean,
-            daysLate: row.days_late as number || 0,
-            notes: row.notes as string | undefined,
-            createdAt: row.created_at as Date,
+            id: row.id,
+            loanId: row.loan_id,
+            paymentDate: row.payment_date,
+            paymentAmount: parseFloat(String(row.payment_amount)) || 0,
+            principalComponent: parseFloat(String(row.principal_component)) || 0,
+            interestComponent: parseFloat(String(row.interest_component)) || 0,
+            feesComponent: parseFloat(String(row.fees_component)) || 0,
+            outstandingAfter: parseFloat(String(row.outstanding_after)) || 0,
+            paymentType: row.payment_type,
+            paymentMode: row.payment_mode ?? undefined,
+            referenceNumber: row.reference_number ?? undefined,
+            status: row.status,
+            isOnTime: row.is_on_time,
+            daysLate: row.days_late || 0,
+            notes: row.notes ?? undefined,
+            createdAt: row.created_at,
         };
     }
 }
