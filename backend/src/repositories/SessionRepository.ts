@@ -3,7 +3,7 @@
  * Data access layer for user sessions
  */
 
-import { query } from '../lib/db';
+import { query } from '@shared/database/db';
 
 export interface SessionRow {
     id: string;

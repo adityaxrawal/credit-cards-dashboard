@@ -3,7 +3,7 @@
  * Data access layer for InstrumentService (legacy)
  */
 
-import { query } from '../lib/db';
+import { query } from '@shared/database/db';
 
 export interface LegacyInstrumentRow {
     id: string;

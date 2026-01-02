@@ -1,15 +1,15 @@
-import { decrypt } from '../utils/helpers/encryption';
-import pool, { safeQuery } from '../lib/db';
-import * as gmailClient from '../lib/gmailClient';
-import { GmailFetcherService } from '../services/gmail/fetcher';
-import logger from '../utils/infrastructure/logger';
-import { WorkflowLogger } from '../utils/infrastructure/workflowLogger';
-import { universalPipeline } from '../services/transactions/pipeline/UniversalTransactionPipeline';
+import { decrypt } from '@shared/utils/helpers/encryption';
+import pool, { safeQuery } from '@shared/database/db';
+import * as gmailClient from '@shared/infra/google/gmailClient';
+import { GmailFetcherService } from '@modules/gmail/gmail.fetcher';
+import logger from '@shared/utils/infrastructure/logger';
+import { WorkflowLogger } from '@shared/utils/infrastructure/workflowLogger';
+import { universalPipeline } from '@modules/transactions/services/pipeline/UniversalTransactionPipeline';
 // GptQueueManager removed
-import { SimplifiedEmail } from '../types/transaction.types';
+import { SimplifiedEmail } from '@shared/types/transaction.types';
 import { SanitizerService } from '../services/gmail/sanitize/sanitizer';
 import dayjs from 'dayjs';
-import { broadcastProcessingUpdate, broadcastJobComplete } from '../services/alerts/WebSocketState';
+import { broadcastProcessingUpdate, broadcastJobComplete } from '@modules/alerts/websocket-state';
 import { dbWriteQueueManager } from '../services/infrastructure/DbWriteQueueManager';
 import { ProcessingWorkerPool } from '../services/infrastructure/ProcessingWorkerPool';
 import { circuitBreakerManager } from '../services/infrastructure/CircuitBreakerManager';
@@ -286,7 +286,7 @@ export async function runHistoricalScan(
 
       // --- Bill Detection ---
       try {
-        const { BillAutoService } = await import('../services/bills/BillAutoService');
+        const { BillAutoService } = await import('@modules/bills/bill-auto.service');
         const sanitizedEmail = await SanitizerService.sanitize(cleanEmail);
         const bill = await BillAutoService.processEmailForBill(userId, sanitizedEmail);
         if (bill) {
@@ -396,7 +396,7 @@ export async function runHistoricalScan(
 
     // After sync, invalidate caches so fresh data is fetched
     try {
-      const { AnalyticsService } = await import('../services/analytics/AnalyticsService');
+      const { AnalyticsService } = await import('@modules/analytics/analytics.service');
       await AnalyticsService.invalidateCache(userId);
       logger.info(`[HistoricalScanner] Analytics cache invalidated for user ${userId}`);
     } catch (cacheErr) {
@@ -421,7 +421,7 @@ export async function runHistoricalScan(
     });
 
     try {
-      const { PostProcessingService } = await import('../services/processing/PostProcessingService');
+      const { PostProcessingService } = await import('@modules/transactions/services/processing/PostProcessingService');
       const billsCreated = await PostProcessingService.generateBillsFromTransactions(userId);
       postProcessingStats.billsCreated = billsCreated;
 

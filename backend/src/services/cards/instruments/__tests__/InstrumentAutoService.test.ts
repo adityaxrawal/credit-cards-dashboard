@@ -1,4 +1,4 @@
-import { InstrumentAutoService } from '../InstrumentAutoService';
+import { InstrumentAutoService } from '@modules/cards/instrument-auto.service';
 
 describe('InstrumentAutoService', () => {
     describe('extractAccountLast4', () => {

@@ -1,9 +1,9 @@
 import dayjs from 'dayjs';
-import { UserRepository } from '../repositories/UserRepository';
+import { UserRepository } from '@modules/user/user.repository';
 import { InstrumentRepository } from '../repositories/InstrumentRepository';
 import { BalanceHistoryRepository } from '../repositories/BalanceHistoryRepository';
-import { DashboardRepository } from '../repositories/DashboardRepository';
-import { TransactionRepository } from '../repositories/TransactionRepository';
+import { DashboardRepository } from '@modules/dashboard/dashboard.repository';
+import { TransactionRepository } from '@modules/transactions/repositories/TransactionRepository';
 
 /**
  * Balance Snapshot Scheduler

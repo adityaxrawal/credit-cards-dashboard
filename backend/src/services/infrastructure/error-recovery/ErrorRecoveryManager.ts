@@ -1,6 +1,6 @@
-import pool, { safeQuery } from '../../../lib/db';
-import logger from '../../../utils/infrastructure/logger';
-import { isPostgresError } from '../../../utils/validation/errorTypeGuards';
+import pool, { safeQuery } from '../../../shared/database/db';
+import logger from '@shared/utils/infrastructure/logger';
+import { isPostgresError } from '@shared/utils/validation/errorTypeGuards';
 import { ManualReviewService } from './ManualReviewService';
 import { RetryQueueService } from './RetryQueueService';
 
@@ -79,7 +79,8 @@ export class ErrorRecoveryManager {
             msg.includes('econnreset') ||
             code === '57P01' || // admin_shutdown
             code === '57P02' || // crash_shutdown
-            code === '57P03'    // cannot_connect_now
+            code === '57P03' || // cannot_connect_now
+            code === '23505'    // Unique violation (e.g., trying to insert duplicate primary key)
         ) {
             return 'DB_CONNECTION';
         }

@@ -1,5 +1,5 @@
-import pool from '../lib/db';
-import * as alertsService from '../services/alerts/AlertsService';
+import pool from '@shared/database/db';
+import * as alertsService from '@modules/alerts/alerts.service';
 import dayjs from 'dayjs';
 
 /**

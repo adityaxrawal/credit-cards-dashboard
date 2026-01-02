@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { EdgeCaseHandler } from '../services/transactions/extraction/EdgeCaseHandler';
+import { EdgeCaseHandler } from '@modules/transactions/services/extraction/EdgeCaseHandler';
 
 describe('EdgeCaseHandler', () => {
     describe('parseAmount', () => {

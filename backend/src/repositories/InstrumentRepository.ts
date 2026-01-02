@@ -1,5 +1,5 @@
-import { query } from '../lib/db';
-import { Instrument, InstrumentType, UUID } from '../types/instruments.types';
+import { query } from '@shared/database/db';
+import { Instrument, InstrumentType, UUID } from '@shared/types/instruments.types';
 
 export class InstrumentRepository {
     static async findByUserId(userId: UUID): Promise<Instrument[]> {

@@ -1,6 +1,6 @@
 
-import { query } from '../lib/db';
-import { ReconciliationHistoryRecord, ReconciliationStatus } from '../types/reconciliation.types';
+import { query } from '@shared/database/db';
+import { ReconciliationHistoryRecord, ReconciliationStatus } from '@shared/types/reconciliation.types';
 import { PoolClient } from 'pg';
 
 export class ReconciliationRepository {

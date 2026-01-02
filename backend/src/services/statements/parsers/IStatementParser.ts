@@ -1,4 +1,4 @@
-import { ExtractedStatement } from '../../../types/statement.types';
+import { ExtractedStatement, StatementTransaction } from '@shared/types/statement.types';
 
 export interface IStatementParser {
     /**

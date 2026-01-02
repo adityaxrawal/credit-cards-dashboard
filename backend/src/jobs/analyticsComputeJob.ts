@@ -1,5 +1,5 @@
-import pool from '../lib/db';
-import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import pool from '@shared/database/db';
+import { AnalyticsService } from '@modules/analytics/analytics.service';
 
 /**
  * Analytics Compute Job

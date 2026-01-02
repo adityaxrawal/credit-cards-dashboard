@@ -1,5 +1,5 @@
 import { IStatementParser } from './IStatementParser';
-import { ExtractedStatement, StatementTransaction } from '../../../types/statement.types';
+import { ExtractedStatement, StatementTransaction } from '@shared/types/statement.types';
 
 export class HDFCStatementParser implements IStatementParser {
 

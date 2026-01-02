@@ -4,13 +4,13 @@
 import { jest } from '@jest/globals';
 
 // Mock the database pool
-jest.mock('../lib/db', () => ({
+jest.mock('@shared/database/db', () => ({
     query: jest.fn().mockImplementation(() => Promise.resolve({ rows: [], rowCount: 0 })),
     connect: jest.fn(),
 }));
 
 // Mock logger to avoid console spam in tests
-jest.mock('../utils/infrastructure/logger', () => ({
+jest.mock('@shared/utils/infrastructure/logger', () => ({
     info: jest.fn(),
     error: jest.fn(),
     warn: jest.fn(),

@@ -2,7 +2,7 @@
  * Test utilities and helpers for the Credit Card Dashboard backend tests
  */
 
-import { CleanEmail, TransactionType, TransactionDirection } from '../../types/transaction.types';
+import { CleanEmail, TransactionType, TransactionDirection } from '@shared/types/transaction.types';
 
 /**
  * Creates a mock email for testing extractors

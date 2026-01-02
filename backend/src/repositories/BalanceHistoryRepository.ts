@@ -1,5 +1,5 @@
 
-import { query } from '../lib/db';
+import { query } from '@shared/database/db';
 import { PoolClient } from 'pg';
 
 export interface BalanceSnapshot {

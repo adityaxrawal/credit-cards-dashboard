@@ -1,7 +1,7 @@
-import { UserRepository } from '../repositories/UserRepository';
-import * as budgetService from '../services/bills/BudgetService';
-import * as alertsService from '../services/alerts/AlertsService';
-import logger from '../utils/infrastructure/logger';
+import { UserRepository } from '@modules/user/user.repository';
+import * as budgetService from '@modules/budget/budget.service';
+import * as alertsService from '@modules/alerts/alerts.service';
+import logger from '@shared/utils/infrastructure/logger';
 
 /**
  * Spending Alert Job

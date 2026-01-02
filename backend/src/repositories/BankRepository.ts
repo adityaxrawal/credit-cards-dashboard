@@ -1,5 +1,5 @@
-import { query } from '../lib/db';
-import { Bank, UUID } from '../types/instruments.types';
+import { query } from '@shared/database/db';
+import { Bank, UUID } from '@shared/types/instruments.types';
 
 export class BankRepository {
     static async findAll(): Promise<Bank[]> {

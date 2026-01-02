@@ -12,7 +12,7 @@
  * - GPT failure does NOT block rule-based flow
  */
 
-import logger from '../../utils/infrastructure/logger';
+import logger from '@shared/utils/infrastructure/logger';
 
 export type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 

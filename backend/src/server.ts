@@ -1,12 +1,12 @@
 import 'dotenv/config';
 import app from './app';
-import pool from './lib/db';
-import { env } from './config/env';
+import pool from './shared/database/db';
+import { env } from './shared/config/env';
 import { createServer } from 'http';
-import { initializeWebSocket } from './services/alerts/WebSocketService';
-import { registerAll } from './services/transactions/classification';
+import { initializeWebSocket } from './modules/alerts/websocket.service';
+import { registerAll } from './modules/transactions/services/classification';
 import { dbWriteQueueManager } from './services/infrastructure/DbWriteQueueManager';
-import logger from './utils/infrastructure/logger';
+import logger from './shared/utils/infrastructure/logger';
 
 const PORT = env.PORT || 8000;
 
@@ -76,3 +76,4 @@ const startServer = async () => {
 };
 
 startServer();
+// touch

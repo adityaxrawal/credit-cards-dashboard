@@ -1,5 +1,5 @@
 import { InstrumentRepository } from './InstrumentRepository';
-import { UPIHandle, UUID } from '../types/instruments.types';
+import { UPIHandle, UUID } from '@shared/types/instruments.types';
 
 export class UPIHandleRepository {
     static async findByUserId(userId: UUID): Promise<UPIHandle[]> {
@@ -8,7 +8,7 @@ export class UPIHandleRepository {
     }
 
     static async findByAccountId(accountId: UUID): Promise<UPIHandle[]> {
-        const { query } = require('../lib/db');
+        const { query } = require('@shared/database/db');
         const result = await query(
             `SELECT * FROM instruments 
              WHERE type = 'upi_handle' 
@@ -19,7 +19,7 @@ export class UPIHandleRepository {
     }
 
     static async findByHandle(upiHandle: string): Promise<UPIHandle | null> {
-        const { query } = require('../lib/db');
+        const { query } = require('@shared/database/db');
         const result = await query(
             `SELECT * FROM instruments WHERE type = 'upi_handle' AND identifier = $1 LIMIT 1`,
             [upiHandle]
@@ -28,7 +28,7 @@ export class UPIHandleRepository {
     }
 
     static async findByUserAndHandle(userId: UUID, upiHandle: string): Promise<UPIHandle | null> {
-        const { query } = require('../lib/db');
+        const { query } = require('@shared/database/db');
         const result = await query(
             `SELECT * FROM instruments WHERE user_id = $1 AND type = 'upi_handle' AND identifier = $2 LIMIT 1`,
             [userId, upiHandle]

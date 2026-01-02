@@ -1,5 +1,5 @@
-import { ManualReviewRepository } from '../../../repositories/ManualReviewRepository';
-import logger from '../../../utils/infrastructure/logger';
+import { ManualReviewRepository } from '@modules/manual-review/manual-review.repository';
+import logger from '@shared/utils/infrastructure/logger';
 
 interface EmailContext {
     userId: string;

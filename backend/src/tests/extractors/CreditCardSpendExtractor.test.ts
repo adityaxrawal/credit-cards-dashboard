@@ -1,7 +1,7 @@
 import { describe, it, expect } from '@jest/globals';
-import { CreditCardSpendExtractor } from '../../services/transactions/extraction/extractors/CreditCardSpendExtractor';
+import { CreditCardSpendExtractor } from '@modules/transactions/services/extraction/extractors/CreditCardSpendExtractor';
 import { createMockEmail } from '../utils/testHelpers';
-import { TransactionType, TransactionDirection } from '../../types/transaction.types';
+import { TransactionType, TransactionDirection } from '@shared/types/transaction.types';
 
 describe('CreditCardSpendExtractor', () => {
     const userId = 'test-user-id';

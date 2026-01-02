@@ -5,7 +5,7 @@
  */
 
 // Mock database before any imports
-jest.mock('../../lib/db', () => ({
+jest.mock('@shared/database/db', () => ({
     __esModule: true,
     default: {
         query: jest.fn(),
@@ -17,14 +17,14 @@ jest.mock('../../lib/db', () => ({
 }));
 
 // Mock authentication middleware
-jest.mock('../../middleware/auth.middleware', () => ({
+jest.mock('@shared/middleware/auth.middleware', () => ({
     authenticate: (req: any, res: any, next: any) => {
         req.user = { id: 'test-user-123', email: 'test@example.com' };
         next();
     },
 }));
 
-const mockPool = require('../../lib/db').default;
+const mockPool = require('@shared/database/db').default;
 
 describe('Accounts API Logic', () => {
     beforeEach(() => {

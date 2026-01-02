@@ -3,7 +3,7 @@
  * Data access layer for subscription detection and management
  */
 
-import { query } from '../lib/db';
+import { query } from '@shared/database/db';
 
 export class SubscriptionRepository {
     /**

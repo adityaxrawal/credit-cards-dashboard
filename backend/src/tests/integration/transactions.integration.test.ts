@@ -1,11 +1,10 @@
-
 import { jest } from '@jest/globals';
-jest.unmock('../../lib/db');
+jest.unmock('@shared/database/db');
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
-import { createManualTransaction, updateTransaction, deleteTransaction, getTransaction } from '../../services/transactions/TransactionService';
-import pool from '../../lib/db';
-import { InstrumentType } from '../../types/transaction.types';
+import { createManualTransaction, updateTransaction, deleteTransaction, getTransaction } from '@modules/transactions/services/TransactionService';
+import pool from '@shared/database/db';
+import { InstrumentType } from '@shared/types/transaction.types';
 
 describe('Transaction Integration Tests', () => {
     let userId: string;

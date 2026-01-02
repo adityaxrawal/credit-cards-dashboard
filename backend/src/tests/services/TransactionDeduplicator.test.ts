@@ -3,17 +3,17 @@
  * Tests for fingerprint generation, duplicate detection, and near-duplicate matching
  */
 
-import { TransactionDeduplicator } from '../../services/transactions/TransactionDeduplicator';
+import { TransactionDeduplicator } from '@modules/transactions/services/TransactionDeduplicator';
 
 // Mock dependencies
-jest.mock('../../lib/db', () => ({
+jest.mock('@shared/database/db', () => ({
     __esModule: true,
     default: {
         query: jest.fn(),
     },
 }));
 
-jest.mock('../../utils/infrastructure/logger', () => ({
+jest.mock('@shared/utils/infrastructure/logger', () => ({
     __esModule: true,
     default: {
         info: jest.fn(),
@@ -23,7 +23,7 @@ jest.mock('../../utils/infrastructure/logger', () => ({
     },
 }));
 
-const mockPool = require('../../lib/db').default;
+const mockPool = require('@shared/database/db').default;
 
 describe('TransactionDeduplicator', () => {
     beforeEach(() => {

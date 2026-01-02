@@ -4,7 +4,7 @@
  */
 
 // Mock dependencies
-jest.mock('../../lib/db', () => ({
+jest.mock('@shared/database/db', () => ({
     __esModule: true,
     default: {
         query: jest.fn(),
@@ -15,7 +15,7 @@ jest.mock('../../lib/db', () => ({
     },
 }));
 
-const mockPool = require('../../lib/db').default;
+const mockPool = require('@shared/database/db').default;
 
 describe('TransactionLockService', () => {
     const userId = 'user-123';

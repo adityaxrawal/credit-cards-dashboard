@@ -1,5 +1,5 @@
 import { Client } from 'pg';
-import { env } from '../config/env';
+import { env } from '@shared/config/env';
 
 const runFix = async () => {
     const client = new Client({

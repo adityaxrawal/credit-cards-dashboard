@@ -1,4 +1,4 @@
-import logger from '../../../utils/infrastructure/logger';
+import logger from '@shared/utils/infrastructure/logger';
 import { DbWriteQueueManager } from '../DbWriteQueueManager';
 import { LogRepository } from '../../../repositories/LogRepository';
 

@@ -1,7 +1,7 @@
-import * as alertsService from '../services/alerts/AlertsService';
-import { UserRepository } from '../repositories/UserRepository';
-import { LoanRepository } from '../repositories/LoanRepository';
-import { AlertRepository } from '../repositories/AlertRepository';
+import * as alertsService from '@modules/alerts/alerts.service';
+import { UserRepository } from '@modules/user/user.repository';
+import { LoanRepository } from '@modules/loans/loan.repository';
+import { AlertRepository } from '@modules/alerts/alerts.repository';
 import dayjs from 'dayjs';
 
 /**

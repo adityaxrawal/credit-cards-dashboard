@@ -4,21 +4,21 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
-import { errorHandler } from './middleware/error.middleware';
-import { apiLimiter } from './middleware/rateLimit.middleware';
-import { metricsMiddleware } from './middleware/metrics.middleware';
-import { metricsService } from './services/analytics/MetricsService';
+import { errorHandler } from './shared/middleware/error.middleware';
+import { apiLimiter } from './shared/middleware/rateLimit.middleware';
+import { metricsMiddleware } from './shared/middleware/metrics.middleware';
+import { metricsService } from './modules/analytics/metrics.service';
 import routes from './routes';
-import { env } from './config/env';
+import { env } from './shared/config/env';
 
-import { csrfProtection, csrfErrorHandler } from './middleware/csrf.middleware';
+import { csrfProtection, csrfErrorHandler } from './shared/middleware/csrf.middleware';
 import { CleanupService } from './services/infrastructure/CleanupService';
 
 import * as Sentry from '@sentry/node';
 
 // Initialize background services
 CleanupService.startCleanupCron();
-import { SchedulerService } from './services/reports/SchedulerService';
+import { SchedulerService } from './modules/reports/scheduler.service';
 SchedulerService.getInstance().init();
 
 
@@ -102,7 +102,7 @@ app.get('/api/csrf-token', (req, res) => {
 
 // Comprehensive Health Check
 app.get('/health', async (req, res) => {
-  const { performHealthCheck } = await import('./utils/healthCheck');
+  const { performHealthCheck } = await import('./shared/utils/healthCheck');
   const health = await performHealthCheck();
 
   const statusCode = health.status === 'healthy' ? 200 : (health.status === 'degraded' ? 200 : 503);
@@ -111,7 +111,7 @@ app.get('/health', async (req, res) => {
 
 // Detailed Health Check (for monitoring tools)
 app.get('/health/detailed', async (req, res) => {
-  const { performHealthCheck, getSystemMetrics, getDatabaseStats } = await import('./utils/healthCheck');
+  const { performHealthCheck, getSystemMetrics, getDatabaseStats } = await import('./shared/utils/healthCheck');
 
   const [health, systemMetrics, dbStats] = await Promise.all([
     performHealthCheck(),

@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { LogRepository } from '../../repositories/LogRepository';
-import logger from '../../utils/infrastructure/logger';
+import logger from '@shared/utils/infrastructure/logger';
 
 /**
  * Cleanup Service

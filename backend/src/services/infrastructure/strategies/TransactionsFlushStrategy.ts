@@ -8,8 +8,8 @@
 
 import { FlushStrategy } from './FlushStrategy';
 import { DbWriteJob, DbWriteTable } from '../DbWriteQueueManager';
-import { TransactionRepository } from '../../../repositories/TransactionRepository';
-import logger from '../../../utils/infrastructure/logger';
+import { TransactionRepository } from '@modules/transactions/repositories/TransactionRepository';
+import logger from '@shared/utils/infrastructure/logger';
 
 export class TransactionsFlushStrategy implements FlushStrategy {
     readonly table: DbWriteTable = 'transactions';

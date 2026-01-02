@@ -1,4 +1,4 @@
-import pool from '../lib/db';
+import pool from '@shared/database/db';
 import dayjs from 'dayjs';
 
 /**

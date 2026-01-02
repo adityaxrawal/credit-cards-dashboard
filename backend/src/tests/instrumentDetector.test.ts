@@ -1,6 +1,6 @@
 import { describe, it, expect } from '@jest/globals';
-import { InstrumentDetector, DetectedInstrument } from '../services/transactions/extraction/InstrumentDetector';
-import { InstrumentType } from '../types/transaction.types';
+import { InstrumentDetector, DetectedInstrument } from '@modules/transactions/services/extraction/InstrumentDetector';
+import { InstrumentType } from '@shared/types/transaction.types';
 
 describe('InstrumentDetector', () => {
     describe('detectFromContent', () => {

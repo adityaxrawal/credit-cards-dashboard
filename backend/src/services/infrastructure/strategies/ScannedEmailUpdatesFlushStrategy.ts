@@ -9,7 +9,7 @@
 import { FlushStrategy } from './FlushStrategy';
 import { DbWriteJob, DbWriteTable } from '../DbWriteQueueManager';
 import { LogRepository } from '../../../repositories/LogRepository';
-import logger from '../../../utils/infrastructure/logger';
+import logger from '@shared/utils/infrastructure/logger';
 
 export class ScannedEmailUpdatesFlushStrategy implements FlushStrategy {
     readonly table: DbWriteTable = 'scanned_email_updates';

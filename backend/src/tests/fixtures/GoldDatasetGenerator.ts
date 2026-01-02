@@ -1,4 +1,4 @@
-import { SimplifiedEmail } from '../../types/transaction.types';
+import { SimplifiedEmail } from '@shared/types/transaction.types';
 
 export interface GroundTruth {
     expectedType: 'credit_card_spend' | 'upi_spend' | 'bank_debit' | 'non_financial';

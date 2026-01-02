@@ -1,5 +1,5 @@
-import pool, { safeQuery } from '../../../lib/db';
-import logger from '../../../utils/infrastructure/logger';
+import pool, { safeQuery } from '../../../shared/database/db';
+import logger from '@shared/utils/infrastructure/logger';
 
 interface EmailContext {
     userId: string;

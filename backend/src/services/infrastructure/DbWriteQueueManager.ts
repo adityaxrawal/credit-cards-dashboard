@@ -11,7 +11,7 @@
  * Refactored: Issue #9 - Uses Strategy Pattern for table-specific flushing
  */
 
-import logger from '../../utils/infrastructure/logger';
+import logger from '@shared/utils/infrastructure/logger';
 import { randomUUID } from 'crypto';
 import { FlushStrategy, defaultStrategies } from './strategies';
 

@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
-import logger from '../../utils/infrastructure/logger';
+import logger from '@shared/utils/infrastructure/logger';
 import dayjs from 'dayjs';
 
 export interface EmailOptions {

@@ -3,7 +3,7 @@
  * Data access layer for notification preferences and logs
  */
 
-import { query } from '../lib/db';
+import { query } from '@shared/database/db';
 
 export interface NotificationPreferenceRow {
     id: string;

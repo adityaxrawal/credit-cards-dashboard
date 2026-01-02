@@ -9,7 +9,7 @@
 import { FlushStrategy } from './FlushStrategy';
 import { DbWriteJob, DbWriteTable } from '../DbWriteQueueManager';
 import { JobRepository } from '../../../repositories/JobRepository';
-import logger from '../../../utils/infrastructure/logger';
+import logger from '@shared/utils/infrastructure/logger';
 
 export class JobStatsFlushStrategy implements FlushStrategy {
     readonly table: DbWriteTable = 'job_stats';

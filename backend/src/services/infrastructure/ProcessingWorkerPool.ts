@@ -8,7 +8,7 @@
  * - Never awaits DB operations directly
  */
 
-import logger from '../../utils/infrastructure/logger';
+import logger from '@shared/utils/infrastructure/logger';
 
 // Simple semaphore implementation
 class Semaphore {

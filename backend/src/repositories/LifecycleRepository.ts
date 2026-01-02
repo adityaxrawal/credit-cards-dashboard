@@ -3,7 +3,7 @@
  * Data access layer for transaction lifecycle/status operations
  */
 
-import { query } from '../lib/db';
+import { query } from '@shared/database/db';
 
 export class LifecycleRepository {
     /**

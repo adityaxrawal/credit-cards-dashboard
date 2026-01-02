@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { SimplifiedEmail, CleanEmail } from '../../../types/transaction.types';
+import { SimplifiedEmail, CleanEmail } from '@shared/types/transaction.types';
 
 export type CleanEmailContent = CleanEmail;
 
@@ -20,13 +20,13 @@ export class SanitizerService {
         const attachments: { filename: string; mimeType: string; data: Buffer }[] = [];
 
         if (rawEmail.attachments && rawEmail.attachments.length > 0 && fetchAttachment) {
-            const pdfAttachments = rawEmail.attachments.filter(att =>
+            const pdfAttachments = rawEmail.attachments.filter((att: any) =>
                 att.mimeType === 'application/pdf' || att.filename.toLowerCase().endsWith('.pdf')
             );
 
             if (pdfAttachments.length > 0) {
                 const results = await Promise.all(
-                    pdfAttachments.map(async (att) => {
+                    pdfAttachments.map(async (att: any) => {
                         try {
                             const buffer = await fetchAttachment(rawEmail.messageId, att.id);
                             if (buffer) {

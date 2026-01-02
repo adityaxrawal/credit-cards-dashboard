@@ -1,5 +1,5 @@
 
-import pool from '../../lib/db';
+import pool from '@shared/database/db';
 
 async function main() {
     try {

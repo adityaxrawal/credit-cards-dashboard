@@ -3,7 +3,7 @@
  * Data access layer for budget automation rules
  */
 
-import { query } from '../lib/db';
+import { query } from '@shared/database/db';
 
 export interface BudgetRuleRow {
     id: string;

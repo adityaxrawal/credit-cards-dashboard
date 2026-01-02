@@ -3,7 +3,7 @@
  * Centralized data access for system logs (email processing, pipelines, errors)
  */
 
-import { query } from '../lib/db';
+import { query } from '@shared/database/db';
 
 export class LogRepository {
     /**

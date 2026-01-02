@@ -5,10 +5,10 @@
 
 import { NotificationRepository } from '../repositories/NotificationRepository';
 import { NotificationQueueRepository } from '../repositories/NotificationQueueRepository';
-import { PreferenceService } from '../services/notifications/PreferenceService';
+import { PreferenceService } from '@modules/user/preference.service';
 import { EmailService } from '../services/notifications/EmailService';
 import { PushNotificationService } from '../services/notifications/PushNotificationService';
-import logger from '../utils/infrastructure/logger';
+import logger from '@shared/utils/infrastructure/logger';
 import dayjs from 'dayjs';
 
 export const processNotificationQueue = async () => {

@@ -3,7 +3,7 @@
  * Data access layer for queued notifications
  */
 
-import { query } from '../lib/db';
+import { query } from '@shared/database/db';
 
 export interface NotificationQueueItem {
     id: string;

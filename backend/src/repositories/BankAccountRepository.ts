@@ -1,5 +1,5 @@
 import { InstrumentRepository } from './InstrumentRepository';
-import { BankAccount, UUID } from '../types/instruments.types';
+import { BankAccount, UUID } from '@shared/types/instruments.types';
 
 export class BankAccountRepository {
     static async findByUserId(userId: UUID): Promise<BankAccount[]> {
@@ -8,7 +8,7 @@ export class BankAccountRepository {
     }
 
     static async findByUserAndBank(userId: UUID, bankId: UUID): Promise<BankAccount[]> {
-        const { query } = require('../lib/db');
+        const { query } = require('@shared/database/db');
         const result = await query(
             `SELECT * FROM instruments WHERE user_id = $1 AND bank_id = $2 AND type = 'bank_account'`,
             [userId, bankId]
@@ -23,7 +23,7 @@ export class BankAccountRepository {
     }
 
     static async findByUserAndMasked(userId: UUID, masked: string): Promise<BankAccount | null> {
-        const { query } = require('../lib/db');
+        const { query } = require('@shared/database/db');
         const result = await query(
             `SELECT * FROM instruments WHERE user_id = $1 AND identifier = $2 AND type = 'bank_account' LIMIT 1`,
             [userId, masked]

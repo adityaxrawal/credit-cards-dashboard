@@ -1,8 +1,8 @@
 import { describe, it, expect } from '@jest/globals';
-import { BankAccountUPIDebitExtractor } from '../../services/transactions/extraction/extractors/BankAccountUPIDebitExtractor';
-import { BankAccountUPICreditExtractor } from '../../services/transactions/extraction/extractors/BankAccountUPICreditExtractor';
+import { BankAccountUPIDebitExtractor } from '@modules/transactions/services/extraction/extractors/BankAccountUPIDebitExtractor';
+import { BankAccountUPICreditExtractor } from '@modules/transactions/services/extraction/extractors/BankAccountUPICreditExtractor';
 import { createMockEmail } from '../utils/testHelpers';
-import { TransactionType, TransactionDirection } from '../../types/transaction.types';
+import { TransactionType, TransactionDirection } from '@shared/types/transaction.types';
 
 describe('UPI Extractors', () => {
     const userId = 'test-user-id';

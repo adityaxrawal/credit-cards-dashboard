@@ -3,7 +3,7 @@
  * Data access layer for category-based budget envelopes
  */
 
-import { query } from '../lib/db';
+import { query } from '@shared/database/db';
 
 export interface EnvelopeRow {
     id: string;

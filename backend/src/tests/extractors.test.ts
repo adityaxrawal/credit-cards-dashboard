@@ -1,19 +1,11 @@
 import { describe, it, expect } from '@jest/globals';
-import { BankChargeExtractor } from '../services/transactions/extraction/extractors/BankChargeExtractor';
-import { InterestExtractor } from '../services/transactions/extraction/extractors/InterestExtractor';
-import { ChequeExtractor } from '../services/transactions/extraction/extractors/ChequeExtractor';
-import { StandingInstructionExtractor } from '../services/transactions/extraction/extractors/StandingInstructionExtractor';
-import { CleanEmail, TransactionType, TransactionDirection } from '../types/transaction.types';
+import { BankChargeExtractor } from '@modules/transactions/services/extraction/extractors/BankChargeExtractor';
+import { InterestExtractor } from '@modules/transactions/services/extraction/extractors/InterestExtractor';
+import { ChequeExtractor } from '@modules/transactions/services/extraction/extractors/ChequeExtractor';
+import { StandingInstructionExtractor } from '@modules/transactions/services/extraction/extractors/StandingInstructionExtractor';
+import { CleanEmail, TransactionType, TransactionDirection } from '@shared/types/transaction.types';
+import { createMockEmail } from './utils/testHelpers';
 
-// Helper to create mock email
-const createMockEmail = (subject: string, body: string): CleanEmail => ({
-    id: 'test-email-id',
-    subject,
-    from: 'bank@test.com',
-    cleanedBody: body,
-    internalDate: Date.now(),
-    hasAttachments: false
-});
 
 describe('BankChargeExtractor', () => {
     it('should extract annual fee', async () => {

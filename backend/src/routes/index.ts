@@ -1,30 +1,30 @@
 import { Router } from 'express';
-import authRoutes from './auth.routes';
-import cardsRoutes from './cards.routes';
-import transactionsRoutes from './transactions.routes';
-import budgetRoutes from './budget.routes';
-import analyticsRoutes from './analytics.routes';
-import alertsRoutes from './alerts.routes';
-import gmailRoutes from './gmail.routes';
+import authRoutes from '../modules/auth/auth.routes';
+import cardsRoutes from '../modules/cards/cards.routes';
+import transactionsRoutes from '@modules/transactions/transactions.routes';
+import budgetRoutes from '../modules/budget/budget.routes';
+import analyticsRoutes from '../modules/analytics/analytics.routes';
+import alertsRoutes from '../modules/alerts/alerts.routes';
+import gmailRoutes from '../modules/gmail/gmail.routes';
 
-import rewardsRoutes from './rewards.routes';
-import extractionRoutes from './extraction.routes';
-import billsRoutes from './bills.routes';
-import monitoringRoutes from './monitoring.routes';
-import statementsRoutes from './statements.routes';
-import categoriesRoutes from './categories.routes';
-import reportsRoutes from './reports.routes';
-import manualReviewRoutes from './manual-review.routes';
-import recurringRoutes from './recurring.routes';
-import dashboardRoutes from './dashboard.routes';
-import accountsRoutes from './accounts.routes';
-import loansRoutes from './loans.routes';
-import goalsRoutes from './goals.routes';
-import transfersRoutes from './transfers.routes';
-import importRoutes from './import.routes';
-import sharedExpenseRoutes from './shared-expense.routes';
-import currencyRoutes from './currency.routes';
-import securityRoutes from './security.routes';
+import rewardsRoutes from '../modules/rewards/rewards.routes';
+import extractionRoutes from '../modules/extraction/extraction.routes';
+import billsRoutes from '../modules/bills/bills.routes';
+import monitoringRoutes from '../modules/monitoring/monitoring.routes';
+// // import statementsRoutes from '../modules/statements/statements.routes';
+import categoriesRoutes from '../modules/categories/categories.routes';
+import reportsRoutes from '../modules/reports/reports.routes';
+import manualReviewRoutes from '../modules/manual-review/manual-review.routes';
+import recurringRoutes from '../modules/recurring/recurring.routes';
+import dashboardRoutes from '../modules/dashboard/dashboard.routes';
+import accountsRoutes from '../modules/accounts/accounts.routes';
+import loansRoutes from '../modules/loans/loans.routes';
+import goalsRoutes from '../modules/goals/goals.routes';
+import transfersRoutes from '../modules/transfers/transfers.routes';
+import importRoutes from '../modules/import/import.routes';
+import sharedExpenseRoutes from '../modules/shared-expense/shared-expense.routes';
+import currencyRoutes from '../modules/currency/currency.routes';
+import securityRoutes from '../modules/security/security.routes';
 
 
 const router = Router();
@@ -50,7 +50,7 @@ router.use('/gmail', gmailRoutes);
 router.use('/rewards', rewardsRoutes);
 router.use('/extraction', extractionRoutes);
 router.use('/bills', billsRoutes);
-router.use('/statements', statementsRoutes);
+// router.use('/statements', statementsRoutes);
 router.use('/categories', categoriesRoutes);
 router.use('/reports', reportsRoutes);
 router.use('/manual-review', manualReviewRoutes);
@@ -68,7 +68,7 @@ router.use('/currency', currencyRoutes);
 router.use('/security', securityRoutes);
 
 // Rules Engine
-import rulesRoutes from './rules.routes';
+import rulesRoutes from '../modules/rules/rules.routes';
 router.use('/rules', rulesRoutes);
 
 

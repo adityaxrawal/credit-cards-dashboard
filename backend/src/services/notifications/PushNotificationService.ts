@@ -1,5 +1,5 @@
 import webpush from 'web-push';
-import logger from '../../utils/infrastructure/logger';
+import logger from '@shared/utils/infrastructure/logger';
 import { NotificationRepository } from '../../repositories/NotificationRepository';
 
 export interface PushPayload {
