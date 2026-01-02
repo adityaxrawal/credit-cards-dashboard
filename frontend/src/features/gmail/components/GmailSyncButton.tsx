@@ -1,21 +1,110 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Button } from "@/shared/components/ui/primitives/Button";
 import { Input } from "@/shared/components/ui/primitives/Input";
 import { Label } from "@/shared/components/ui/primitives/label";
-import { RefreshCw, X, CheckCircle, XCircle, AlertCircle, Calendar } from "lucide-react";
+import { 
+  RefreshCw, 
+  X, 
+  CheckCircle, 
+  XCircle, 
+  AlertCircle, 
+  Calendar,
+  Loader2,
+  Database,
+  Mail,
+  Search,
+  FileText,
+  ArrowRight
+} from "lucide-react";
 import { gmailApi } from "@/features/gmail/api";
 import { ManualCardMappingModal } from "./ManualCardMappingModal";
 import { useGmailSync } from "@/lib/contexts/GmailWebSocketContext";
 import { toast } from "react-hot-toast";
+import { motion, AnimatePresence } from "framer-motion";
+
+// --- Types ---
 
 interface GmailSyncModalProps {
   isOpen: boolean;
   onClose: () => void;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onSyncComplete?: () => void;
 }
+
+type StepStatus = 'pending' | 'active' | 'completed' | 'error';
+
+interface SyncStep {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  status: StepStatus;
+  detail?: string;
+}
+
+// --- Components ---
+
+const StepItem = ({ step, isLast }: { step: SyncStep; isLast: boolean }) => {
+  const getStatusColor = (s: StepStatus) => {
+    switch (s) {
+      case 'completed': return 'text-primary-green';
+      case 'active': return 'text-primary-green';
+      case 'error': return 'text-semantic-red';
+      default: return 'text-muted-text';
+    }
+  };
+
+  const getIcon = () => {
+    if (step.status === 'active') return <Loader2 className="w-5 h-5 animate-spin text-primary-green" />;
+    if (step.status === 'completed') return <CheckCircle className="w-5 h-5 text-primary-green" />;
+    if (step.status === 'error') return <XCircle className="w-5 h-5 text-semantic-red" />;
+    return <step.icon className={`w-5 h-5 ${getStatusColor(step.status)}`} />;
+  };
+
+  return (
+    <div className="flex gap-4 relative">
+      <div className="flex flex-col items-center">
+        <div className={`
+          w-8 h-8 rounded-full flex items-center justify-center border transition-colors duration-300
+          ${step.status === 'active' ? 'bg-primary-green/10 border-primary-green/50 shadow-[0_0_10px_rgba(34,197,94,0.2)]' : 
+            step.status === 'completed' ? 'bg-primary-green/10 border-primary-green/50' : 
+            step.status === 'error' ? 'bg-semantic-red/10 border-semantic-red/50' : 
+            'bg-hover-bg border-muted-text/20'}
+        `}>
+          {getIcon()}
+        </div>
+        {!isLast && (
+          <div className={`w-0.5 flex-1 my-1 transition-colors duration-300 ${
+            step.status === 'completed' ? 'bg-primary-green/30' : 'bg-muted-text/10'
+          }`} />
+        )}
+      </div>
+      <div className="flex-1 pb-6 pt-1">
+        <div className="flex justify-between items-start">
+          <h4 className={`text-sm font-medium transition-colors ${
+            step.status === 'active' ? 'text-primary-text' : 
+            step.status === 'completed' ? 'text-primary-text/80' : 
+            'text-muted-text'
+          }`}>
+            {step.label}
+          </h4>
+          {step.status === 'active' && (
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-primary-green animate-pulse">
+              In Progress
+            </span>
+          )}
+        </div>
+        {step.detail && step.status !== 'pending' && (
+          <p className="text-xs text-secondary-text mt-1 font-medium animate-in fade-in slide-in-from-top-1">
+            {step.detail}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// --- Main Modal Component ---
 
 export function GmailSyncModal({
   isOpen,
@@ -25,50 +114,47 @@ export function GmailSyncModal({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [mappingMessageId, setMappingMessageId] = useState<string | null>(null);
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
 
   // Consume Global Sync State
   const { state, startSyncObservation, resetState } = useGmailSync();
   const { 
     isSyncing, 
     status, 
-    jobId, 
     processed, 
     total, 
     inserted, 
     errors, 
     currentStep,
-    progress: progressPercent,
     postProcessingStats,
     errorList,
+    queueStatus,
     errorMessage: apiErrorMessage
   } = state;
 
   const isCompleted = status === 'COMPLETED';
   const isFailed = status === 'FAILED';
 
-  // State initialization when opening modal
-  React.useEffect(() => {
+
+  // State initialization
+  useEffect(() => {
     if (isOpen) {
       if (!isSyncing && !isCompleted && !isFailed) {
         setConfigMode(true);
         loadDates();
       } else {
-        // If already syncing or showing results, show status view
         setConfigMode(false);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, isSyncing, isCompleted, isFailed]);
 
   const loadDates = async () => {
     try {
       const { lastSync } = await gmailApi.getLastSync();
-      const end = new Date();
-      // Default to 90 days if no last sync, otherwise use last sync date
+      setEndDate(new Date().toISOString().split('T')[0]);
+      // Default to 90 days if no last sync
       const start = lastSync ? new Date(lastSync) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-      
       setStartDate(start.toISOString().split('T')[0]);
-      setEndDate(end.toISOString().split('T')[0]);
     } catch (e) {
       console.error("Failed to load last sync:", e);
       setStartDate(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
@@ -77,39 +163,24 @@ export function GmailSyncModal({
   };
 
   const handleSync = async () => {
-    console.log(`[GmailSync] Starting manual sync... Range: ${startDate || 'Default'} to ${endDate || 'Default'}`);
     setConfigMode(false);
-    // Reset any previous state (though startSyncObservation does it too)
     resetState();
-
     try {
       const result = await gmailApi.scanHistorical(
         startDate ? new Date(startDate) : undefined,
         endDate ? new Date(endDate) : undefined
       );
-
-      if (result.jobId) {
-        console.log(`[GmailSync] Job started: ${result.jobId}`);
-        startSyncObservation(result.jobId);
-      }
-    } catch (error: unknown) {
+      if (result.jobId) startSyncObservation(result.jobId);
+    } catch (error: any) {
       console.error("Sync error:", error);
-      const apiError = error as { message?: string; response?: { data?: { error?: { message?: string } } } };
-      const msg = apiError?.response?.data?.error?.message || apiError?.message || "Failed to start sync";
+      const msg = error?.response?.data?.error?.message || error?.message || "Failed to start sync";
       toast.error(msg);
-      // We manually update state here if needed, but easier to let user retry
       setConfigMode(true); 
     }
   };
 
   const handleClose = () => {
-    // FORCE close allowed
     onClose();
-    // We do NOT reset state on close if syncing, so user can background it
-    if (!isSyncing) {
-       // Optional: reset state on close if finished? 
-       // resetState(); 
-    }
   };
 
   const resetAndViewConfig = () => {
@@ -117,313 +188,371 @@ export function GmailSyncModal({
     setConfigMode(true);
     loadDates();
   };
+  
+  // -- Sync Logic Mappers --
+
+  const steps = useMemo<SyncStep[]>(() => {
+    const isPostProcessing = currentStep?.startsWith('POST_PROCESSING') ?? false;
+    const isQueued = (queueStatus?.queue1 ?? 0) > 0 || (queueStatus?.queue2 ?? 0) > 0;
+    const hasProcessed = processed > 0;
+    const isFetching = currentStep === 'FETCHING' || currentStep === 'PROCESSING_AND_FETCHING';
+    
+    // Helper to determine status based on overall flow
+    // Order: Connecting -> Fetching -> Parsing -> Detecting -> DB -> Finalizing
+    
+    // 1. Connecting
+    let connectingStatus: StepStatus = 'completed'; // Assume completed if we see any other state
+    if (status === 'STARTING' || status === 'IDLE') connectingStatus = 'active';
+    
+    // 2. Fetching Emails
+    let fetchingStatus: StepStatus = 'pending';
+    if (connectingStatus === 'completed') {
+        if (isFetching && !isPostProcessing && !isCompleted) fetchingStatus = 'active';
+        else if (hasProcessed || isPostProcessing || isCompleted) fetchingStatus = 'completed';
+    }
+
+    // 3. Parsing Messages
+    let parsingStatus: StepStatus = 'pending';
+    if (fetchingStatus !== 'pending') {
+        // Active if we are processing emails (even if also fetching)
+        if (!isPostProcessing && !isCompleted && (hasProcessed || isFetching)) parsingStatus = 'active';
+        else if (isPostProcessing || isCompleted) parsingStatus = 'completed';
+    }
+
+    // 4. Detecting Transactions
+    let detectingStatus: StepStatus = 'pending';
+    if (parsingStatus !== 'pending') {
+        // Active alongside parsing
+        if (!isPostProcessing && !isCompleted && hasProcessed) detectingStatus = 'active';
+        else if (isPostProcessing || isCompleted) detectingStatus = 'completed';
+    }
+
+    // 5. Writing to Database
+    let dbStatus: StepStatus = 'pending';
+    if (detectingStatus !== 'pending') {
+         if (isQueued && !isCompleted) dbStatus = 'active';
+         else if ((isPostProcessing || isCompleted) && !isQueued) dbStatus = 'completed';
+         else if (!isQueued && detectingStatus === 'active') dbStatus = 'active'; // ready to write
+    }
+
+    // 6. Finalizing
+    let finalizingStatus: StepStatus = 'pending';
+    if (dbStatus !== 'pending') {
+        if (isPostProcessing && !isCompleted) finalizingStatus = 'active';
+        else if (isCompleted) finalizingStatus = 'completed';
+    }
+
+    // Error Override
+    if (isFailed) {
+        // Find the last active step and mark it error? Or just leave them as they stopped?
+        // Let's mark the likely failed step
+        if (!isPostProcessing) parsingStatus = 'error'; 
+        else finalizingStatus = 'error';
+    }
+
+    return [
+      {
+        id: 'connecting',
+        label: 'Connecting to Gmail',
+        icon: Mail,
+        status: connectingStatus,
+        detail: connectingStatus === 'active' ? 'Establishing secure connection...' : undefined
+      },
+      {
+        id: 'fetching',
+        label: 'Fetching emails',
+        icon: Search,
+        status: fetchingStatus,
+        detail: fetchingStatus === 'active' ? `Scanning date range...` : 
+                fetchingStatus === 'completed' ? `Scanned ${total} emails` : undefined
+      },
+      {
+        id: 'parsing',
+        label: 'Parsing messages',
+        icon: FileText,
+        status: parsingStatus,
+        detail: parsingStatus === 'active' ? `${processed} / ${total} emails processed` : 
+                parsingStatus === 'completed' ? 'All emails parsed' : undefined
+      },
+      {
+        id: 'detecting',
+        label: 'Detecting transactions',
+        icon: Search,
+        status: detectingStatus,
+        detail: detectingStatus === 'active' ? `Found ${inserted} transactions so far` : 
+                detectingStatus === 'completed' ? `Found ${inserted} transactions` : undefined
+      },
+      {
+        id: 'writing',
+        label: 'Writing to database',
+        icon: Database,
+        status: dbStatus,
+        detail: dbStatus === 'active' ? `${(queueStatus?.queue1 ?? 0) + (queueStatus?.queue2 ?? 0)} items queued` : 
+                dbStatus === 'completed' ? 'All writes complete' : undefined
+      },
+      {
+        id: 'finalizing',
+        label: 'Finalizing sync',
+        icon: CheckCircle,
+        status: finalizingStatus,
+        detail: finalizingStatus === 'active' ? (
+            currentStep === 'POST_PROCESSING_ANALYTICS' ? 'Computing analytics...' :
+            currentStep === 'POST_PROCESSING_BILLS' ? 'Generating bills...' :
+            currentStep === 'POST_PROCESSING_CARDS' ? 'Detecting new cards...' : 'Finishing up...'
+        ) : finalizingStatus === 'completed' ? 'Sync complete!' : undefined
+      }
+    ];
+  }, [status, currentStep, processed, total, inserted, queueStatus, postProcessingStats, isCompleted, isFailed]);
+
+
+  // Calculate overall percentage
+  // We can weigh the steps: Parsing (80%), Post-processing (20%)
+  const percentage = useMemo(() => {
+    if (isCompleted) return 100;
+    if (total === 0) return 5; // indeterminate start
+    
+    const parsingProgress = processed / total;
+    // Cap parsing at 90%
+    const weightedParsing = Math.min(parsingProgress * 90, 90);
+    
+    // Add extra for post processing
+    const isPostProcessing = currentStep?.startsWith('POST_PROCESSING');
+    const weightedPost = isPostProcessing ? 10 : 0; // Simple bump
+
+    return Math.round(weightedParsing + weightedPost);
+  }, [processed, total, currentStep, isCompleted]);
+
 
   if (!isOpen) return null;
 
-  // Calculate percentage for display
-  const displayPercent = progressPercent ?? (total > 0 ? Math.round((processed / total) * 100) : 0);
-
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={(e) => e.stopPropagation()} />
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity" onClick={(e) => e.stopPropagation()} />
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-card-bg rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-6 max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-primary-text flex items-center gap-2">
-              <RefreshCw className={isSyncing ? "animate-spin" : ""} size={24} />
-              Gmail Sync
-            </h2>
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+      >
+        <div className="bg-card-bg border border-white/10 rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col pointer-events-auto">
+          
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 border-b border-white/5">
+                <div>
+                    <h2 className="text-xl font-bold text-primary-text flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${isSyncing ? 'bg-primary-green/10' : 'bg-white/5'}`}>
+                        <RefreshCw className={`w-5 h-5 text-primary-green ${isSyncing ? "animate-spin" : ""}`} />
+                    </div>
+                    Gmail Sync
+                    </h2>
+                    <p className="text-xs text-secondary-text mt-1 ml-1 overflow-hidden">
+                        {configMode ? "Select range to scan" : 
+                         isCompleted ? "Sync completed successfully" : 
+                         isFailed ? "Sync failed" : "Synchronizing your financial data..."}
+                    </p>
+                </div>
             <button
                 onClick={handleClose}
-                className="text-secondary-text hover:text-primary-text transition-colors"
+                className="text-muted-text hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"
              >
-                <X size={24} />
+                <X size={20} />
              </button>
           </div>
 
+          <div className="overflow-y-auto flex-1 p-6">
           {configMode ? (
-            <div className="space-y-4 mt-4">
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 flex items-start gap-2">
-                <Calendar className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <span>Select the date range to scan for transactions.</span>
+            <div className="space-y-6">
+              <div className="p-4 bg-primary-green/10 border border-primary-green/20 rounded-xl flex gap-3">
+                <Calendar className="w-5 h-5 text-primary-green flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                    <p className="text-sm font-medium text-primary-text">Date Range</p>
+                    <p className="text-xs text-secondary-text leading-relaxed">
+                        Select a date range to scan for transaction emails. 
+                        We recommend syncing the last 90 days for optimal results.
+                    </p>
+                </div>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Start Date</Label>
+                  <Label className="text-xs font-semibold text-secondary-text uppercase tracking-wider">Start Date</Label>
                   <Input 
                     type="date" 
                     value={startDate} 
                     onChange={(e) => setStartDate(e.target.value)} 
+                    className="bg-hover-bg border-white/10 focus:border-primary-green/50"
                   />
                 </div>
                 <div className="space-y-2">
-                   <Label className="text-sm font-medium">End Date</Label>
+                   <Label className="text-xs font-semibold text-secondary-text uppercase tracking-wider">End Date</Label>
                    <Input 
                      type="date" 
                      value={endDate} 
                      onChange={(e) => setEndDate(e.target.value)} 
+                     className="bg-hover-bg border-white/10 focus:border-primary-green/50"
                    />
                 </div>
               </div>
-
-              <div className="flex justify-end gap-3 pt-6 border-t border-muted-text/10">
-                <Button variant="ghost" onClick={handleClose}>Cancel</Button>
-                <Button onClick={handleSync} disabled={!startDate || !endDate}>Start Sync</Button>
-              </div>
             </div>
           ) : (
-            <>
-              {/* Status Messages (Completed) */}
-              {isCompleted && (
-                <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <CheckCircle className="text-green-600 flex-shrink-0" size={24} />
-                  <div>
-                    <p className="font-semibold text-green-900">Sync Complete!</p>
-                    <p className="text-sm text-green-700 mt-1">
-                      Found {inserted || 0} new transaction{inserted !== 1 ? "s" : ""} 
-                      {total ? ` out of ${total} emails scanned` : ''}
-                    </p>
-                    {postProcessingStats && (
-                      <div className="mt-2 text-xs text-green-800 space-y-1">
-                         {postProcessingStats.billsCreated ? (
-                            <p>• Generated {postProcessingStats.billsCreated} new bills</p>
-                         ) : null}
-                         {postProcessingStats.instrumentsCreated ? (
-                            <p>• Detected {postProcessingStats.instrumentsCreated} new cards</p>
-                         ) : null}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Status Messages (Failed) */}
-              {isFailed && (
-                <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <XCircle className="text-red-600 flex-shrink-0" size={24} />
-                  <div className="flex-1">
-                    <p className="font-semibold text-red-900">Sync Failed</p>
-                    <p className="text-sm text-red-700 mt-1">
-                      {apiErrorMessage || "An error occurred during scanning"}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Progress View */}
-              {(isSyncing || (!isCompleted && !isFailed)) && (
-                <div className="space-y-4">
-                  {/* Post-Processing Steps UI */}
-                  {currentStep?.startsWith("POST_PROCESSING") ? (
-                    <div className="space-y-3 bg-hover-bg rounded-xl p-4 border border-border-color">
-                      <h3 className="text-sm font-semibold text-primary-text mb-2">Finalizing Sync...</h3>
-                      
-                      <div className="flex items-center gap-3">
-                        <CheckCircle className="text-green-600 w-5 h-5 flex-shrink-0" />
-                        <span className="text-secondary-text text-sm">Sync Emails & Transactions</span>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        {currentStep === 'POST_PROCESSING_ANALYTICS' ? (
-                            <RefreshCw className="text-primary-green w-5 h-5 flex-shrink-0 animate-spin" />
-                        ) : (
-                            <CheckCircle className="text-green-600 w-5 h-5 flex-shrink-0" />
-                        )}
-                        <span className={`text-sm ${currentStep === 'POST_PROCESSING_ANALYTICS' ? "text-primary-text font-medium" : "text-secondary-text"}`}>
-                            Computing Analytics
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                         {currentStep === 'POST_PROCESSING_ANALYTICS' ? (
-                            <div className="w-5 h-5 rounded-full border-2 border-muted-text/20 flex-shrink-0" />
-                        ) : currentStep === 'POST_PROCESSING_BILLS' ? (
-                            <RefreshCw className="text-primary-green w-5 h-5 flex-shrink-0 animate-spin" />
-                        ) : (
-                            <CheckCircle className="text-green-600 w-5 h-5 flex-shrink-0" />
-                        )}
-                        <span className={`text-sm ${currentStep === 'POST_PROCESSING_BILLS' ? "text-primary-text font-medium" : "text-secondary-text"}`}>
-                            Generating Bills {postProcessingStats?.billsCreated ? `(${postProcessingStats.billsCreated} created)` : ''}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                         {['POST_PROCESSING_ANALYTICS', 'POST_PROCESSING_BILLS'].includes(currentStep || '') ? (
-                            <div className="w-5 h-5 rounded-full border-2 border-muted-text/20 flex-shrink-0" />
-                        ) : currentStep === 'POST_PROCESSING_CARDS' ? (
-                            <RefreshCw className="text-primary-green w-5 h-5 flex-shrink-0 animate-spin" />
-                        ) : (
-                            <CheckCircle className="text-green-600 w-5 h-5 flex-shrink-0" />
-                        )}
-                        <span className={`text-sm ${currentStep === 'POST_PROCESSING_CARDS' ? "text-primary-text font-medium" : "text-secondary-text"}`}>
-                            Detecting New Cards {postProcessingStats?.instrumentsCreated ? `(${postProcessingStats.instrumentsCreated} found)` : ''}
-                        </span>
-                      </div>
+            <div className="space-y-8 animate-in fade-in duration-500">
+                
+                {/* Stats Grid */}
+               <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-hover-bg rounded-xl p-3 border border-white/5 text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-muted-text mb-1">Found</p>
+                        <p className="text-xl font-bold text-primary-green tabular-nums">{inserted}</p>
                     </div>
-                  ) : (
-                  // Normal Fetch/Process Progress
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm text-secondary-text">
-                      <span>
-                        {processed}/{total} emails processed
-                      </span>
-                      <span className="font-semibold">{displayPercent}%</span>
+                    <div className="bg-hover-bg rounded-xl p-3 border border-white/5 text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-muted-text mb-1">Processed</p>
+                        <p className="text-xl font-bold text-primary-text tabular-nums">{processed}</p>
                     </div>
-                    <div className="w-full bg-hover-bg rounded-full h-3 overflow-hidden">
-                      <div
-                        className="bg-primary-green h-3 transition-all duration-300 ease-out"
-                        style={{ width: `${displayPercent}%` }}
-                      />
+                     <div className={`bg-hover-bg rounded-xl p-3 border border-white/5 text-center ${errors > 0 ? 'bg-semantic-red/10 border-semantic-red/20' : ''}`}>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-text mb-1">Errors</p>
+                        <p className={`text-xl font-bold tabular-nums ${errors > 0 ? 'text-semantic-red' : 'text-primary-text'}`}>{errors}</p>
                     </div>
-                    <div className="flex justify-between items-center">
-                       <p className="text-xs text-secondary-text">
-                           {(!jobId || jobId === '') ? 'Initializing...' : 
-                             currentStep === 'FETCHING' ? 'Fetching emails...' :
-                             currentStep === 'PROCESSING_AND_FETCHING' ? 'Processing emails...' :
-                             currentStep || 'Scanning...'}
-                       </p>
-                    </div>
-                  </div>
-                  )}
+               </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-hover-bg rounded-lg p-3">
-                      <p className="text-xs text-secondary-text">Transactions Found</p>
-                      <p className="text-2xl font-bold text-primary-text mt-1">
-                        {inserted || 0}
-                      </p>
-                    </div>
-
-                    <div className="bg-hover-bg rounded-lg p-3">
-                      <p className="text-xs text-secondary-text">Errors</p>
-                      <p className="text-2xl font-bold text-primary-text mt-1">
-                        {errors || 0}
-                      </p>
-                    </div>
-                    <div className="bg-hover-bg rounded-lg p-3 col-span-2">
-                       <p className="text-xs text-secondary-text">Emails Scanned</p>
-                       <p className="text-xl font-bold text-primary-text mt-1">
-                         {total || 0}
-                       </p>
-                    </div>
-                  </div>
-
-                  {/* Queue Depth Indicators - NEW */}
-                  {state.queueStatus && (state.queueStatus.queue1 > 0 || state.queueStatus.queue2 > 0) && (
-                    <div className="bg-hover-bg rounded-lg p-3 space-y-2">
-                      <p className="text-xs font-medium text-secondary-text">Pipeline Queues</p>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="w-20 text-secondary-text">Processing</span>
-                          <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
-                            <div 
-                              className="bg-blue-500 h-2 transition-all"
-                              style={{ width: `${Math.min((state.queueStatus.queue1 / 100) * 100, 100)}%` }}
-                            />
-                          </div>
-                          <span className="w-8 text-right text-secondary-text">{state.queueStatus.queue1}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="w-20 text-secondary-text">DB Writes</span>
-                          <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
-                            <div 
-                              className="bg-green-500 h-2 transition-all"
-                              style={{ width: `${Math.min((state.queueStatus.queue2 / 50) * 100, 100)}%` }}
-                            />
-                          </div>
-                          <span className="w-8 text-right text-secondary-text">{state.queueStatus.queue2}</span>
-                        </div>
-
-                      </div>
-                      <p className="text-[10px] text-muted-text mt-1">
-                        {state.queueStatus.queue2 > 0 ? "DB writes are queued and will complete after processing" : "All DB writes flushed"}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <div className="flex items-start gap-2">
-                      <AlertCircle className="text-blue-600 flex-shrink-0 mt-0.5" size={16} />
-                      <p className="text-xs text-blue-900">
-                        Scanning your Gmail for credit card transaction emails. 
-                        This scan happens in the background. You can close this window.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Error List & Manual Mapping */}
-              {errorList && errorList.length > 0 && (
-                <div className="mt-4 border-t border-border-color pt-4">
-                  <h3 className="text-sm font-semibold text-primary-text mb-2">Failed Items</h3>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {errorList.map((err: unknown, idx: number) => {
-                       /* eslint-disable @typescript-eslint/no-explicit-any */
-                       const errMsg = typeof err === 'string' ? err : (err as any).message || (err as any).error || JSON.stringify(err);
-                       const msgId = (err as any)?.messageId;
-                       
-                       return (
-                      <div key={idx} className="flex items-center justify-between bg-hover-bg p-2 rounded text-xs">
-                        <span className="truncate flex-1 mr-2 text-red-500" title={errMsg}>
-                          {errMsg}
-                        </span>
-                        {msgId && (
-                            <Button 
-                            size="sm" 
-                            variant="ghost" 
-                            className="h-6 text-[10px]"
-                            onClick={() => setMappingMessageId(msgId)}
-                            >
-                            Map Card
-                            </Button>
-                        )}
-                      </div>
-                    )})}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-muted-text/10">
-                {isCompleted || isFailed ? (
-                  <>
-                    <Button onClick={resetAndViewConfig} variant="ghost">Start New Sync</Button>
-                    <Button onClick={handleClose} variant="primary">Close</Button>
-                  </>
-                ) : isSyncing ? (
-                  <Button onClick={handleClose} variant="primary">Run in Background</Button>
-                ) : null}
+              {/* Progress Bar */}
+              <div className="space-y-2">
+                 <div className="flex justify-between text-xs font-medium">
+                    <span className="text-primary-text">Overall Progress</span>
+                    <span className="text-primary-green">{percentage}%</span>
+                 </div>
+                 <div className="h-2 w-full bg-hover-bg rounded-full overflow-hidden">
+                    <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${percentage}%` }}
+                        transition={{ type: "spring", stiffness: 50, damping: 20 }}
+                        className={`h-full ${isFailed ? 'bg-semantic-red' : 'bg-primary-green'}`} 
+                    />
+                 </div>
               </div>
-            </>
-          )}
-        </div>
-      </div>
 
-      {mappingMessageId && (
+               {/* Multi-step Flow */}
+               <div className="space-y-0 pl-2">
+                    {steps.map((step, idx) => (
+                        <StepItem key={step.id} step={step} isLast={idx === steps.length - 1} />
+                    ))}
+               </div>
+
+                {/* Error Banner */}
+               {isFailed && (
+                   <div className="bg-semantic-red/10 border border-semantic-red/20 rounded-xl p-4 flex gap-3 items-start">
+                        <AlertCircle className="w-5 h-5 text-semantic-red shrink-0 mt-0.5" />
+                        <div>
+                            <p className="text-sm font-semibold text-semantic-red">Sync Failed</p>
+                            <p className="text-xs text-red-300/80 mt-1">{apiErrorMessage || "An unexpected error occurred during the sync process. Please try again."}</p>
+                        </div>
+                   </div>
+               )}
+
+               {/* Manual Mapping / Warns */}
+               {errorList && errorList.length > 0 && (
+                   <div className="border-t border-white/10 pt-4">
+                       <button 
+                         onClick={() => setShowErrorDetails(!showErrorDetails)}
+                         className="flex items-center gap-2 text-xs text-muted-text hover:text-white transition-colors w-full"
+                       >
+                           {showErrorDetails ? 'Hide' : 'Show'} {errorList.length} Issues that need attention
+                           <ArrowRight className={`w-3 h-3 transition-transform ${showErrorDetails ? 'rotate-90' : ''}`} />
+                       </button>
+                       
+                       <AnimatePresence>
+                           {showErrorDetails && (
+                               <motion.div 
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="overflow-hidden"
+                               >
+                                   <div className="space-y-2 mt-3 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                                        {errorList.map((err: any, idx: number) => (
+                                            <div key={idx} className="bg-white/5 p-2 rounded text-[10px] flex justify-between items-center group">
+                                                <span className="text-red-300 truncate max-w-[70%]">{err.message || JSON.stringify(err)}</span>
+                                                {err.messageId && (
+                                                     <Button 
+                                                        size="sm" 
+                                                        variant="ghost"
+                                                        className="h-6 text-[10px] bg-white/5 hover:bg-white/10"
+                                                        onClick={() => setMappingMessageId(err.messageId)}
+                                                     >
+                                                         Map
+                                                     </Button>
+                                                )}
+                                            </div>
+                                        ))}
+                                   </div>
+                               </motion.div>
+                           )}
+                       </AnimatePresence>
+                   </div>
+               )}
+
+            </div>
+          )}
+          </div>
+
+          {/* Footer */}
+          <div className="p-6 border-t border-white/5 flex justify-end gap-3 bg-card-bg rounded-b-2xl">
+             {configMode ? (
+                 <>
+                    <Button variant="ghost" onClick={handleClose}>Cancel</Button>
+                    <Button 
+                        onClick={handleSync} 
+                        disabled={!startDate || !endDate}
+                        className="bg-primary-green hover:bg-primary-green/90 text-black font-semibold"
+                    >
+                        Start Scan
+                    </Button>
+                 </>
+             ) : (
+                <>
+                    {(isCompleted || isFailed) && (
+                        <Button variant="ghost" onClick={resetAndViewConfig}>New Scan</Button>
+                    )}
+                    {isSyncing ? (
+                         <Button 
+                            onClick={handleClose} 
+                            variant="primary"
+                            className="bg-zinc-800 hover:bg-zinc-700 text-white border border-white/10"
+                         >
+                            Running in background...
+                         </Button>
+                    ) : (
+                        <Button 
+                            onClick={handleClose} 
+                            className="bg-primary-green hover:bg-primary-green/90 text-black font-semibold min-w-[100px]"
+                        >
+                            Done
+                        </Button>
+                    )}
+                </>
+             )}
+          </div>
+        </div>
+      </motion.div>
+
+       {mappingMessageId && (
         <ManualCardMappingModal
           isOpen={true}
           onClose={() => setMappingMessageId(null)}
           messageId={mappingMessageId}
-          onSuccess={() => {
-            // No-op for now
-          }}
+          onSuccess={() => {}}
         />
       )}
     </>
   );
 }
 
+// --- Button Wrapper ---
+
 interface GmailSyncButtonProps {
   onSyncComplete?: () => void;
   className?: string;
 }
 
-/**
- * GmailSyncButton Component
- * Button that triggers the Gmail sync modal
- */
 export function GmailSyncButton({
   onSyncComplete,
   className,
@@ -431,14 +560,11 @@ export function GmailSyncButton({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
 
-  const handleOpenModal = () => {
-    setIsModalOpen(true);
-  };
-
+  const handleOpenModal = () => setIsModalOpen(true);
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    // Ideally we update lastSync from context or API, but simple local state is fine for now
     setLastSync(new Date());
+    onSyncComplete?.();
   };
 
   return (
@@ -448,19 +574,23 @@ export function GmailSyncButton({
           <RefreshCw className="mr-2 h-4 w-4" />
           Sync Gmail
         </Button>
-
         {lastSync && (
-          <span className="text-sm text-gray-500">
-            Last check: {lastSync.toLocaleTimeString()}
+          <span className="text-xs text-muted-text">
+            Last check: {lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
         )}
       </div>
 
-      <GmailSyncModal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        onSyncComplete={onSyncComplete}
-      />
+      <AnimatePresence>
+        {isModalOpen && (
+            <GmailSyncModal
+                isOpen={isModalOpen}
+                onClose={handleCloseModal}
+                onSyncComplete={onSyncComplete}
+            />
+        )}
+      </AnimatePresence>
     </>
   );
 }
+
