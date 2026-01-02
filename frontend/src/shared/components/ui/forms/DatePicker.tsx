@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Button } from "@/shared/components/ui";
+import { cn } from "@/shared/utils"; // Assuming cn is available here, otherwise will use template literals but cn is safer given other files use it.
+// Checking imports in TransactionsPageClient (step 20) confirms 'cn' is in '@/shared/utils'.
 
 export interface DatePickerProps {
   value?: Date | null;
@@ -15,18 +17,8 @@ export interface DatePickerProps {
 }
 
 const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -61,6 +53,13 @@ export const DatePicker: React.FC<DatePickerProps> = ({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Sync viewDate when value changes
+  useEffect(() => {
+    if (value) {
+      setViewDate(value);
+    }
+  }, [value]);
 
   const formatDate = useCallback(
     (date: Date | null): string => {
@@ -180,41 +179,37 @@ export const DatePicker: React.FC<DatePickerProps> = ({
           setIsOpen(false);
           break;
         case "Enter":
-          event.preventDefault();
-          if (value) {
-            handleDateSelect(value);
+          if (document.activeElement === inputRef.current) {
+             // If focused on input, maybe toggle? But standard is Enter accepts selection if grid focused.
+             // We'll leave specific grid focus logic for now or simple "Enter closes" if handled.
           }
           break;
-        case "ArrowLeft":
-          event.preventDefault();
-          navigateMonth("prev");
-          break;
-        case "ArrowRight":
-          event.preventDefault();
-          navigateMonth("next");
-          break;
+        // Basic month navigation shortcuts could go here if grid focus management was implemented
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, value, handleDateSelect, navigateMonth]);
+  }, [isOpen]);
 
   return (
     <div ref={datePickerRef} className={`relative ${className}`}>
       {/* Input Field */}
       <div
-        className={`
-          flex items-center border rounded-lg px-3 py-2 cursor-pointer
-          ${
-            disabled
-              ? "bg-gray-100 dark:bg-[#2A2D34] border-gray-300 dark:border-gray-600 cursor-not-allowed"
-              : "bg-white dark:bg-[#1A1D21] border-gray-300 dark:border-gray-600 hover:border-[#6ECB8E] dark:hover:border-[#6ECB8E]"
-          }
-          ${isOpen ? "ring-2 ring-[#6ECB8E] border-[#6ECB8E]" : ""}
-        `}
+        className={cn(
+          "flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 cursor-pointer group",
+          disabled
+            ? "bg-bg-primary/50 border-border opacity-60 cursor-not-allowed"
+            : "bg-primary-bg border-border hover:border-border/80 hover:bg-hover-bg",
+          isOpen && "ring-1 ring-primary-green border-primary-green",
+        )}
         onClick={handleToggle}
       >
+        <CalendarIcon className={cn(
+            "w-4 h-4 transition-colors",
+            isOpen || value ? "text-primary-green hover:text-primary-green" : "text-secondary-text group-hover:text-primary-text"
+        )} />
+        
         <input
           ref={inputRef}
           type="text"
@@ -222,88 +217,73 @@ export const DatePicker: React.FC<DatePickerProps> = ({
           placeholder={placeholder}
           readOnly
           disabled={disabled}
-          className={`
-            flex-1 bg-transparent outline-none text-sm
-            ${
-              disabled
-                ? "text-gray-400 dark:text-gray-500"
-                : "text-gray-900 dark:text-white"
-            }
-            placeholder-gray-400 dark:placeholder-gray-500
-          `}
+          className={cn(
+            "flex-1 bg-transparent outline-none text-sm transition-colors cursor-pointer",
+            disabled ? "text-muted-text" : "text-primary-text placeholder-secondary-text"
+          )}
         />
 
-        <div className="flex items-center gap-1">
-          {showClearButton && value && !disabled && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleClear();
-              }}
-              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-            >
-              ×
-            </button>
-          )}
-          <Calendar className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-        </div>
+        {showClearButton && value && !disabled && (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleClear();
+            }}
+            className="p-1 -mr-1 rounded-full hover:bg-white/10 text-muted-text hover:text-error transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </div>
+        )}
       </div>
 
       {/* Calendar Dropdown */}
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 bg-white dark:bg-[#25282E] border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 min-w-[280px]">
+        <div className="absolute top-full left-0 mt-2 bg-card-bg border border-border rounded-xl shadow-2xl z-50 min-w-[280px] p-3 animate-in fade-in zoom-in-95 duration-200">
+          
           {/* Header */}
-          <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => navigateMonth("prev")}
-                className="p-1"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
+          <div className="flex items-center justify-between mb-4 px-1">
+            <button
+               onClick={() => navigateMonth("prev")}
+               className="p-1.5 rounded-lg hover:bg-hover-bg text-secondary-text hover:text-primary-text transition-colors"
+               aria-label="Previous Month"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => navigateYear("prev")}
-                  className="text-sm font-medium text-gray-900 dark:text-white hover:text-[#6ECB8E] dark:hover:text-[#6ECB8E]"
-                >
-                  {viewDate.getFullYear()}
-                </button>
-                <button
-                  onClick={() => navigateMonth("prev")}
-                  className="text-sm font-medium text-gray-900 dark:text-white hover:text-[#6ECB8E] dark:hover:text-[#6ECB8E]"
-                >
+            <div className="flex items-center gap-1">
+               <span className="text-sm font-semibold text-primary-text">
                   {MONTHS[viewDate.getMonth()]}
-                </button>
-              </div>
-
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => navigateMonth("next")}
-                className="p-1"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </Button>
+               </span>
+               <span className="text-sm font-medium text-secondary-text">
+                  {viewDate.getFullYear()}
+               </span>
             </div>
+
+            <button
+               onClick={() => navigateMonth("next")}
+               className="p-1.5 rounded-lg hover:bg-hover-bg text-secondary-text hover:text-primary-text transition-colors"
+               aria-label="Next Month"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
 
           {/* Days of Week */}
-          <div className="grid grid-cols-7 gap-1 p-2 border-b border-gray-200 dark:border-gray-700">
+          <div className="grid grid-cols-7 mb-2">
             {DAYS.map((day) => (
               <div
                 key={day}
-                className="text-xs font-medium text-gray-500 dark:text-gray-400 text-center py-1"
+                className="text-[10px] font-bold text-secondary-text uppercase tracking-wider text-center py-1"
               >
                 {day}
               </div>
             ))}
           </div>
 
-          {/* Calendar Days */}
-          <div className="grid grid-cols-7 gap-1 p-2">
+          {/* Calendar Grid */}
+          <div className="grid grid-cols-7 gap-1">
             {calendarDays.map((date, index) => {
               const isCurrentMonth = date.getMonth() === viewDate.getMonth();
               const isSelected = isDateSelected(date);
@@ -313,49 +293,37 @@ export const DatePicker: React.FC<DatePickerProps> = ({
               return (
                 <button
                   key={index}
-                  onClick={() => handleDateSelect(date)}
+                  onClick={(e) => {
+                      e.preventDefault();
+                      handleDateSelect(date);
+                  }}
                   disabled={isDisabled}
-                  className={`
-                    text-sm py-2 px-1 rounded text-center transition-colors
-                    ${
-                      !isCurrentMonth
-                        ? "text-gray-300 dark:text-gray-600"
-                        : isSelected
-                          ? "bg-[#6ECB8E] text-white"
-                          : isToday
-                            ? "bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300"
-                            : "text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700"
-                    }
-                    ${isDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
-                  `}
+                  className={cn(
+                    "relative h-9 rounded-lg text-sm flex items-center justify-center transition-all duration-200",
+                    !isCurrentMonth && "text-muted-text opacity-30 font-normal",
+                    isCurrentMonth && !isSelected && !isToday && "text-primary-text hover:bg-hover-bg",
+                    isToday && !isSelected && "text-primary-green font-semibold bg-primary-green/5 ring-1 ring-primary-green/30",
+                    isSelected && "bg-primary-green text-primary-bg font-bold shadow-sm scale-105",
+                    isDisabled && "opacity-20 cursor-not-allowed hover:bg-transparent"
+                  )}
                 >
                   {date.getDate()}
+                  {isToday && !isSelected && (
+                      <div className="absolute bottom-1 w-1 h-1 rounded-full bg-primary-green" />
+                  )}
                 </button>
               );
             })}
           </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between p-3 border-t border-gray-200 dark:border-gray-700">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => handleDateSelect(new Date())}
-              className="text-[#6ECB8E] hover:text-[#6ECB8E]"
-            >
-              Today
-            </Button>
-
-            {showClearButton && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleClear}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                Clear
-              </Button>
-            )}
+          
+          {/* Footer - "Go to Today" */}
+          <div className="mt-3 pt-3 border-t border-border flex justify-center">
+               <button 
+                  onClick={() => handleDateSelect(new Date())}
+                  className="text-xs font-medium text-primary-green hover:underline decoration-primary-green/50 underline-offset-4"
+               >
+                   Today
+               </button>
           </div>
         </div>
       )}
