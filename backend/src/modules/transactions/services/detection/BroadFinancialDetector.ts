@@ -1,6 +1,22 @@
-import { EnhancedRuleClassifier } from '../classification/EnhancedRuleClassifier';
+/**
+ * BroadFinancialDetector - New Architecture Transaction Detection
+ * 
+ * COMPLETE REWRITE as per new specification:
+ * - Detects ONLY completed monetary transaction events
+ * - Strict validation against predefined criteria
+ * - Rejects non-transactions (OTPs, marketing, pending, failed)
+ * - Integrates with confidence scoring system
+ */
+
 import { CurrencyNormalizer } from '@shared/utils/text/CurrencyNormalizer';
 import { isFinancialAuthority, isMerchantSender } from '../../../../data/transaction-patterns';
+import { ConfidenceScorer, SignalDetection } from '../scoring/ConfidenceScorer';
+import { ConfidenceDetails, ManualReviewReason, ManualReviewTrigger, SourceType } from '@shared/types/transaction.types';
+import * as crypto from 'crypto';
+
+// ============================================
+// Detection Result Interfaces (New Architecture)
+// ============================================
 
 export interface DetectionResult {
     isFinancial: boolean;
@@ -8,152 +24,426 @@ export interface DetectionResult {
     reasons: string[];
 }
 
+export interface StrictDetectionResult {
+    isValidTransaction: boolean;
+    failureReasons: string[];
+    confidenceScore: number;
+    confidenceDetails: ConfidenceDetails;
+    requiresManualReview: boolean;
+    reviewTriggers: ManualReviewTrigger[];
+    sourceType?: SourceType;
+    detectedSignals: SignalDetection;
+}
+
+export interface AuthorityCheckResult {
+    isAuthoritative: boolean;
+    sourceType?: SourceType;
+    bankName?: string;
+    isMerchant: boolean;
+    merchantName?: string;
+}
+
+// ============================================
+// Regex Pattern Definitions (New Architecture)
+// ============================================
+
+const PATTERNS = {
+    // === POSITIVE SIGNALS: Completed Transaction Indicators ===
+    COMPLETION_SUCCESS: /\b(?:debited|credited|successful(?:ly)?|completed|confirmed|processed|posted)\b/i,
+    COMPLETION_VERBS: /\b(?:spent|charged|paid|deducted|received|deposited|withdrawn|transferred|sent)\b/i,
+    ALERT_PATTERNS: /\b(?:transaction\s+(?:alert|notification|update)|alert\s+from.*card|debit\s+alert|credit\s+alert)\b/i,
+
+    // === INSTRUMENT DETECTION ===
+    CREDIT_CARD: /\b(?:credit\s+card|cc\b|visa|mastercard|amex|american\s+express)\b/i,
+    DEBIT_CARD: /\b(?:debit\s+card|dc\b|atm\s+card|rupay)\b/i,
+    UPI: /\b(?:upi|@(?:ybl|oksbi|paytm|okhdfcbank|okicici|apl|ibl|sbi|axisbank|icici|hdfc|kotak))\b/i,
+    UPI_ON_CC: /\b(?:rupay.*credit.*upi|credit\s+card.*@.*upi|upi.*credit\s+card)\b/i,
+    NEFT: /\b(?:neft\s+(?:transfer|ref|txn)?|neft-?\d+)\b/i,
+    IMPS: /\b(?:imps\s+(?:transfer|ref|txn)?|imps-?\d+|inter-?bank\s+mobile)\b/i,
+    RTGS: /\b(?:rtgs\s+(?:transfer|ref)?)\b/i,
+    SWIFT_WIRE: /\b(?:swift\s+(?:transfer|wire)|wire\s+transfer|iban)\b/i,
+    WALLET: /\b(?:wallet|paytm|phonepe|gpay|google\s+pay|amazon\s+pay)\b/i,
+    BANK_ACCOUNT: /\b(?:bank\s+account|savings?\s+a\/c|current\s+a\/c|a\/c\s+(?:no|ending))\b/i,
+    POS: /\b(?:pos\s+terminal|swipe|chip\s+transaction|tap\s*[&and]*\s*pay|contactless)\b/i,
+
+    // === REFERENCE NUMBERS ===
+    REF_IDS: /\b(?:txn\s*(?:id|no|ref)?|ref(?:erence)?\s*(?:no|id|num)?|rrn|utr|arn|auth\s*code|transaction\s+id)\s*[:#]?\s*([A-Z0-9]+)/i,
+    RRN_PATTERN: /\b(?:rrn|retrieval\s+ref)\s*[:#]?\s*(\d{12})/i,
+    UTR_PATTERN: /\b(?:utr|unique\s+transaction\s+ref)\s*[:#]?\s*([A-Z0-9]+)/i,
+
+    // === BALANCE / CONTEXT ===
+    BALANCE_CONTEXT: /\b(?:avail(?:able)?\s+bal(?:ance)?|outstanding|running\s+bal(?:ance)?|bal(?:ance)?\s+after)\b/i,
+    STATEMENT_CONTEXT: /\b(?:statement\s+for|monthly\s+statement|account\s+statement)\b/i,
+
+    // === NEGATIVE SIGNALS: Non-Transaction Indicators ===
+    OTP_SECURITY: /\b(?:otp|one[- ]?time\s+password|verification\s+code|login\s+(?:alert|code)|security\s+code|2fa|two[- ]?factor)\b/i,
+    MARKETING: /\b(?:marketing|promotional|discount\s+(?:offer|code)|coupon|limited\s+(?:offer|time)|enjoy\s+benefits|exclusive\s+(?:offer|privilege)|flash\s+sale|cashback\s+offer|reward\s+points)\b/i,
+    NEWSLETTER: /\b(?:newsletter|digest|weekly\s+update|market\s+highlights|unsubscribe|manage\s+preferences)\b/i,
+    LOAN_OFFER: /\b(?:pre[- ]?approved\s+loan|loan\s+offer|personal\s+loan|credit\s+limit\s+(?:increase|offer)|check\s+eligibility)\b/i,
+    UPGRADE_PROMO: /\b(?:upgrade\s+(?:program|now|offer)|apply\s+now|book\s+now|register\s+now)\b/i,
+
+    // === FAILED/PENDING/INTENT (Non-Completed) ===
+    FAILED_PENDING: /\b(?:failed|declined|rejected|unsuccessful|pending|in\s+progress|processing|initiated|attempted|trying)\b/i,
+    INTENT_ONLY: /\b(?:payment\s+(?:attempt|request|link)|pay\s+now|complete\s+(?:your\s+)?payment|invoice|order\s+(?:confirmation|placed|received)|cart|checkout)\b/i,
+
+    // === CONTEXTUAL EXCLUSIONS ===
+    RECEIVING_EMAIL: /\b(?:receiving\s+this\s+email|received\s+this\s+email|why\s+you\s+received)\b/i,
+    AUTO_PAY_REMINDER: /\b(?:upcoming\s+(?:bill|payment)|due\s+(?:date|on)|reminder|autopay\s+scheduled)\b/i,
+};
+
+// ============================================
+// BroadFinancialDetector Class (New Architecture)
+// ============================================
+
 export class BroadFinancialDetector {
-    // PRECOMPILED REGEXES for performance (compiled once at class load)
-    private static readonly VERBS_REGEX = /spent|purchase[d]?|bought|charged|debited|payment|paid|deducted|credited|received|deposited|refund|withdrawal|transfer|sent/i;
-    private static readonly RECEIVING_EMAIL_REGEX = /receiving\s+this\s+email|received\s+this\s+email/i;
-    private static readonly ALERT_PATTERN_REGEX = /transaction\s+(?:alert|notification|update)|alert\s+from\s+.*card/i;
-    private static readonly INSTRUMENTS_REGEX = /credit\s+card|debit\s+card|bank\s+account|savings\s+a\/c|current\s+a\/c|rupay|visa|mastercard|amex|upi|neft|rtgs|imps|wallet/i;
-    private static readonly REF_IDS_REGEX = /txn|ref(?:erence)?\s*(?:no|id)|payment\s+id|transaction\s+id/i;
-    private static readonly CONTEXT_REGEX = /avail\.\s+bal|available\s+balance|outstanding|bill\s+due|statement\s+for/i;
-    private static readonly ACKNOWLEDGMENT_REGEX = /received\s+your\s+payment|payment\s+received|acknowledgement/i;
-    private static readonly NEGATIVE_SIGNALS_REGEX = /offer\s+valid|voucher|pre[- ]?approved|upgrade\s+program|newsletter|digest|market\s+highlights|upcoming\s+bill|generated\s+on|check\s+eligibility|book\s+now|register(?!\s+for\s+banking)|apply\s+now|webinar|certification|course|syllabus|training\s+session|masterclass|unsubscribe/i;
-    private static readonly STRONG_CONFIRMATION_REGEX = /debited|credited|payment\s+successful|txn\s+id|ref\s+no|transaction\s+id|authorization\s+code|e-?mandate|registration\s+success|mandate\s+(?:set|registered|approved|cancelled)|debit\s+approval/i;
-    private static readonly MARKETING_REGEX = /marketing|promotional|discount\s+(?:offer|code)|coupon|limited\s+offer|enjoy\s+benefits|exclusive\s+privilege/i;
-    private static readonly OTP_REGEX = /otp|verification\s+code|one[- ]?time\s+password|login\s+alert/i;
 
     /**
-     * Determine if email represents any financial activity
-     * High precision, rejects noise: marketing, OTPs, newsletters
-     * 
-     * NEW: Uses Scoring System (0-100)
-     * Passing Score: >= 50
+     * LEGACY API: Determine if email represents any financial activity
+     * @deprecated Use detectStrict() for new architecture
      */
     static isFinancialEmail(text: string, sender?: string): boolean {
         return this.detect(text, sender).isFinancial;
     }
 
     /**
-     * Comprehensive Detection with Scoring
+     * LEGACY API: Comprehensive Detection with Scoring
+     * @deprecated Use detectStrict() for new architecture
      */
     static detect(text: string, sender?: string): DetectionResult {
+        const strictResult = this.detectStrict(text, sender);
+
+        // Convert to legacy format for backward compatibility
+        return {
+            isFinancial: strictResult.isValidTransaction,
+            score: Math.round(strictResult.confidenceScore * 100),
+            reasons: strictResult.isValidTransaction
+                ? Object.entries(strictResult.detectedSignals)
+                    .filter(([_, v]) => v === true)
+                    .map(([k, _]) => k)
+                : strictResult.failureReasons
+        };
+    }
+
+    /**
+     * NEW ARCHITECTURE: Strict Transaction Detection
+     * 
+     * A valid transaction must satisfy ALL of:
+     * 1. Describes a completed debit or credit
+     * 2. Contains a specific monetary amount
+     * 3. Names or implies a financial instrument
+     * 4. Originates from an authoritative source
+     * 5. Indicates success, not just intent
+     */
+    static detectStrict(text: string, sender?: string): StrictDetectionResult {
         const lowerText = text.toLowerCase();
-        let score = 0;
-        const reasons: string[] = [];
+        const failureReasons: string[] = [];
+        const reviewTriggers: ManualReviewTrigger[] = [];
 
-        // 0. SENDER CHECK (The "Financial Authority" Gate)
-        if (sender) {
-            // A. REJECT MERCHANTS (Duplicate Prevention)
-            const merchantCheck = isMerchantSender(sender);
-            if (merchantCheck.isMerchant) {
-                return {
-                    isFinancial: false,
-                    score: 0,
-                    reasons: [`Merchant Rejection: ${merchantCheck.merchantName}`]
-                };
-            }
+        // ============================================
+        // STEP 1: Authority Check (Gatekeeping)
+        // ============================================
+        const authorityCheck = this.checkAuthoritySource(sender);
 
-            // B. BOOST FINANCIAL AUTHORITIES
-            const authCheck = isFinancialAuthority(sender);
-            if (authCheck.isKnown) {
-                // Massive boost: We trust banks.
-                // But we still scour content to ensure it's not a Loan Offer or OTP.
-                score += 40;
-                reasons.push(`Verified Authority: ${authCheck.bankName}`);
-            } else {
-                // C. UNKNOWN SENDER PENALTY (reduced to prevent false rejections)
-                // If it's not a known bank/wallet, we treat it with suspicion.
-                // It needs strong signals (Verb + Amount + RefID) to pass.
-                score -= 10;
-                reasons.push('Unknown Sender Penalty');
-            }
+        // Reject merchants outright (duplicate prevention)
+        if (authorityCheck.isMerchant) {
+            return this.createRejectionResult([`Merchant sender rejected: ${authorityCheck.merchantName}`]);
         }
 
-        // 1. AMOUNT PRESENCE (Critical Signal) (+30 points)
-        // Check for specific currency symbols or clear amount patterns
+        // ============================================
+        // STEP 2: Negative Signal Check (Early Exit)
+        // ============================================
+        const negativeSignals = this.checkNegativeSignals(lowerText);
+        if (negativeSignals.shouldReject) {
+            return this.createRejectionResult(negativeSignals.reasons);
+        }
+
+        // ============================================
+        // STEP 3: Positive Signal Detection
+        // ============================================
         const amountCandidates = CurrencyNormalizer.extractCandidates(text);
-        if (amountCandidates.length > 0) {
-            score += 30;
-            reasons.push('Amount Detected');
+        const hasAmount = amountCandidates.length > 0;
+        const hasCompletionIndicator = this.hasCompletionIndicator(lowerText);
+        const instrumentType = this.detectInstrument(lowerText);
+        const hasInstrument = instrumentType !== null;
+        const hasReferenceId = this.hasReferenceId(lowerText);
+        const hasTimestamp = this.hasTimestampIndicator(lowerText);
+        const hasBalanceContext = PATTERNS.BALANCE_CONTEXT.test(lowerText) || PATTERNS.STATEMENT_CONTEXT.test(lowerText);
+
+        // ============================================
+        // STEP 4: Validation Against Strict Criteria
+        // ============================================
+
+        // Criterion 1: Must have completion indicator (not just intent)
+        if (!hasCompletionIndicator) {
+            failureReasons.push('No completion indicator (debited/credited/successful)');
         }
 
-        // 2. TRANSACTION VERBS (Strong Signal) (+20 points)
-        if (this.VERBS_REGEX.test(lowerText)) {
-            // IGNORE "receiving this email" context
-            if (!this.RECEIVING_EMAIL_REGEX.test(lowerText)) {
-                score += 20;
-                reasons.push('Transaction Verb');
-            }
+        // Criterion 2: Must have monetary amount
+        if (!hasAmount) {
+            failureReasons.push('No monetary amount detected');
         }
 
-        // 2a. TRANSACTION ALERTS (New Pattern) (+15 points)
-        if (this.ALERT_PATTERN_REGEX.test(lowerText)) {
-            score += 15;
-            reasons.push('Transaction Alert Pattern');
+        // Criterion 3: Must have or imply financial instrument
+        if (!hasInstrument && !authorityCheck.isAuthoritative) {
+            failureReasons.push('No financial instrument detected');
         }
 
-        // 3. FINANCIAL ACCOUNT/INSTRUMENT (+20 points)
-        if (this.INSTRUMENTS_REGEX.test(lowerText)) {
-            score += 20;
-            reasons.push('Instrument Keyword');
+        // Criterion 4: Authoritative source OR strong content signals
+        const hasStrongContentSignals = hasAmount && hasCompletionIndicator && hasReferenceId;
+        if (!authorityCheck.isAuthoritative && !hasStrongContentSignals) {
+            failureReasons.push('Non-authoritative source without strong transaction signals');
         }
 
-        // 4. TRANSACTION ID / REF NO (+15 points)
-        if (this.REF_IDS_REGEX.test(lowerText)) {
-            score += 15;
-            reasons.push('Reference ID');
+        // ============================================
+        // STEP 5: Confidence Scoring
+        // ============================================
+        const signals: SignalDetection = {
+            authoritativeSource: authorityCheck.isAuthoritative,
+            sourceType: authorityCheck.sourceType,
+            instrumentDetected: hasInstrument || authorityCheck.isAuthoritative,
+            amountDetected: hasAmount,
+            timestampDetected: hasTimestamp,
+            referenceIdDetected: hasReferenceId,
+            ambiguity: negativeSignals.hasWeakNegative,
+            ocrUncertainty: false, // Set by PDF parser when applicable
+            contradictorySignals: this.hasContradictorySignals(lowerText),
+        };
+
+        const confidenceDetails = ConfidenceScorer.calculate(signals);
+
+        // ============================================
+        // STEP 6: Manual Review Triggers
+        // ============================================
+        const manualReview = ConfidenceScorer.requiresManualReview(confidenceDetails, signals);
+        reviewTriggers.push(...manualReview.triggers);
+
+        // Check for zero amount
+        if (hasAmount && amountCandidates.some(a => a === 0)) {
+            reviewTriggers.push({
+                id: crypto.randomUUID(),
+                reason: ManualReviewReason.ZERO_AMOUNT,
+                details: 'Zero-value transaction detected'
+            });
         }
 
-        // 5. BALANCE/STATEMENT CONTEXT (+10 points)
-        if (this.CONTEXT_REGEX.test(lowerText)) {
-            score += 10;
-            reasons.push('Balance/Statement Context');
-        }
-
-        // --- RECEIPT / ACKNOWLEDGMENT PENALTY ---
-        if (this.ACKNOWLEDGMENT_REGEX.test(lowerText)) {
-            score -= 25;
-            reasons.push('Acknowledgment Penalty');
-        }
-
-        // 6. BANK SENDER / BRANDING (We verify sender in Classifier, but text might have it)
-        // Hard to detect generically without list, skip for now or rely on pattern matching
-
-        // --- NEGATIVE EVIDENCE RULES ---
-        const hasNegative = this.NEGATIVE_SIGNALS_REGEX.test(lowerText);
-        const hasConfirmation = this.STRONG_CONFIRMATION_REGEX.test(lowerText);
-
-        if (hasNegative && !hasConfirmation) {
-            score -= 30;
-            reasons.push('Negative Signal Detected');
-        }
-
-        // --- PROMOTIONAL PENALTIES ---
-        if (this.MARKETING_REGEX.test(lowerText)) {
-            if (!hasConfirmation) {
-                score -= 40;
-                reasons.push('Marketing Penalty');
-            } else {
-                score -= 5;
-                reasons.push('Minor Marketing Noise');
-            }
-        }
-
-        // OTP / SECURITY PENALTY
-        if (this.OTP_REGEX.test(lowerText)) {
-            score -= 50;
-            reasons.push('OTP/Security Penalty');
-        }
-
-        // PASSING THRESHOLD
-        // Default: 50
-        const THRESHOLD = 50;
-        const isFinancial = score >= THRESHOLD;
+        // ============================================
+        // STEP 7: Final Decision
+        // ============================================
+        const isValid = failureReasons.length === 0;
 
         return {
-            isFinancial,
-            score,
-            reasons
+            isValidTransaction: isValid,
+            failureReasons,
+            confidenceScore: confidenceDetails.score,
+            confidenceDetails,
+            requiresManualReview: reviewTriggers.length > 0,
+            reviewTriggers,
+            sourceType: authorityCheck.sourceType,
+            detectedSignals: signals,
+        };
+    }
+
+    // ============================================
+    // Helper Methods
+    // ============================================
+
+    private static checkAuthoritySource(sender?: string): AuthorityCheckResult {
+        if (!sender) {
+            return { isAuthoritative: false, isMerchant: false };
+        }
+
+        // Check for merchant (reject)
+        const merchantCheck = isMerchantSender(sender);
+        if (merchantCheck.isMerchant) {
+            return {
+                isAuthoritative: false,
+                isMerchant: true,
+                merchantName: merchantCheck.merchantName,
+            };
+        }
+
+        // Check for financial authority
+        const authCheck = isFinancialAuthority(sender);
+        if (authCheck.isKnown) {
+            return {
+                isAuthoritative: true,
+                sourceType: this.categorizeSourceType(sender, authCheck.bankName),
+                bankName: authCheck.bankName,
+                isMerchant: false,
+            };
+        }
+
+        // Check for UPI app patterns
+        if (/phonepe|gpay|paytm|bhim|amazonpay/i.test(sender)) {
+            return {
+                isAuthoritative: true,
+                sourceType: SourceType.UPI_APP_EMAIL,
+                isMerchant: false,
+            };
+        }
+
+        // Check for payment gateways
+        if (/razorpay|payu|billdesk|ccavenue|instamojo|stripe/i.test(sender)) {
+            return {
+                isAuthoritative: true,
+                sourceType: SourceType.PAYMENT_GATEWAY_RECEIPT,
+                isMerchant: false,
+            };
+        }
+
+        return { isAuthoritative: false, isMerchant: false };
+    }
+
+    private static categorizeSourceType(sender: string, bankName?: string): SourceType {
+        const lowerSender = sender.toLowerCase();
+
+        if (lowerSender.includes('statement') || lowerSender.includes('estatement')) {
+            return SourceType.MONTHLY_STATEMENT;
+        }
+        if (lowerSender.includes('alert') || lowerSender.includes('notification')) {
+            return SourceType.BANK_ALERT;
+        }
+        if (/phonepe|gpay|paytm|bhim|amazonpay/i.test(lowerSender)) {
+            return SourceType.UPI_APP_EMAIL;
+        }
+
+        // Default to bank alert for known banks
+        return SourceType.BANK_ALERT;
+    }
+
+    private static checkNegativeSignals(lowerText: string): { shouldReject: boolean; reasons: string[]; hasWeakNegative: boolean } {
+        const reasons: string[] = [];
+        let shouldReject = false;
+        let hasWeakNegative = false;
+
+        // OTP / Security alerts - HARD REJECT
+        if (PATTERNS.OTP_SECURITY.test(lowerText)) {
+            reasons.push('OTP/Security alert detected');
+            shouldReject = true;
+        }
+
+        // Failed/Pending transactions - HARD REJECT (unless reversal)
+        if (PATTERNS.FAILED_PENDING.test(lowerText) && !PATTERNS.COMPLETION_SUCCESS.test(lowerText)) {
+            reasons.push('Failed/Pending transaction (not completed)');
+            shouldReject = true;
+        }
+
+        // Intent without payment (invoices, cart, payment links)
+        if (PATTERNS.INTENT_ONLY.test(lowerText) && !PATTERNS.COMPLETION_SUCCESS.test(lowerText)) {
+            reasons.push('Intent only (no payment confirmation)');
+            shouldReject = true;
+        }
+
+        // Marketing / Promotional - HARD REJECT (unless has confirmation)
+        if (PATTERNS.MARKETING.test(lowerText)) {
+            if (!PATTERNS.COMPLETION_SUCCESS.test(lowerText)) {
+                reasons.push('Marketing/Promotional email');
+                shouldReject = true;
+            } else {
+                hasWeakNegative = true;
+            }
+        }
+
+        // Newsletter / Digest - HARD REJECT
+        if (PATTERNS.NEWSLETTER.test(lowerText)) {
+            reasons.push('Newsletter/Digest email');
+            shouldReject = true;
+        }
+
+        // Loan offers without actual transaction
+        if (PATTERNS.LOAN_OFFER.test(lowerText) && !PATTERNS.COMPLETION_SUCCESS.test(lowerText)) {
+            reasons.push('Loan offer (not a transaction)');
+            shouldReject = true;
+        }
+
+        // Upgrade promos
+        if (PATTERNS.UPGRADE_PROMO.test(lowerText) && !PATTERNS.COMPLETION_SUCCESS.test(lowerText)) {
+            reasons.push('Upgrade/Promotional (not a transaction)');
+            shouldReject = true;
+        }
+
+        // Auto-pay reminders (not actual transactions)
+        if (PATTERNS.AUTO_PAY_REMINDER.test(lowerText) && !PATTERNS.COMPLETION_SUCCESS.test(lowerText)) {
+            reasons.push('Upcoming bill/reminder (not a completed transaction)');
+            shouldReject = true;
+        }
+
+        return { shouldReject, reasons, hasWeakNegative };
+    }
+
+    private static hasCompletionIndicator(lowerText: string): boolean {
+        // Must have completion success OR completion verbs WITH context
+        if (PATTERNS.COMPLETION_SUCCESS.test(lowerText)) {
+            return true;
+        }
+        if (PATTERNS.COMPLETION_VERBS.test(lowerText) && !PATTERNS.RECEIVING_EMAIL.test(lowerText)) {
+            return true;
+        }
+        if (PATTERNS.ALERT_PATTERNS.test(lowerText)) {
+            return true;
+        }
+        return false;
+    }
+
+    private static detectInstrument(lowerText: string): string | null {
+        if (PATTERNS.UPI_ON_CC.test(lowerText)) return 'upi_on_credit_card';
+        if (PATTERNS.CREDIT_CARD.test(lowerText)) return 'credit_card';
+        if (PATTERNS.DEBIT_CARD.test(lowerText)) return 'debit_card';
+        if (PATTERNS.UPI.test(lowerText)) return 'upi';
+        if (PATTERNS.NEFT.test(lowerText)) return 'neft';
+        if (PATTERNS.IMPS.test(lowerText)) return 'imps';
+        if (PATTERNS.RTGS.test(lowerText)) return 'rtgs';
+        if (PATTERNS.SWIFT_WIRE.test(lowerText)) return 'swift_wire';
+        if (PATTERNS.WALLET.test(lowerText)) return 'wallet_transfer';
+        if (PATTERNS.POS.test(lowerText)) return 'pos';
+        if (PATTERNS.BANK_ACCOUNT.test(lowerText)) return 'bank_account';
+        return null;
+    }
+
+    private static hasReferenceId(lowerText: string): boolean {
+        return PATTERNS.REF_IDS.test(lowerText) ||
+            PATTERNS.RRN_PATTERN.test(lowerText) ||
+            PATTERNS.UTR_PATTERN.test(lowerText);
+    }
+
+    private static hasTimestampIndicator(lowerText: string): boolean {
+        // Check for date/time patterns
+        return /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/.test(lowerText) ||
+            /\b\d{1,2}:\d{2}\s*(?:am|pm)?\b/i.test(lowerText) ||
+            /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}/i.test(lowerText);
+    }
+
+    private static hasContradictorySignals(lowerText: string): boolean {
+        // Check for both debit and credit indicators in same message
+        const hasDebit = /\b(?:debited|debit|spent|paid|charged)\b/i.test(lowerText);
+        const hasCredit = /\b(?:credited|credit|received|deposited)\b/i.test(lowerText);
+
+        // Both present is contradictory UNLESS it's a transfer context
+        if (hasDebit && hasCredit && !/\b(?:transfer(?:red)?|reversal|refund)\b/i.test(lowerText)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static createRejectionResult(reasons: string[]): StrictDetectionResult {
+        return {
+            isValidTransaction: false,
+            failureReasons: reasons,
+            confidenceScore: 0,
+            confidenceDetails: ConfidenceScorer.createLowConfidence(),
+            requiresManualReview: false,
+            reviewTriggers: [],
+            detectedSignals: {
+                authoritativeSource: false,
+                instrumentDetected: false,
+                amountDetected: false,
+                timestampDetected: false,
+                referenceIdDetected: false,
+                ambiguity: true,
+                ocrUncertainty: false,
+                contradictorySignals: false,
+            },
         };
     }
 }

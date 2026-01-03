@@ -1,8 +1,7 @@
 import crypto from 'crypto';
 import { env } from './env';
 
-export const featureFlags = {
-    USE_NEW_PIPELINE: env.NODE_ENV !== 'test' && (process.env.USE_NEW_PIPELINE === 'true'),
+const featureFlags = {
     NEW_PIPELINE_ROLLOUT_PERCENTAGE: parseInt(
         process.env.NEW_PIPELINE_ROLLOUT_PERCENTAGE || '100' // Default 100% - already deployed
     ),

@@ -9,6 +9,10 @@ const envSchema = z.object({
   PORT: z.string().default('8000'),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
+  // Supabase (Optional, required only for PDF password features)
+  SUPABASE_URL: z.string().optional(),
+  SUPABASE_SERVICE_KEY: z.string().optional(),
+
   // Database (Optional overrides if DATABASE_URL not sufficient, but usually node-postgres uses env vars automatically. 
   // However, for explicit usage we can define them or just rely on DATABASE_URL. 
   // Let's stick to DATABASE_URL as primary, but if the codebase uses others, we add them.)
@@ -36,7 +40,6 @@ const envSchema = z.object({
   BATCH_SIZE: z.coerce.number().optional().default(2),
 
   // Feature Flags
-  USE_NEW_PIPELINE: z.string().optional().default('true'),
   NEW_PIPELINE_ROLLOUT_PERCENTAGE: z.string().optional().default('100'),
   SKIP_GPT: z.string().optional().default('false'),
 

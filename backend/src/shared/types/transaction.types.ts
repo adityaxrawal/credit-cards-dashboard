@@ -42,8 +42,16 @@ export enum InstrumentType {
     DEBIT_CARD = 'debit_card',
     UPI = 'upi',
     UPI_HANDLE = 'upi_handle',
+    UPI_ON_CREDIT_CARD = 'upi_on_credit_card',
     BANK_ACCOUNT = 'bank_account',
     SAVINGS_ACCOUNT = 'savings_account',
+    IMPS = 'imps',
+    NEFT = 'neft',
+    RTGS = 'rtgs',
+    SWIFT_WIRE = 'swift_wire',
+    WALLET_TRANSFER = 'wallet_transfer',
+    POS = 'pos',
+    ESCROW_TRANSFER = 'escrow_transfer',
 }
 
 export enum TransactionDirection {
@@ -80,6 +88,60 @@ export enum TransactionLinkType {
     SPLIT = 'split',
     AUTHORIZATION = 'authorization',
     REVERSAL = 'reversal',
+}
+
+// ============================================
+// Source Type Classification (New Architecture)
+// ============================================
+
+export enum SourceType {
+    BANK_ALERT = 'bank_alert',
+    UPI_APP_EMAIL = 'upi_app_email',
+    MERCHANT_RECEIPT = 'merchant_receipt',
+    PAYMENT_GATEWAY_RECEIPT = 'payment_gateway_receipt',
+    MONTHLY_STATEMENT = 'monthly_statement',
+}
+
+// ============================================
+// Manual Review System (New Architecture)
+// ============================================
+
+export enum ManualReviewReason {
+    MISSING_AMOUNT = 'missing_amount',
+    MISSING_INSTRUMENT = 'missing_instrument',
+    ZERO_AMOUNT = 'zero_amount',
+    MULTIPLE_TIMESTAMPS = 'multiple_timestamps',
+    SENDER_DOMAIN_MISMATCH = 'sender_domain_mismatch',
+    OCR_LOW_CONFIDENCE = 'ocr_low_confidence',
+    CONFLICTING_DIRECTION = 'conflicting_direction',
+    INVOICE_NO_PAYMENT = 'invoice_no_payment',
+    UNRECOGNIZED_CURRENCY = 'unrecognized_currency',
+    AMBIGUOUS_REFUND = 'ambiguous_refund',
+    CANCELLED_NO_REFUND = 'cancelled_no_refund',
+    PDF_PASSWORD_UNKNOWN = 'pdf_password_unknown',
+    LOW_CONFIDENCE_SCORE = 'low_confidence_score',
+}
+
+export interface ManualReviewTrigger {
+    id: string;
+    reason: ManualReviewReason;
+    details?: string;
+}
+
+// ============================================
+// Confidence Scoring System (New Architecture)
+// ============================================
+
+export interface ConfidenceDetails {
+    score: number;
+    authoritative_source: boolean;  // +0.4
+    instrument_detected: boolean;   // +0.2
+    amount_detected: boolean;       // +0.2
+    timestamp_detected: boolean;    // +0.1
+    reference_id_detected: boolean; // +0.1
+    ambiguity_penalty: boolean;     // -0.3
+    ocr_uncertainty: boolean;       // -0.3
+    contradictory_signals: boolean; // -0.2
 }
 
 export interface Instrument {
@@ -154,19 +216,79 @@ export interface ClassificationResult {
 }
 
 export interface ExtractedTransaction {
+    // ============================================
+    // Core Fields (New Architecture)
+    // ============================================
+
+    /** Unique event identifier for this transaction (populated by pipeline) */
+    unique_event_id?: string;
+
     type: TransactionType;
     direction: TransactionDirection;
     amount: number;
     currency: string;
+
+    /** Normalized timestamp in UTC (populated by pipeline) */
+    timestamp_normalized?: Date;
+
     merchant?: string;
     counterpartyName?: string;
     counterpartyIdentifier?: string;
+
+    /** Payee name (for debits - who received the money) */
+    payee_name?: string;
+
+    /** Payer name (for credits - who sent the money) */
+    payer_name?: string;
+
+    /** Transaction location if available */
+    location?: string;
+
+    /** Account balance after this transaction */
+    balance_after_transaction?: number;
+
     instrumentType: InstrumentType;
     instrumentId?: string;
     category?: string;
     referenceNumber?: string;
     fingerprint: string;
     metadata?: TransactionMetadata;
+
+    // ============================================
+    // Source Tracking (New Architecture)
+    // ============================================
+
+    /** Type of source this transaction was extracted from (populated by pipeline) */
+    source_type?: SourceType;
+
+    /** Email address of the source */
+    source_email_address?: string;
+
+    /** Folder or label ID where source was found */
+    source_folder_id?: string;
+
+    /** Thread ID for email grouping */
+    source_thread_id?: string;
+
+    // ============================================
+    // Confidence Scoring (New Architecture)
+    // ============================================
+
+    /** Overall confidence score (0-1) (populated by pipeline) */
+    confidence_score?: number;
+
+    /** Detailed breakdown of confidence scoring (populated by pipeline) */
+    confidence_details?: ConfidenceDetails;
+
+    // ============================================
+    // Manual Review System (New Architecture)
+    // ============================================
+
+    /** Whether this transaction requires manual review (populated by pipeline) */
+    requires_manual_review?: boolean;
+
+    /** List of reasons triggering manual review */
+    review_triggers?: ManualReviewTrigger[];
 
     // Extended fields for new capabilities
     rrn?: string;

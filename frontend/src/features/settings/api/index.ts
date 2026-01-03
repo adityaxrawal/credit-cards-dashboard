@@ -60,4 +60,39 @@ export const settingsApi = {
     const data = await apiClient.patch<any>("/api/settings", { [key]: value });
     return (data.data?.data || {}) as UserSettings;
   },
+
+  // PDF Password Management
+  listPdfPasswords: async (): Promise<PdfPassword[]> => {
+    const response = await apiClient.get<any>("/api/settings/pdf-passwords");
+    return (response.data?.data || []) as PdfPassword[];
+  },
+
+  addPdfPassword: async (data: CreatePdfPasswordDto): Promise<PdfPassword> => {
+    const response = await apiClient.post<any>("/api/settings/pdf-passwords", data);
+    return response.data?.data as PdfPassword;
+  },
+
+  deletePdfPassword: async (id: string): Promise<void> => {
+    await apiClient.delete(`/api/settings/pdf-passwords/${id}`);
+  },
+
+  updatePdfPassword: async (id: string, data: { priority: number }): Promise<void> => {
+    await apiClient.patch(`/api/settings/pdf-passwords/${id}`, data);
+  },
 };
+
+export interface PdfPassword {
+  id: string;
+  password_name: string;
+  password_masked: string;
+  bank_hint?: string;
+  priority: number;
+  created_at: string;
+}
+
+export interface CreatePdfPasswordDto {
+  password_name: string;
+  password_value: string;
+  bank_hint?: string;
+  priority?: number;
+}

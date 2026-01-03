@@ -79,8 +79,70 @@ export class InstrumentDetector {
         /([a-zA-Z0-9._-]+@(?:upi|oksbi|okaxis|okicici|okhdfcbank|ybl|paytm|apl|ibl|axl|sbi|icici|hdfc|axis|kotak|yes|federal|bob))/i,
     ];
 
+    // ============================================
+    // NEW ARCHITECTURE: Additional Instrument Patterns
+    // ============================================
+
+    // IMPS patterns
+    private static readonly IMPS_PATTERNS: RegExp[] = [
+        /imps\s+(?:ref|txn|transfer)/i,
+        /imps[-/]\d+/i,
+        /inter-?bank\s+mobile\s+payment/i,
+        /\bimps\b.*(?:transfer|sent|received)/i,
+    ];
+
+    // NEFT patterns
+    private static readonly NEFT_PATTERNS: RegExp[] = [
+        /neft\s+(?:ref|txn|transfer)/i,
+        /neft[-/]\d+/i,
+        /neft\s+(?:credit|debit)/i,
+        /\bneft\b.*(?:transfer|sent|received)/i,
+    ];
+
+    // RTGS patterns
+    private static readonly RTGS_PATTERNS: RegExp[] = [
+        /rtgs\s+(?:ref|txn|transfer)/i,
+        /rtgs[-/]\d+/i,
+        /\brtgs\b.*(?:transfer|sent|received)/i,
+    ];
+
+    // SWIFT/Wire patterns
+    private static readonly SWIFT_PATTERNS: RegExp[] = [
+        /swift\s+(?:transfer|wire|payment)/i,
+        /wire\s+transfer/i,
+        /international\s+transfer/i,
+        /\biban\b/i,
+        /swift\s+code/i,
+    ];
+
+    // POS patterns
+    private static readonly POS_PATTERNS: RegExp[] = [
+        /pos\s+(?:transaction|terminal|purchase)/i,
+        /\bswipe\b.*card/i,
+        /chip\s+transaction/i,
+        /tap\s*[&and]*\s*pay/i,
+        /contactless\s+(?:payment|transaction)/i,
+        /in-?store\s+purchase/i,
+    ];
+
+    // Wallet patterns
+    private static readonly WALLET_PATTERNS: RegExp[] = [
+        /(?:paytm|phonepe|gpay|google\s+pay|amazon\s+pay)\s+wallet/i,
+        /wallet\s+(?:load|debit|credit|transfer)/i,
+        /added\s+to\s+(?:paytm|phonepe|gpay)\s+wallet/i,
+    ];
+
+    // UPI on Credit Card patterns (RuPay CC via UPI)
+    private static readonly UPI_ON_CC_PATTERNS: RegExp[] = [
+        /rupay.*credit.*upi/i,
+        /credit\s+card.*@.*upi/i,
+        /upi.*credit\s+card/i,
+        /cc.*upi\s+transaction/i,
+    ];
+
     /**
      * Detect all instruments from email content
+     * NEW ARCHITECTURE: Detects all instrument types including IMPS, NEFT, RTGS, SWIFT, POS, Wallet
      */
     static detectFromContent(
         subject: string,
@@ -89,6 +151,12 @@ export class InstrumentDetector {
     ): DetectedInstrument[] {
         const text = `${subject} ${body}`;
         const instruments: DetectedInstrument[] = [];
+
+        // NEW: Detect UPI on Credit Card first (most specific)
+        const upiOnCC = this.detectUPIOnCreditCard(text);
+        if (upiOnCC) {
+            instruments.push(upiOnCC);
+        }
 
         // Detect card
         const card = this.detectCard(text);
@@ -106,6 +174,37 @@ export class InstrumentDetector {
         const upi = this.detectUPI(text);
         if (upi) {
             instruments.push(upi);
+        }
+
+        // NEW ARCHITECTURE: Detect transfer types
+        const imps = this.detectIMPS(text);
+        if (imps) {
+            instruments.push(imps);
+        }
+
+        const neft = this.detectNEFT(text);
+        if (neft) {
+            instruments.push(neft);
+        }
+
+        const rtgs = this.detectRTGS(text);
+        if (rtgs) {
+            instruments.push(rtgs);
+        }
+
+        const swift = this.detectSWIFT(text);
+        if (swift) {
+            instruments.push(swift);
+        }
+
+        const pos = this.detectPOS(text);
+        if (pos) {
+            instruments.push(pos);
+        }
+
+        const wallet = this.detectWallet(text);
+        if (wallet) {
+            instruments.push(wallet);
         }
 
         // Try to enrich with bank name from sender domain
@@ -181,6 +280,128 @@ export class InstrumentDetector {
                     type: InstrumentType.UPI,
                     upiVpa: match[1].toLowerCase(),
                     confidence: 0.95
+                };
+            }
+        }
+        return null;
+    }
+
+    // ============================================
+    // NEW ARCHITECTURE: Additional Detection Methods
+    // ============================================
+
+    /**
+     * Detect UPI on Credit Card (RuPay CC via UPI)
+     */
+    private static detectUPIOnCreditCard(text: string): DetectedInstrument | null {
+        for (const pattern of this.UPI_ON_CC_PATTERNS) {
+            if (pattern.test(text)) {
+                // Also try to extract card last 4
+                const card = this.detectCard(text);
+                return {
+                    type: InstrumentType.UPI_ON_CREDIT_CARD,
+                    cardLast4: card?.cardLast4,
+                    confidence: 0.9
+                };
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Detect IMPS transfer
+     */
+    private static detectIMPS(text: string): DetectedInstrument | null {
+        for (const pattern of this.IMPS_PATTERNS) {
+            if (pattern.test(text)) {
+                const account = this.detectAccount(text);
+                return {
+                    type: InstrumentType.IMPS,
+                    accountMasked: account?.accountMasked,
+                    confidence: 0.85
+                };
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Detect NEFT transfer
+     */
+    private static detectNEFT(text: string): DetectedInstrument | null {
+        for (const pattern of this.NEFT_PATTERNS) {
+            if (pattern.test(text)) {
+                const account = this.detectAccount(text);
+                return {
+                    type: InstrumentType.NEFT,
+                    accountMasked: account?.accountMasked,
+                    confidence: 0.85
+                };
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Detect RTGS transfer
+     */
+    private static detectRTGS(text: string): DetectedInstrument | null {
+        for (const pattern of this.RTGS_PATTERNS) {
+            if (pattern.test(text)) {
+                const account = this.detectAccount(text);
+                return {
+                    type: InstrumentType.RTGS,
+                    accountMasked: account?.accountMasked,
+                    confidence: 0.85
+                };
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Detect SWIFT/Wire transfer
+     */
+    private static detectSWIFT(text: string): DetectedInstrument | null {
+        for (const pattern of this.SWIFT_PATTERNS) {
+            if (pattern.test(text)) {
+                const account = this.detectAccount(text);
+                return {
+                    type: InstrumentType.SWIFT_WIRE,
+                    accountMasked: account?.accountMasked,
+                    confidence: 0.8
+                };
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Detect POS transaction
+     */
+    private static detectPOS(text: string): DetectedInstrument | null {
+        for (const pattern of this.POS_PATTERNS) {
+            if (pattern.test(text)) {
+                const card = this.detectCard(text);
+                return {
+                    type: InstrumentType.POS,
+                    cardLast4: card?.cardLast4,
+                    confidence: 0.85
+                };
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Detect Wallet transfer
+     */
+    private static detectWallet(text: string): DetectedInstrument | null {
+        for (const pattern of this.WALLET_PATTERNS) {
+            if (pattern.test(text)) {
+                return {
+                    type: InstrumentType.WALLET_TRANSFER,
+                    confidence: 0.8
                 };
             }
         }

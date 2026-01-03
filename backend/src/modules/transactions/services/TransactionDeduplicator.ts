@@ -2,6 +2,46 @@ import crypto from 'crypto';
 import { isUniqueViolationError } from '@shared/utils/validation/errorTypeGuards';
 import logger from '@shared/utils/infrastructure/logger';
 import { TransactionRepository } from '@modules/transactions/repositories/TransactionRepository';
+import { SourceType, InstrumentType } from '@shared/types/transaction.types';
+
+// ============================================
+// New Architecture Constants
+// ============================================
+
+/**
+ * Time windows for deduplication (New Architecture)
+ * Per spec: ±10 min for cards, ±1 hr for UPI
+ */
+export const TIME_WINDOWS = {
+    CARD: 10 * 60 * 1000,           // ±10 minutes for card transactions
+    UPI: 60 * 60 * 1000,            // ±1 hour for UPI transactions
+    STATEMENT: 24 * 60 * 60 * 1000, // ±1 day for statement matching
+    DEFAULT: 3 * 24 * 60 * 60 * 1000, // 3 days default (backwards compatible)
+};
+
+/**
+ * Source Authority Hierarchy (New Architecture)
+ * Higher number = higher authority, keep the stronger source
+ */
+export const SOURCE_AUTHORITY: Record<SourceType, number> = {
+    [SourceType.BANK_ALERT]: 100,
+    [SourceType.MONTHLY_STATEMENT]: 90,
+    [SourceType.UPI_APP_EMAIL]: 70,
+    [SourceType.PAYMENT_GATEWAY_RECEIPT]: 50,
+    [SourceType.MERCHANT_RECEIPT]: 30,
+};
+
+/**
+ * Merged Transaction Log (New Architecture)
+ * Records when transactions from multiple sources are merged
+ */
+export interface MergedTransactionLog {
+    primary_event_id: string;
+    merged_source_ids: string[];
+    merge_reason: string;
+    authority_rankings: Record<string, number>;
+    merged_at: Date;
+}
 
 /**
  * Transaction fingerprint components
@@ -14,7 +54,7 @@ export interface FingerprintComponents {
     bankDomain?: string;
     direction?: 'debit' | 'credit';
 
-    // New fields for Fix #1
+    // Reference numbers for Fix #1
     rrn?: string;
     arn?: string;
     upiRef?: string;
@@ -24,6 +64,10 @@ export interface FingerprintComponents {
     // Multi-currency support (Fix #8)
     originalAmount?: number;
     originalCurrency?: string;
+
+    // New Architecture: Source and Instrument Type
+    sourceType?: SourceType;
+    instrumentType?: InstrumentType;
 }
 
 /**
@@ -35,15 +79,17 @@ export interface DeduplicationResult {
     existingTransactionId?: string;
     confidence: number;
     matchType?: 'PRIMARY_REF' | 'EXACT_FINGERPRINT' | 'SOFT_MATCH' | 'NONE';
+    mergeLog?: MergedTransactionLog;
 }
 
 /**
  * TransactionDeduplicator - Prevent duplicate transaction entries
  * 
- * Uses multi-stage deduplication:
+ * NEW ARCHITECTURE: Uses updated multi-stage deduplication:
  * 1. Primary References (RRN, ARN, UPI Ref) - 100% confidence
  * 2. Exact Fingerprint Match - 100% confidence
- * 3. Soft Match (Fuzzy) - High confidence
+ * 3. Soft Match (Fuzzy) with instrument-specific time windows
+ * 4. Authority-based source ranking for merge decisions
  */
 export class TransactionDeduplicator {
     /**
@@ -193,19 +239,22 @@ export class TransactionDeduplicator {
 
     /**
      * Check for near-duplicate transactions (same amount, date, similar merchant)
-     * Used when fingerprint doesn't match but transaction might still be duplicate
+     * NEW ARCHITECTURE: Uses instrument-specific time windows
      */
     static async checkNearDuplicate(
         userId: string,
         components: FingerprintComponents,
-        toleranceMs: number = 86400000 * 3 // 3 days tolerance (Fix #6)
+        toleranceMs?: number
     ): Promise<{ isNearDuplicate: boolean; matchedIds: string[]; confidence: number }> {
         try {
+            // NEW ARCHITECTURE: Use instrument-specific time windows
+            const effectiveTolerance = toleranceMs ?? this.getTimeWindow(components.instrumentType);
+
             const dateStart = new Date(
-                (components.date instanceof Date ? components.date : new Date(components.date)).getTime() - toleranceMs
+                (components.date instanceof Date ? components.date : new Date(components.date)).getTime() - effectiveTolerance
             );
             const dateEnd = new Date(
-                (components.date instanceof Date ? components.date : new Date(components.date)).getTime() + toleranceMs
+                (components.date instanceof Date ? components.date : new Date(components.date)).getTime() + effectiveTolerance
             );
 
             const amountMin = components.amount - 0.01;
@@ -227,17 +276,32 @@ export class TransactionDeduplicator {
             const normalizedMerchant = this.normalizeMerchant(components.merchant);
             const matches = potentialDuplicates.filter(row => {
                 const rowMerchant = this.normalizeMerchant(row.merchant);
-                return this.merchantSimilarity(normalizedMerchant, rowMerchant) > 0.85; // Stricter threshold for auto-dedupe
+                return this.merchantSimilarity(normalizedMerchant, rowMerchant) > 0.85;
             });
 
-            // Special check: If amount is same, date is close, merchant matches -> likely duplicate
-            // We return confidence based on these factors
+            // Additional matching criteria from spec:
+            // - same masked card/account
+            // - same VPA
+            // - same reference/RRN
+            // - fuzzy-similar merchant names
+            const matchesWithVpaOrCard = potentialDuplicates.filter(row => {
+                // Check VPA match (from instrument_details)
+                if (components.upiRef && row.instrument_details?.upi_vpa_payer === components.upiRef) return true;
+                if (components.upiRef && row.instrument_details?.upi_vpa_payee === components.upiRef) return true;
+                // Check card last 4 match (from instrument_details)
+                if (components.cardLastFour && row.instrument_details?.card_last4 === components.cardLastFour) return true;
+                // Check RRN match
+                if (components.rrn && row.rrn === components.rrn) return true;
+                return false;
+            });
 
-            if (matches.length > 0) {
+            const allMatches = [...new Set([...matches.map(m => m.id), ...matchesWithVpaOrCard.map(m => m.id)])];
+
+            if (allMatches.length > 0) {
                 return {
                     isNearDuplicate: true,
-                    matchedIds: matches.map(m => m.id),
-                    confidence: 0.9 // High confidence for soft match
+                    matchedIds: allMatches,
+                    confidence: 0.9
                 };
             }
 
@@ -246,6 +310,63 @@ export class TransactionDeduplicator {
             logger.error('[Deduplicator] Failed to check near-duplicate:', error);
             return { isNearDuplicate: false, matchedIds: [], confidence: 0 };
         }
+    }
+
+    /**
+     * Get time window based on instrument type (New Architecture)
+     */
+    private static getTimeWindow(instrumentType?: InstrumentType): number {
+        if (!instrumentType) return TIME_WINDOWS.DEFAULT;
+
+        switch (instrumentType) {
+            case InstrumentType.CREDIT_CARD:
+            case InstrumentType.DEBIT_CARD:
+            case InstrumentType.POS:
+                return TIME_WINDOWS.CARD;
+            case InstrumentType.UPI:
+            case InstrumentType.UPI_ON_CREDIT_CARD:
+            case InstrumentType.UPI_HANDLE:
+                return TIME_WINDOWS.UPI;
+            case InstrumentType.NEFT:
+            case InstrumentType.IMPS:
+            case InstrumentType.RTGS:
+            case InstrumentType.SWIFT_WIRE:
+                return TIME_WINDOWS.STATEMENT;
+            default:
+                return TIME_WINDOWS.DEFAULT;
+        }
+    }
+
+    /**
+     * Compare source authority for merge decisions (New Architecture)
+     */
+    static compareSourceAuthority(sourceA?: SourceType, sourceB?: SourceType): number {
+        const rankA = sourceA ? SOURCE_AUTHORITY[sourceA] : 0;
+        const rankB = sourceB ? SOURCE_AUTHORITY[sourceB] : 0;
+        return rankA - rankB; // Positive if A is stronger
+    }
+
+    /**
+     * Create merge log when combining transactions from multiple sources
+     */
+    static createMergeLog(
+        primaryEventId: string,
+        mergedSourceIds: string[],
+        mergeReason: string,
+        sources: Array<{ id: string; sourceType?: SourceType }>
+    ): MergedTransactionLog {
+        const authorityRankings: Record<string, number> = {};
+        sources.forEach(s => {
+            authorityRankings[s.id] = s.sourceType ? SOURCE_AUTHORITY[s.sourceType] : 0;
+        });
+
+        return {
+            primary_event_id: primaryEventId,
+            merged_source_ids: mergedSourceIds,
+            merge_reason: mergeReason,
+            authority_rankings: authorityRankings,
+            merged_at: new Date(),
+        };
     }
 
     /**

@@ -4,7 +4,7 @@ import * as crypto from 'crypto';
 import logger from '@shared/utils/infrastructure/logger';
 import { SimplifiedEmail, CleanEmail, PipelineResult, TransactionType, TransactionDirection, InstrumentType } from '@shared/types/transaction.types';
 import { InstrumentAutoService } from '@modules/cards/instrument-auto.service';
-import { BankPDFPasswordResolver } from '@modules/statements/bank-pdf-password-resolver';
+// import { BankPDFPasswordResolver } from '@modules/statements/bank-pdf-password-resolver'; // Removed
 
 import { SanitizerService } from '@modules/gmail/sanitizer';
 import { BroadFinancialDetector } from '../detection/BroadFinancialDetector';
@@ -19,11 +19,11 @@ import { ManualReviewService } from '../../../../services/infrastructure/error-r
 import { ErrorRecoveryManager } from '../../../../services/infrastructure/error-recovery/ErrorRecoveryManager';
 import { StatementParserFactory } from '@modules/statements/statement-parser-factory';
 import { StatementReconciler } from '@modules/statements/statement-reconciler';
-import { featureFlags } from '@shared/config/featureFlags';
 import { MerchantEnricher } from '../enrichment/MerchantEnricher';
 import { UnclassifiedRepository } from '@modules/manual-review/unclassified.repository';
 import { UserProfileService } from '@modules/user/user-profile.service';
 import { EmailTrustService } from '@shared/services/EmailTrustService';
+import { PdfPasswordService } from '@modules/settings/PdfPasswordService';
 
 
 export interface IPipelineDependencies {
@@ -106,60 +106,17 @@ export class UniversalTransactionPipeline {
 
                 // Fetch user instruments & profile to generate passwords
                 const instruments = await this.deps.instrumentService.getUserInstruments(userId);
-
-                // Fetch real profile context for password generation
                 const profileContext = await UserProfileService.getPasswordContext(userId);
 
-                const candidatePasswords: string[] = [];
-                const dob = profileContext?.dob || new Date('2000-01-01'); // Fallback purely for safety, though won't match if real DOB different
+                // Initialize Password Service
+                const pdfPasswordService = new PdfPasswordService();
 
-                // 1. Generate from context
-                // We just map instruments to context format simply
-                for (const inst of instruments) {
-                    // Check account_number_masked (last 4)
-                    const last4 = inst.account_number_masked?.slice(-4);
-                    if (last4) {
-                        candidatePasswords.push(`ADIT${last4}`); // Keep the specific pattern user liked
-                        if (profileContext?.firstName) {
-                            candidatePasswords.push(`${profileContext.firstName}${last4}`);
-                        }
-                    }
-                }
-
-                // 2. Use Resolver with Expanded Context
-                const context = {
-                    firstName: profileContext?.firstName || 'User',
-                    dob: dob,
+                const uniquePasswords = await pdfPasswordService.getAllPasswordsForParsing(userId, {
+                    firstName: profileContext?.firstName,
+                    dateOfBirth: profileContext?.dob || undefined,
                     instruments: instruments
-                };
+                });
 
-                const resolved = BankPDFPasswordResolver.generateCandidates(context);
-                candidatePasswords.push(...resolved);
-
-                // 3. Brute Force Dates (Common for many banks)
-                // Add DDMMYYYY and DDMMYY of DOB if not covered
-                const dd = String(dob.getDate()).padStart(2, '0');
-                const mm = String(dob.getMonth() + 1).padStart(2, '0');
-                const yyyy = String(dob.getFullYear());
-                const yy = yyyy.slice(-2);
-
-                candidatePasswords.push(`${dd}${mm}${yyyy}`);
-                candidatePasswords.push(`${dd}${mm}${yy}`);
-
-                // 4. Name + Date Combinations (Common: ADIT1234)
-                if (profileContext?.firstName) {
-                    const prefix = profileContext.firstName.substring(0, 4).toUpperCase();
-                    candidatePasswords.push(`${prefix}${dd}${mm}`); // First 4 name + DDMM
-                    candidatePasswords.push(`${prefix}${yyyy}`);    // First 4 name + YYYY
-                } else {
-                    candidatePasswords.push(`ADIT${dd}${mm}`); // Fallback
-                    candidatePasswords.push(`ADIT${yyyy}`);
-                }
-
-                // Add explicit user-provided passwords if any (e.g. from a text file or settings)
-                // candidatePasswords.push(...userSettings.customPasswords);
-
-                const uniquePasswords = [...new Set(candidatePasswords)];
                 if (uniquePasswords.length > 0) {
                     logger.info(`[Pipeline] Generated ${uniquePasswords.length} candidate passwords for protected statements`);
                 }

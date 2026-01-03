@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Save, Mail, CreditCard, Smartphone, Check, AlertTriangle, RefreshCw, DollarSign, Clock } from "lucide-react";
+import { Save, Mail, CreditCard, Smartphone, Check, AlertTriangle, RefreshCw, DollarSign, Clock, Lock } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button, Input, ProgressBar, Switch, Label } from "@/shared/components/ui";
 import { cn, formatCurrency } from "@/shared/utils";
@@ -9,9 +9,11 @@ import { settingsApi, type UserSettings } from "@/features/settings/api";
 import { useToast } from "@/shared/utils/toast";
 import { apiClient } from "@/lib/api-client";
 import { useOverview } from "@/features/dashboard/hooks/useDashboardHooks";
+import { PdfPasswordSettings } from "./PdfPasswordSettings";
 
 const tabs = [
   { key: "spending", label: "Spending Limits", icon: CreditCard },
+  { key: "pdf-passwords", label: "PDF Passwords", icon: Lock },
   { key: "email", label: "Email Preferences", icon: Mail },
   { key: "gmail", label: "Gmail Integration", icon: Smartphone },
   { key: "currency", label: "Currency Settings", icon: DollarSign },
@@ -48,6 +50,7 @@ export default function SettingsPageClient() {
       {/* Content */}
       <div className="flex-1 min-w-0">
         {activeTab === "spending" && <SpendingLimitsSettings />}
+        {activeTab === "pdf-passwords" && <PdfPasswordSettings />}
         {activeTab === "email" && <EmailPreferencesSettings />}
         {activeTab === "gmail" && <GmailIntegrationSettings />}
         {activeTab === "currency" && <CurrencySettings />}

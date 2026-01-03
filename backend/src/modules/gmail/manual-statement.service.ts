@@ -13,7 +13,7 @@
 import logger from '@shared/utils/infrastructure/logger';
 import { StatementParserFactory } from '@modules/statements/statement-parser-factory';
 import { StatementReconciler } from '@modules/statements/statement-reconciler';
-import { BankPDFPasswordResolver, PasswordContext } from '@modules/statements/bank-pdf-password-resolver';
+import { PdfPasswordService } from '@modules/settings/PdfPasswordService';
 import { UserProfileService } from '@modules/user/user-profile.service';
 import { InstrumentRepository } from '../../repositories/InstrumentRepository';
 import { ExtractedStatement, ReconciliationStats } from '@shared/types/statement.types';
@@ -195,19 +195,16 @@ export class ManualStatementService {
             // Fetch user profile context (Name, DOB)
             const profileContext = await UserProfileService.getPasswordContext(userId);
 
-            // Build password context
-            const context: PasswordContext = {
-                firstName: profileContext?.firstName,
-                dob: profileContext?.dob || undefined,
-                instruments: instruments.map(inst => ({
-                    ...inst,
-                    // Map to the format expected by BankPDFPasswordResolver
-                    account_number_masked: inst.last4 ? `XXXXXX${inst.last4}` : undefined
-                })) as any
-            };
+            // Initialize Password Service
+            const pdfPasswordService = new PdfPasswordService();
 
-            // Generate candidates using the resolver
-            const generatedPasswords = BankPDFPasswordResolver.generateCandidates(context);
+            const generatedPasswords = await pdfPasswordService.getAllPasswordsForParsing(userId, {
+                firstName: profileContext?.firstName,
+                dateOfBirth: profileContext?.dob || undefined,
+                instruments: instruments.map(inst => ({
+                    account_number_masked: inst.last4 ? `XXXXXX${inst.last4}` : undefined
+                }))
+            });
 
             // Add generated passwords that aren't already in the list
             for (const pwd of generatedPasswords) {

@@ -237,6 +237,7 @@ export class EnhancedRuleClassifier {
 
     /**
      * Map pattern category to standard transaction type
+     * NEW ARCHITECTURE: Extended with new instrument types
      */
     private static mapCategoryToType(category: string, defaultType?: string): string {
         if (defaultType) {
@@ -244,6 +245,7 @@ export class EnhancedRuleClassifier {
         }
 
         const typeMap: Record<string, string> = {
+            // Original mappings
             PAYMENT_CONFIRMATION: 'cc_spend',
             DEBIT_ALERT: 'bank_debit',
             CREDIT_ALERT: 'bank_credit',
@@ -255,16 +257,74 @@ export class EnhancedRuleClassifier {
             EMI_PAYMENT: 'cc_spend',
             CASHBACK_REWARD: 'cashback',
             STATEMENT: 'statement_txn',
-
-            // New Categories
             INVESTMENT: 'investment',
             TRAVEL: 'travel',
             FOOD_DELIVERY: 'food',
             RIDE_HAILING: 'transport',
-
             OTP_SECURITY: 'non_financial',
             PROMOTIONAL: 'non_financial',
             MARKETING: 'non_financial',
+
+            // ============================================
+            // NEW ARCHITECTURE: New Instrument Types
+            // ============================================
+
+            // UPI on Credit Card (RuPay CC via UPI)
+            UPI_ON_CC: 'cc_upi',
+            CC_UPI: 'cc_upi',
+            RUPAY_CC_UPI: 'cc_upi',
+            CREDIT_CARD_UPI: 'cc_upi',
+
+            // IMPS Transfers
+            IMPS_DEBIT: 'imps_debit',
+            IMPS_CREDIT: 'imps_credit',
+            IMPS_TRANSFER: 'imps_debit',
+
+            // NEFT Transfers
+            NEFT_DEBIT: 'neft_debit',
+            NEFT_CREDIT: 'neft_credit',
+            NEFT_TRANSFER: 'neft_debit',
+
+            // RTGS Transfers
+            RTGS_DEBIT: 'rtgs_debit',
+            RTGS_CREDIT: 'rtgs_credit',
+            RTGS_TRANSFER: 'rtgs_debit',
+
+            // SWIFT/International Wire
+            SWIFT_WIRE: 'swift_wire',
+            WIRE_TRANSFER: 'swift_wire',
+            INTERNATIONAL_TRANSFER: 'swift_wire',
+
+            // POS Transactions
+            POS_TRANSACTION: 'pos_debit',
+            POS_DEBIT: 'pos_debit',
+            SWIPE_TRANSACTION: 'pos_debit',
+            CONTACTLESS_PAYMENT: 'pos_debit',
+
+            // Wallet Transfers
+            WALLET_DEBIT: 'wallet_debit',
+            WALLET_CREDIT: 'wallet_credit',
+            WALLET_LOAD: 'wallet_credit',
+            PAYTM_WALLET: 'wallet_debit',
+            PHONEPE_WALLET: 'wallet_debit',
+
+            // Salary and Regular Income
+            SALARY: 'salary',
+            SALARY_CREDIT: 'salary',
+            PAYROLL: 'salary',
+            SALARY_TRANSFER: 'salary',
+            EMPLOYER_CREDIT: 'salary',
+
+            // Standing Instructions / eNACH
+            STANDING_INSTRUCTION: 'standing_instruction',
+            ENACH: 'enach',
+            AUTO_DEBIT: 'standing_instruction',
+            MANDATE_DEBIT: 'standing_instruction',
+
+            // Cheque Transactions
+            CHEQUE_DEPOSIT: 'cheque_deposit',
+            CHEQUE_RETURN: 'cheque_return',
+            CHEQUE_DEBIT: 'bank_debit',
         };
 
         return typeMap[category] || 'unclassified';
