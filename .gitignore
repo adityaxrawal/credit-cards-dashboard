@@ -57,6 +57,7 @@ backend/services/api-gateway/backup/services-old/gmail/token-manager.ts
 backend/deploy.sh
 backend/backend_repo.txt
 backend_repo.txt
+context.txt
 
 
 # Additional sensitive artifacts restored from purge
