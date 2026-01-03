@@ -7,6 +7,7 @@ import { UniversalAmountExtractor } from '../UniversalAmountExtractor';
 import { CurrencyAmountExtractor, ExtractedCurrencyAmount } from '../CurrencyAmountExtractor';
 import { currencyConverter } from '@modules/currency/CurrencyConversionService';
 import { EnhancedClassificationResult } from '../../classification/EnhancedRuleClassifier';
+import { MerchantExtractor } from '../MerchantExtractor';
 
 export class CreditCardSpendExtractor {
     static async extract(userId: string, email: CleanEmail, classification?: EnhancedClassificationResult): Promise<ExtractedTransaction> {
@@ -35,7 +36,7 @@ export class CreditCardSpendExtractor {
         // Extract amount with currency detection
         const currencyResult = this.extractAmountWithCurrency(combined);
         const amount = currencyResult.normalizedAmount;
-        const merchant = this.extractMerchant(combined);
+        const merchant = this.extractMerchant(combined, email.subject);
         const cardLast4 = this.extractCardLast4(combined);
         const date = this.extractDate(text, email.internalDate);
         const referenceNumber = this.extractReferenceNumber(combined);
@@ -126,7 +127,16 @@ export class CreditCardSpendExtractor {
         }
     }
 
-    private static extractMerchant(text: string): string {
+    private static extractMerchant(text: string, subject: string = ''): string {
+        // Use the new centralized MerchantExtractor
+        const candidates = MerchantExtractor.extract(text, subject);
+
+        if (candidates.length > 0) {
+            // Return top candidate
+            return candidates[0].rawName;
+        }
+
+        // Fallback to legacy patterns if new extractor fails (unlikely given it has a fallback too)
         const patterns = [
             BankParserPatterns.MERCHANT_AT,
             BankParserPatterns.MERCHANT_TO,
@@ -209,7 +219,7 @@ export class CreditCardSpendExtractor {
         if (match) {
             amount = parseFloat(match[1]);
             cardLast4 = match[2];
-            merchant = match[3].trim();
+            merchant = MerchantExtractor.cleanName(match[3]);
             // Date: 27/12/25
             const dateParts = match[4].split('/');
             if (dateParts.length === 3) {
@@ -223,7 +233,7 @@ export class CreditCardSpendExtractor {
             // Fallback to generic if regex fails even with high confidence classification
             // (Should ideally rely on generic extractors but scoped)
             amount = this.extractAmount(fullText);
-            const genericMerchant = this.extractMerchant(fullText);
+            const genericMerchant = this.extractMerchant(fullText, email.subject);
             merchant = genericMerchant !== 'Unknown Merchant' ? genericMerchant : 'SBI Generic';
             cardLast4 = this.extractCardLast4(fullText) || '';
         }
@@ -266,7 +276,7 @@ export class CreditCardSpendExtractor {
 
         if (match) {
             amount = parseFloat(match[1]);
-            merchant = match[2].trim();
+            merchant = MerchantExtractor.cleanName(match[2]);
         } else {
             amount = this.extractAmount(fullText);
             // Jupiter usually has merchant clearly.
@@ -371,7 +381,7 @@ export class CreditCardSpendExtractor {
 
         // Try generic extraction primarily, just enforcing specific context
         let amount = this.extractAmount(fullText);
-        let merchant = this.extractMerchant(fullText);
+        let merchant = this.extractMerchant(fullText, email.subject);
         let cardLast4 = this.extractCardLast4(fullText) || '';
 
         // Yes Bank: "INR 230.00 has been debited from your card XX1234"

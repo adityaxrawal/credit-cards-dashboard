@@ -434,7 +434,7 @@ export class UniversalTransactionPipeline {
             // === ENRICHMENT ===
             try {
                 // Enrich Merchant Name & Category
-                const enriched = MerchantEnricher.enrich(extracted.merchant || '');
+                const enriched = await MerchantEnricher.enrich(extracted.merchant || '');
 
                 // If we found a good match (confidence > 0.8), update the data
                 // Or if the original was "Unknown Merchant" and we got something better

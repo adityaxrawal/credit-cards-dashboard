@@ -4,6 +4,7 @@ import { CleanEmail, ExtractedTransaction, TransactionType, TransactionDirection
 import { InstrumentAutoService } from '@modules/cards/instrument-auto.service';
 import { BankParserPatterns } from '@shared/utils/cache/regexCache';
 import { UniversalAmountExtractor } from '../UniversalAmountExtractor';
+import { MerchantExtractor } from '../MerchantExtractor';
 
 export class BankAccountDebitExtractor {
     static async extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {
@@ -12,7 +13,7 @@ export class BankAccountDebitExtractor {
 
         const amount = this.extractAmount(combined);
         const accountLast4 = this.extractAccountLast4(combined);
-        const recipient = this.extractRecipient(combined);
+        const recipient = this.extractRecipient(combined, email.subject);
         const date = new Date(email.internalDate);
         const referenceNumber = this.extractReferenceNumber(combined);
 
@@ -65,7 +66,14 @@ export class BankAccountDebitExtractor {
         return null;
     }
 
-    private static extractRecipient(text: string): string {
+    private static extractRecipient(text: string, subject: string = ''): string {
+        // Use the new centralized MerchantExtractor
+        const candidates = MerchantExtractor.extract(text, subject);
+
+        if (candidates.length > 0) {
+            return candidates[0].rawName;
+        }
+
         const patterns = [
             BankParserPatterns.MERCHANT_AT,
             BankParserPatterns.MERCHANT_TO,

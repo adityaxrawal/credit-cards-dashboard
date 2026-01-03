@@ -5,6 +5,7 @@ import { InstrumentAutoService } from '@modules/cards/instrument-auto.service';
 import { BankParserPatterns } from '@shared/utils/cache/regexCache';
 import { CurrencyAmountExtractor, ExtractedCurrencyAmount } from '../CurrencyAmountExtractor';
 import { currencyConverter } from '@modules/currency/CurrencyConversionService';
+import { MerchantExtractor } from '../MerchantExtractor';
 
 export class CreditCardUPIExtractor {
     static async extract(userId: string, email: CleanEmail): Promise<ExtractedTransaction> {
@@ -35,7 +36,7 @@ export class CreditCardUPIExtractor {
         });
 
         // Try to find a merchant name in the text if UPI handle is generic
-        const merchant = this.extractMerchant(combined) || upiRecipient || 'UPI Merchant';
+        const merchant = this.extractMerchant(combined, email.subject) || upiRecipient || 'UPI Merchant';
 
         // Perform currency conversion if needed (UPI is typically INR)
         const detectedCurrency = currencyResult.detectedCurrency || 'INR';
@@ -119,7 +120,14 @@ export class CreditCardUPIExtractor {
         return match ? match[1] : null;
     }
 
-    private static extractMerchant(text: string): string | null {
+    private static extractMerchant(text: string, subject: string = ''): string | null {
+        // Use the new centralized MerchantExtractor
+        const candidates = MerchantExtractor.extract(text, subject);
+
+        if (candidates.length > 0) {
+            return candidates[0].rawName;
+        }
+
         const patterns = [
             BankParserPatterns.MERCHANT_AT,
             BankParserPatterns.MERCHANT_TO,
