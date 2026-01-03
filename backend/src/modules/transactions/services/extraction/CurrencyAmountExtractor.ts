@@ -39,54 +39,62 @@ interface CurrencyDetectionResult {
  * Ordered by specificity (most specific first)
  */
 const AMOUNT_PATTERNS: { pattern: RegExp; extractGroup: number; currencyGroup?: number }[] = [
+    // Indian Text Format (Lakh/Crore): "1.5 Lakh", "10 Crores" - Highest Priority
+    {
+        pattern: /((?:₹|Rs\.?|INR)?\s*[\d,]+(?:\.\d+)?)\s*(Lakhs?|Crores?|Cr\.?|L\.?)\b/gi,
+        extractGroup: 0,
+    },
     // ISO code before amount: "USD 123.45", "EUR 1,234.56"
     {
-        pattern: /\b([A-Z]{3})\s*([+-]?\d{1,3}(?:[,.']\d{2,3})*(?:[.,]\d{1,2})?)\b/gi,
+        pattern: /\b([A-Z]{3})\s*([+-]?\d+(?:[,.']\d+)*)\b/gi,
         extractGroup: 2,
         currencyGroup: 1,
     },
-    // Symbol before amount: "$123.45", "€1.234,56", "₹1,23,456.78"
+    // Symbol before amount: "$123.45", "€1.234,56", "₹1,23,456.78", "Rs 1500"
     {
-        pattern: /([₹$€£¥₿฿])\s*([+-]?\d{1,3}(?:[,.']\d{2,3})*(?:[.,]\d{1,8})?)/g,
+        pattern: /([₹$€£¥₿฿])\s*([+-]?\d+(?:[,.']\d+)*)/g,
         extractGroup: 2,
         currencyGroup: 1,
     },
     // S$, C$, A$, HK$ prefixed amounts
     {
-        pattern: /([SACH]K?)\$\s*([+-]?\d{1,3}(?:[,.]\d{2,3})*(?:[.,]\d{1,2})?)/gi,
+        pattern: /([SACH]K?)\$\s*([+-]?\d+(?:[,.]\d+)*)/gi,
         extractGroup: 2,
         currencyGroup: 1,
     },
-    // Rs, Rs. prefix: "Rs 500", "Rs. 1,234.56"
+    // Rs, Rs. prefix: "Rs 500", "Rs. 1,234.56", "Rs 1500.00"
     {
-        pattern: /Rs\.?\s*([+-]?\d{1,3}(?:[,.]\d{2,3})*(?:[.,]\d{1,2})?)/gi,
+        pattern: /Rs\.?\s*([+-]?\d+(?:[,.]\d+)*)/gi,
         extractGroup: 1,
     },
     // Amount with ISO suffix: "123.45 USD", "1,234.56 EUR"
     {
-        pattern: /([+-]?\d{1,3}(?:[,.']\d{2,3})*(?:[.,]\d{1,2})?)\s*([A-Z]{3})\b/gi,
+        pattern: /([+-]?\d+(?:[,.']\d+)*)\s*([A-Z]{3})\b/gi,
         extractGroup: 1,
         currencyGroup: 2,
     },
     // Amount with symbol suffix: "100 €", "1.234,56€"
     {
-        pattern: /([+-]?\d{1,3}(?:[,.']\d{2,3})*(?:[.,]\d{1,8})?)\s*([₹$€£¥₿฿])/g,
+        pattern: /([+-]?\d+(?:[,.']\d+)*)\s*([₹$€£¥₿฿])/g,
         extractGroup: 1,
         currencyGroup: 2,
     },
     // Indian suffix notation: "500/-", "1,234.56/-"
     {
-        pattern: /([+-]?\d{1,3}(?:[,.]\d{2,3})*(?:[.,]\d{1,2})?)\s*\/-/g,
+        pattern: /([+-]?\d+(?:[,.]\d+)*)\s*\/-/g,
         extractGroup: 1,
     },
     // Bracketed negative: "(123.45)"
     {
-        pattern: /\((\d{1,3}(?:[,.]\d{2,3})*(?:[.,]\d{1,2})?)\)/g,
+        pattern: /\((\d+(?:[,.]\d+)*)\)/g,
         extractGroup: 1,
     },
     // Generic with keyword context: "Amount: 500.00"
+    // Keep generic slightly stricter to avoid capturing dates/phones?
+    // Actually \d+(?:[,.]\d+)* reflects "digits followed by optional fractions". 
+    // "2024" matches. "500.00" matches.
     {
-        pattern: /(?:amount|total|balance|payment|paid|spent|debited|credited|received)[:\s]+([+-]?\d{1,3}(?:[,.]\d{2,3})*(?:[.,]\d{1,2})?)/gi,
+        pattern: /(?:amount|total|balance|payment|paid|spent|debited|credited|received|purchase)[:\s]+([+-]?\d+(?:[,.]\d+)*)/gi,
         extractGroup: 1,
     },
 ];
@@ -95,7 +103,7 @@ const AMOUNT_PATTERNS: { pattern: RegExp; extractGroup: number; currencyGroup?: 
  * Contextual keywords that indicate credit/negative values
  */
 const CREDIT_INDICATORS = /\b(credit|credited|cr|refund|refunded|reversal|cashback)\b/i;
-const DEBIT_INDICATORS = /\b(debit|debited|dr|spent|paid|payment|charged)\b/i;
+const DEBIT_INDICATORS = /\b(debit|debited|dr|spent|paid|payment|charged|used|purchase)\b/i;
 
 /**
  * Currency Amount Extractor Class
@@ -170,6 +178,9 @@ export class CurrencyAmountExtractor {
         results.sort((a, b) =>
             confidenceOrder[a.currencyConfidence] - confidenceOrder[b.currencyConfidence]
         );
+
+        // DEBUG LOG
+        // console.log('Extracted Results:', JSON.stringify(results, null, 2));
 
         return results;
     }
@@ -300,6 +311,11 @@ export class CurrencyAmountExtractor {
             return { currency: 'INR', confidence: 'high', method: 'symbol', ambiguities: [] };
         }
 
+        // Priority 3.5: Indian Text Suffixes (Lakhs/Crores)
+        if (/(?:Lakhs?|Crores?|Cr\.?|L\.?)\b/i.test(matchContext)) {
+            return { currency: 'INR', confidence: 'high', method: 'context', ambiguities: [] };
+        }
+
         // Priority 4: Check for suffix notation like "/-" (Indian)
         if (/\/-/.test(matchContext)) {
             return {
@@ -339,10 +355,14 @@ export class CurrencyAmountExtractor {
             Math.min(fullText.length, fullText.indexOf(match) + match.length + 50)
         );
 
+        // Remove the matched amount string from contextWindow to avoid self-match 
+        // (e.g. "1.5 Cr" - Cr is unit, not credit indicator)
+        const contextWithoutMatch = contextWindow.replace(match, '___');
+
         // Refund/credit usually means money coming back (positive in credit direction)
         // But for expense tracking, it's often shown as negative
         // This depends on business logic - for now, mark credits as negative
-        if (CREDIT_INDICATORS.test(contextWindow) && !DEBIT_INDICATORS.test(contextWindow)) {
+        if (CREDIT_INDICATORS.test(contextWithoutMatch) && !DEBIT_INDICATORS.test(contextWithoutMatch)) {
             return true;
         }
 
@@ -355,6 +375,18 @@ export class CurrencyAmountExtractor {
      */
     private static normalizeAmount(raw: string, currencyCode: string | null): number {
         let clean = raw.trim();
+        let multiplier = 1;
+
+        // Check for Indian Suffixes first (before they get stripped)
+        const indianMatch = clean.match(/([\d,]+(?:\.\d+)?)\s*(Lakhs?|Crores?|Cr\.?|L\.?)\b/i);
+        if (indianMatch) {
+            const unit = indianMatch[2].toLowerCase().replace('.', '');
+            if (unit.startsWith('l')) multiplier = 100000;
+            else if (unit.startsWith('c')) multiplier = 10000000;
+
+            // Remove the suffix so we can parse the number part cleanly
+            clean = clean.replace(indianMatch[0], indianMatch[1]);
+        }
 
         // Remove currency symbols and whitespace
         clean = clean.replace(/[₹$€£¥₿฿Ξ₮]/g, '');
@@ -363,95 +395,46 @@ export class CurrencyAmountExtractor {
         clean = clean.replace(/[A-Z]{3}\s*/gi, '');
         clean = clean.replace(/\s+/g, '');
 
-        // Handle Swiss format with apostrophe as thousand separator
-        if (clean.includes("'")) {
-            clean = clean.replace(/'/g, '');
-        }
+        if (clean.includes("'")) clean = clean.replace(/'/g, '');
 
-        // Determine if comma or period is the decimal separator
-        // European format: 1.234,56 (comma is decimal)
-        // US/Indian format: 1,234.56 (period is decimal)
-
-        const currency = currencyCode ? getCurrencyByCode(currencyCode) : null;
-        const expectedDecimalSep = currency?.decimalSeparator || '.';
-
-        // Count occurrences
+        let val = 0;
         const commaCount = (clean.match(/,/g) || []).length;
         const periodCount = (clean.match(/\./g) || []).length;
 
-        // Heuristics:
-        // - If only one separator and it's followed by exactly 2-3 digits at end, it's likely decimal
-        // - If both present, the last one is likely decimal
-        // - If multiple commas and no/one period, commas are thousands
-        // - If multiple periods and no/one comma, periods are thousands (European)
-
-        if (commaCount === 0 && periodCount === 0) {
-            // Pure integer
-            return parseInt(clean, 10);
-        }
-
-        if (commaCount === 0 && periodCount === 1) {
-            // Only periods - likely US format: 1234.56
-            return parseFloat(clean);
-        }
-
-        if (commaCount === 1 && periodCount === 0) {
-            // Only one comma
+        if (commaCount === 0 && periodCount === 0) val = parseInt(clean, 10);
+        else if (commaCount === 0 && periodCount === 1) val = parseFloat(clean);
+        else if (commaCount === 1 && periodCount === 0) {
             const parts = clean.split(',');
             const lastPart = parts[parts.length - 1];
-
-            // If last part is 2 digits, comma is decimal (European single value)
-            if (lastPart.length <= 2) {
-                return parseFloat(clean.replace(',', '.'));
-            } else {
-                // Comma is thousand separator: 1,234 → 1234
-                return parseFloat(clean.replace(',', ''));
-            }
+            if (lastPart.length <= 2) val = parseFloat(clean.replace(',', '.'));
+            else val = parseFloat(clean.replace(',', ''));
         }
-
-        if (commaCount > 1 && periodCount === 0) {
-            // Multiple commas, no periods: Indian/Western thousands (1,23,456 or 1,234,567)
-            return parseFloat(clean.replace(/,/g, ''));
-        }
-
-        if (periodCount > 1 && commaCount === 0) {
-            // Multiple periods: European thousands (1.234.567)
-            // This is unusual for decimals, treat periods as thousands
-            return parseFloat(clean.replace(/\./g, ''));
-        }
-
-        if (commaCount >= 1 && periodCount === 1) {
-            // Both present - determine which is decimal
+        else if (commaCount > 1 && periodCount === 0) val = parseFloat(clean.replace(/,/g, ''));
+        else if (periodCount > 1 && commaCount === 0) val = parseFloat(clean.replace(/\./g, ''));
+        else if (commaCount >= 1 && periodCount === 1) {
             const lastCommaIndex = clean.lastIndexOf(',');
             const lastPeriodIndex = clean.lastIndexOf('.');
-
-            if (lastCommaIndex > lastPeriodIndex) {
-                // Comma comes after period: European format 1.234,56
-                clean = clean.replace(/\./g, '').replace(',', '.');
-            } else {
-                // Period comes after comma: US format 1,234.56
-                clean = clean.replace(/,/g, '');
-            }
-            return parseFloat(clean);
+            if (lastCommaIndex > lastPeriodIndex) clean = clean.replace(/\./g, '').replace(',', '.');
+            else clean = clean.replace(/,/g, '');
+            val = parseFloat(clean);
         }
-
-        if (commaCount === 1 && periodCount >= 1) {
-            // One comma, multiple periods - European 1,234.567.890 (unusual)
-            // Treat comma as thousand, periods as part of number
+        else if (commaCount === 1 && periodCount >= 1) {
             clean = clean.replace(/,/g, '').replace(/\./g, '');
-            return parseFloat(clean);
+            val = parseFloat(clean);
+        }
+        else {
+            const normalized = clean.replace(/[^\d.,]/g, '');
+            const lastSep = Math.max(normalized.lastIndexOf(','), normalized.lastIndexOf('.'));
+            if (lastSep > 0) {
+                const beforeSep = normalized.substring(0, lastSep).replace(/[.,]/g, '');
+                const afterSep = normalized.substring(lastSep + 1);
+                val = parseFloat(`${beforeSep}.${afterSep}`);
+            } else {
+                val = parseFloat(normalized.replace(/[.,]/g, ''));
+            }
         }
 
-        // Fallback: remove all non-digit except last separator
-        const normalized = clean.replace(/[^\d.,]/g, '');
-        const lastSep = Math.max(normalized.lastIndexOf(','), normalized.lastIndexOf('.'));
-        if (lastSep > 0) {
-            const beforeSep = normalized.substring(0, lastSep).replace(/[.,]/g, '');
-            const afterSep = normalized.substring(lastSep + 1);
-            return parseFloat(`${beforeSep}.${afterSep}`);
-        }
-
-        return parseFloat(normalized.replace(/[.,]/g, ''));
+        return val * multiplier;
     }
 
     /**

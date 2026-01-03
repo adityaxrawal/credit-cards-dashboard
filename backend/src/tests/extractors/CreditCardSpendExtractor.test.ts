@@ -2,6 +2,17 @@ import { describe, it, expect } from '@jest/globals';
 import { CreditCardSpendExtractor } from '@modules/transactions/services/extraction/extractors/CreditCardSpendExtractor';
 import { createMockEmail } from '../utils/testHelpers';
 import { TransactionType, TransactionDirection } from '@shared/types/transaction.types';
+import { ExchangeRateService } from '@shared/utils/currency/ExchangeRateService';
+import { jest } from '@jest/globals';
+
+// Mock InstrumentAutoService to avoid DB calls
+jest.mock('@modules/cards/instrument-auto.service', () => ({
+    InstrumentAutoService: {
+        findOrCreateCard: (jest.fn() as any).mockResolvedValue({ id: 'mock-instrument-id' }),
+        findOrCreateGenericCard: (jest.fn() as any).mockResolvedValue({ id: 'mock-generic-id' }),
+        detectBankFromEmail: (jest.fn() as any).mockResolvedValue({ name: 'HDFC Bank' })
+    }
+}));
 
 describe('CreditCardSpendExtractor', () => {
     const userId = 'test-user-id';
@@ -22,7 +33,8 @@ describe('CreditCardSpendExtractor', () => {
             expect(result.type).toBe(TransactionType.CREDIT_CARD_SPEND);
             expect(result.direction).toBe(TransactionDirection.DEBIT);
             expect(result.amount).toBe(2500);
-            expect(result.instrumentDetails?.cardLast4).toBe('1234');
+            expect(result.amount).toBe(2500);
+            expect(result.metadata?.cardLast4).toBe('1234');
         });
 
         it('should extract transaction with rupee symbol', async () => {
@@ -51,7 +63,8 @@ describe('CreditCardSpendExtractor', () => {
 
             expect(result.type).toBe(TransactionType.CREDIT_CARD_SPEND);
             expect(result.amount).toBe(3999);
-            expect(result.instrumentDetails?.cardLast4).toBe('5678');
+            expect(result.amount).toBe(3999);
+            expect(result.metadata?.cardLast4).toBe('5678');
         });
     });
 
@@ -68,7 +81,8 @@ describe('CreditCardSpendExtractor', () => {
 
             expect(result.type).toBe(TransactionType.CREDIT_CARD_SPEND);
             expect(result.amount).toBe(1500);
-            expect(result.instrumentDetails?.cardLast4).toBe('9012');
+            expect(result.amount).toBe(1500);
+            expect(result.metadata?.cardLast4).toBe('9012');
         });
 
         it('should handle CASHBACK SBI Card', async () => {
@@ -108,10 +122,28 @@ describe('CreditCardSpendExtractor', () => {
                 { from: 'alerts@hdfcbank.net' }
             );
 
+            // Mock exchange rate for USD to INR
+            const rateSpy = jest.spyOn(ExchangeRateService, 'getRate');
+            rateSpy.mockResolvedValue({
+                rate: 84.0,
+                rateDate: '2025-01-01',
+                source: 'exchange-api',
+                fromCurrency: 'USD',
+                toCurrency: 'INR',
+                success: true
+            });
+
             const result = await CreditCardSpendExtractor.extract(userId, email);
 
             // Should capture the INR amount for domestic tracking
             expect(result.type).toBe(TransactionType.CREDIT_CARD_SPEND);
+            expect(result.originalAmount).toBe(49.99);
+            expect(result.originalCurrency).toBe('USD');
+            // 49.99 * 84 = 4199.16
+            expect(result.amount).toBe(4199.16);
+            expect(result.conversionSkipped).toBe(false);
+
+            rateSpy.mockRestore();
         });
     });
 
@@ -159,9 +191,9 @@ describe('CreditCardSpendExtractor', () => {
                 { from: 'statements@hdfcbank.net' }
             );
 
-            const result = await CreditCardSpendExtractor.extract(userId, email);
-
-            expect(result.amount).toBeUndefined();
+            await expect(CreditCardSpendExtractor.extract(userId, email))
+                .rejects
+                .toThrow();
         });
     });
 });

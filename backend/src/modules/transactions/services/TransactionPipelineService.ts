@@ -6,10 +6,11 @@
  */
 
 import { TransactionRepository } from '@modules/transactions/repositories/TransactionRepository';
+import { TransactionDeduplicator } from '@modules/transactions/services/TransactionDeduplicator'; // Fix #1
 import dayjs from 'dayjs';
-import { createHash } from 'crypto';
 import { TransactionMetadata } from '@shared/types/transaction.types';
 import { invalidateTransactionCache } from '@shared/utils/cache/cacheInvalidation';
+import logger from '@shared/utils/infrastructure/logger';
 
 export interface EmailTransactionData {
     instrumentType: string;
@@ -32,6 +33,18 @@ export interface EmailTransactionData {
     classificationMethod: string;
     rawExtraction?: any;
     scanJobId?: string;
+    // Extended fields for dedup (Fix #1)
+    rrn?: string;
+    arn?: string;
+    upiRef?: string;
+    impsRef?: string;
+
+    walletTxnId?: string;
+    // Multi-currency support (Fix #8)
+    originalCurrency?: string;
+    exchangeRate?: number;
+    conversionSkipped?: boolean;
+    originalAmount?: number;
 }
 
 export class TransactionPipelineService {
@@ -39,51 +52,76 @@ export class TransactionPipelineService {
      * Insert a transaction from email processing
      */
     static async insertFromEmail(userId: string, data: EmailTransactionData) {
-        console.log(`[TransactionPipelineService] Inserting from email for user ${userId}`);
+        logger.debug(`[TransactionPipelineService] Inserting from email for user ${userId}`);
 
-        // Create fingerprint for deduplication
-        const txnFingerprint = this.generateFingerprint(
-            data.emailMessageId,
-            data.transactionDate,
-            data.amount,
-            data.merchant
-        );
+        // Prepare fingerprint components
+        const components = {
+            amount: data.amount,
+            merchant: data.merchant,
+            date: data.transactionDate,
+            bankDomain: (data.metadata?.bankName as string) || 'unknown',
+            direction: data.direction,
+            // Fix #1: Include references
+            rrn: data.rrn || this.extractRrnFromRef(data.referenceNumber),
+            arn: data.arn,
+            upiRef: data.upiRef,
+            originalAmount: data.originalAmount,
+            originalCurrency: data.originalCurrency
+        };
+
+        const txnFingerprint = TransactionDeduplicator.generateFingerprint(components);
 
         const txDate = dayjs(data.transactionDate);
         const billMonth = txDate.month() + 1;
         const billYear = txDate.year();
 
-        // Check for duplicate
-        const existing = await TransactionRepository.findByFingerprint(userId, txnFingerprint);
-        if (existing) {
-            console.log(`[TransactionPipelineService] Skipping duplicate ${txnFingerprint}`);
-            return existing;
-        }
-
-        const result = await TransactionRepository.create({
+        // Use Deduplicator to Check/Create
+        const result = await TransactionDeduplicator.getOrCreate(
             userId,
-            instrumentType: data.instrumentType,
-            instrumentId: data.instrumentId || data.cardId, // Handle legacy cardId
-            transactionDate: data.transactionDate,
-            merchant: data.merchant,
-            category: data.category || 'Others',
-            amount: data.amount,
-            transactionType: data.transactionType,
-            direction: data.direction,
-            billMonth,
-            billYear,
-            emailMessageId: data.emailMessageId,
             txnFingerprint,
-            isManuallyAdded: false,
-            metadata: data.metadata,
-            classificationMethod: data.classificationMethod,
-            parentTransactionId: undefined,
-        });
+            components,
+            async () => {
+                const inserted = await TransactionRepository.create({
+                    userId,
+                    instrumentType: data.instrumentType,
+                    instrumentId: data.instrumentId || data.cardId,
+                    transactionDate: data.transactionDate,
+                    merchant: data.merchant,
+                    category: data.category || 'Others',
+                    amount: data.amount,
+                    transactionType: data.transactionType,
+                    direction: data.direction,
+                    billMonth,
+                    billYear,
+                    emailMessageId: data.emailMessageId,
+                    txnFingerprint,
+                    isManuallyAdded: false,
+                    metadata: data.metadata,
+                    classificationMethod: data.classificationMethod,
 
-        if (result) {
+                    parentTransactionId: undefined,
+                    // Pass extended fields
+                    referenceNumber: data.referenceNumber || data.rrn,
+                    originalCurrency: data.originalCurrency,
+                    exchangeRate: data.exchangeRate,
+                    conversionSkipped: data.conversionSkipped,
+                    originalAmount: data.originalAmount
+                });
+                return inserted ? inserted.id : null;
+            }
+        );
+
+        if (result.isNew) {
             await invalidateTransactionCache(userId);
+            // Re-fetch object to return full transaction
+            if (result.transactionId) {
+                return TransactionRepository.findById(userId, result.transactionId);
+            }
+        } else {
+            logger.debug(`[TransactionPipelineService] Skipped duplicate. Strategy: ${result.mergeStrategy}`);
         }
-        return result;
+
+        return result.transactionId ? { id: result.transactionId, isDuplicate: !result.isNew } : null;
     }
 
     /**
@@ -94,76 +132,108 @@ export class TransactionPipelineService {
 
         if (items.length === 0) return [];
 
-        const transactionsToCreate = items.map(data => {
-            const txnFingerprint = this.generateFingerprint(
-                data.emailMessageId,
-                data.transactionDate,
-                data.amount,
-                data.merchant
-            );
+        const results = [];
 
-            const txDate = dayjs(data.transactionDate);
-            const billMonth = txDate.month() + 1;
-            const billYear = txDate.year();
+        // Process sequentially to ensure deduplication logic works (one by one)
+        // Optimization: In future, can implement bulk-check in Deduplicator
+        for (const data of items) {
+            try {
+                const res = await this.insertFromEmail(userId, data);
+                // Handle mixed return type (Transaction object OR { id, isDuplicate })
+                const isDuplicate = res && 'isDuplicate' in res ? (res as any).isDuplicate : false;
 
-            return {
-                userId,
-                instrumentType: data.instrumentType,
-                instrumentId: data.instrumentId || data.cardId,
-                transactionDate: data.transactionDate,
-                merchant: data.merchant,
-                category: data.category || 'Others',
-                amount: data.amount,
-                transactionType: data.transactionType,
-                direction: data.direction,
-                billMonth,
-                billYear,
-                emailMessageId: data.emailMessageId,
-                txnFingerprint,
-                isManuallyAdded: false,
-                metadata: data.metadata,
-                rawExtraction: data.rawExtraction,
-                classificationMethod: data.classificationMethod,
-                exactTimestamp: data.exactTimestamp,
-                emailSubject: data.emailSubject,
-                gmailThreadId: data.gmailThreadId,
-                currencyCode: data.currencyCode,
-                referenceNumber: data.referenceNumber,
-                transactionSubtype: data.transactionSubtype,
-                scanJobId: data.scanJobId,
-            };
-        });
-
-        // Filter out duplicates
-        const fingerprints = transactionsToCreate.map(t => t.txnFingerprint);
-        // Ensure getExistingFingerprints exists or use replacement
-        const existingFingerprints = await TransactionRepository.getExistingFingerprints(userId, fingerprints);
-        const newTransactions = transactionsToCreate.filter(t => !existingFingerprints.includes(t.txnFingerprint));
-
-        if (newTransactions.length === 0) {
-            console.log('[TransactionPipelineService] No new transactions (all duplicates)');
-            return [];
+                if (res && res.id && !isDuplicate) {
+                    results.push(res);
+                }
+            } catch (err) {
+                logger.error(`[TransactionPipelineService] Error processing bulk item ${data.emailMessageId}`, err);
+            }
         }
 
-        await TransactionRepository.batchCreate(newTransactions);
+        return results;
+    }
 
-        if (newTransactions.length > 0) {
-            await invalidateTransactionCache(userId);
-        }
-
-        return newTransactions;
+    private static extractRrnFromRef(ref?: string): string | undefined {
+        if (!ref) return undefined;
+        // Basic heuristic: if ref matches RRN pattern (12 chars alnum)
+        if (/^[a-zA-Z0-9]{12}$/.test(ref)) return ref;
+        return undefined;
     }
 
     /**
-     * Generate fingerprint for deduplication
+     * Insert a transaction from PDF Statement processing
      */
-    private static generateFingerprint(
-        emailMessageId: string,
-        transactionDate: Date,
-        amount: number,
-        merchant: string
-    ): string {
-        const data = `${emailMessageId}-${transactionDate.toISOString()}-${amount}-${merchant}`;
-        return createHash('sha256').update(data).digest('hex');
+    static async insertFromPdf(userId: string, data: PdfTransactionData) {
+        logger.debug(`[TransactionPipelineService] Inserting from PDF for user ${userId}`);
+
+        const components = {
+            amount: data.amount,
+            merchant: data.merchant,
+            date: data.date,
+            bankDomain: data.bankName, // Use bank name as domain proxy
+            direction: 'debit' as const, // Default to debit for Statements usually
+            rrn: undefined, // PDF parsing often lacks RRN, but if found, add it
+            // We could parse RRN from description if needed
+        };
+
+        const txnFingerprint = TransactionDeduplicator.generateFingerprint(components);
+
+        const txDate = dayjs(data.date);
+
+        // Use Deduplicator
+        const result = await TransactionDeduplicator.getOrCreate(
+            userId,
+            txnFingerprint,
+            components,
+            async () => {
+                const inserted = await TransactionRepository.create({
+                    userId,
+                    instrumentType: 'BANK', // or CREDIT_CARD depending on context
+                    instrumentId: undefined, // Need to link to account eventually
+                    transactionDate: new Date(data.date),
+                    merchant: data.merchant,
+                    category: data.category || 'Uncategorized',
+                    amount: data.amount,
+                    transactionType: 'pdf_statement',
+                    direction: 'debit', // Assume debit for now
+                    billMonth: txDate.month() + 1,
+                    billYear: txDate.year(),
+                    txnFingerprint,
+                    isManuallyAdded: false,
+                    metadata: {
+                        source: 'PDF_STATEMENT',
+                        originalDescription: data.description,
+                        bank: data.bankName,
+                        confidence: data.confidence
+                    },
+                    classificationMethod: 'img_pdf_parser',
+                    referenceNumber: undefined
+                });
+                return inserted ? inserted.id : null;
+            }
+        );
+
+        if (result.isNew) {
+            await invalidateTransactionCache(userId);
+            logger.info(`[TransactionPipelineService] Created new PDF transaction: ${result.transactionId}`);
+        } else {
+            logger.info(`[TransactionPipelineService] PDF Transaction matched existing: ${result.transactionId} (Strategy: ${result.mergeStrategy})`);
+            // TODO: Could update metadata to say "Confirmed by PDF"
+        }
+
+        return result;
     }
 }
+
+export interface PdfTransactionData {
+    amount: number;
+    date: string;
+    merchant: string;
+    description: string;
+    bankName: string;
+    category?: string;
+    confidence?: number;
+}
+
+
+

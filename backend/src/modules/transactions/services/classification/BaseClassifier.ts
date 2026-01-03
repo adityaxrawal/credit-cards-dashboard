@@ -1,5 +1,7 @@
 import { ClassificationResult, CleanEmail, TransactionType } from '@shared/types/transaction.types';
 
+import { NumberParser } from '@modules/parser/NumberParser';
+
 export abstract class BaseClassifier {
     abstract readonly priority: number; // Lower number = higher priority
     abstract readonly name: string;
@@ -7,13 +9,7 @@ export abstract class BaseClassifier {
     abstract classify(userId: string, cleanEmail: CleanEmail): Promise<ClassificationResult | null>;
 
     protected extractAmount(text: string): number | null {
-        // Matches "Rs. 1,234.50" or "INR 1234" or "$12.99"
-        // Does not insist on currency symbol if context implies, but strict regex is safer
-        const match = text.match(/[₹$€]\s*([\d,]+(?:\.\d{2})?)/) ||
-            text.match(/(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{2})?)/i);
-
-        if (!match) return null;
-        return parseFloat(match[1].replace(/,/g, ''));
+        return NumberParser.parseAmount(text);
     }
 
     protected extractDate(text: string, fallbackDate: number): Date {

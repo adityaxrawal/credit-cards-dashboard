@@ -13,7 +13,10 @@ module.exports = {
     "node_modules/(?!(pdfjs-dist)/)"
   ],
   moduleNameMapper: {
-    // Handle specific imports if necessary
+    '^@modules/(.*)$': '<rootDir>/src/modules/$1',
+    '^@shared/(.*)$': '<rootDir>/src/shared/$1',
+    '^@repositories/(.*)$': '<rootDir>/src/repositories/$1',
+    '^@services/(.*)$': '<rootDir>/src/services/$1'
   },
   collectCoverageFrom: [
     'src/**/*.ts',

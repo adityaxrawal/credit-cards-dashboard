@@ -59,6 +59,10 @@ export class TransactionsFlushStrategy implements FlushStrategy {
                     rawExtraction: d.rawExtraction as any,
                     scanJobId: d.scanJobId as string | undefined,
                     rawEmailId: d.rawEmailId as string | undefined,
+                    trustScore: d.trustScore as number | undefined,
+                    originalCurrency: d.originalCurrency as string | undefined,
+                    exchangeRate: d.exchangeRate as number | undefined,
+                    conversionSkipped: d.conversionSkipped as boolean | undefined,
                 };
             });
 

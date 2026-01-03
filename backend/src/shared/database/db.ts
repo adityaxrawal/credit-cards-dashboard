@@ -145,7 +145,7 @@ export const query = async (text: string, params?: any[]) => {
   try {
     const res = await pool.query(text, params);
     const duration = Date.now() - start;
-    if (env.NODE_ENV === 'development') {
+    if (env.NODE_ENV === 'development' && process.env.LOG_SQL_QUERIES === 'true') {
       logger.debug(`Executed query`, { text: text.substring(0, 100), duration, rows: res.rowCount });
     }
     return res;

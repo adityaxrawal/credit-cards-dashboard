@@ -235,6 +235,7 @@ describe('TransactionDeduplicator', () => {
             const result = await TransactionDeduplicator.getOrCreate(
                 'user-123',
                 'existing-fingerprint',
+                {} as any, // Mock components
                 createFn
             );
 
@@ -253,6 +254,7 @@ describe('TransactionDeduplicator', () => {
             const result = await TransactionDeduplicator.getOrCreate(
                 'user-123',
                 'new-fingerprint',
+                {} as any, // Mock components
                 createFn
             );
 

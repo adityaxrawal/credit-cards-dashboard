@@ -22,6 +22,37 @@ export interface PatternGroup {
     direction?: 'debit' | 'credit';
 }
 
+// ============================================
+// GLOBAL EXCLUSION CONSTANTS (Fix #3)
+// ============================================
+
+export const GLOBAL_EXCLUSIONS = [
+    /otp\s+is\s+|verification\s+code|one\s+time\s+password/i,
+    /login\s+alert|new\s+device\s+detected/i,
+    /statement.*available|statement.*ready/i,
+    /(?:transaction|payment).*(?:declined|failed|unsuccessful)/i,
+    /action\s+required/i
+];
+
+export const PENDING_FAILED_PATTERNS = [
+    /processing/i,
+    /in-progress/i,
+    /initiated/i,
+    /request\s+received/i,
+    /awaiting\s+confirmation/i,
+    /payment\s+pending/i
+];
+
+export const JOB_PATTERNS = [
+    /offer\s+letter/i,
+    /interview/i,
+    /hiring/i,
+    /salary\s+discussion/i,
+    /job\s+application/i,
+    /candidate/i,
+    /recruitment/i
+];
+
 export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
     // ============================================
     // EXPLICIT REJECTIONS (Noise Filter) - Highest Priority
@@ -393,7 +424,8 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
             { pattern: /ach\s+cr/i, weight: 0.95 },
         ],
         excludePatterns: [
-            /reversal|refund/i
+            /reversal|refund/i,
+            ...JOB_PATTERNS // Fix #3: Exclude job offers from salary
         ]
     },
 
@@ -414,7 +446,8 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
         ],
         excludePatterns: [
             /will\s+be\s+(?:received|credited)/i, // Future tense
-            /fail|decline/i
+            /fail|decline/i,
+            ...PENDING_FAILED_PATTERNS // Fix #3: Exclude pending
         ]
     },
 
@@ -470,7 +503,8 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
         excludePatterns: [
             /promotion|offer|discount|coupon|deal|bonus|apply\s+(?:for|now)/i,
             /otp|verification|confirm.*(?:email|identity|account)/i,
-            /request\s+received/i // "We received your request for transaction..."
+            /request\s+received/i, // "We received your request for transaction..."
+            ...PENDING_FAILED_PATTERNS
         ],
     },
 
@@ -488,6 +522,7 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
         ],
         excludePatterns: [
             /limit.*exceeded|insufficient|failed|declined/i,
+            ...PENDING_FAILED_PATTERNS
         ],
     },
 
@@ -509,7 +544,8 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
         ],
         excludePatterns: [
             /job|interview|application|hiring|recruit|career/i,
-            /apply\s+now|referral|bonus\s+points/i
+            /apply\s+now|referral|bonus\s+points/i,
+            ...PENDING_FAILED_PATTERNS // Fix #3
         ]
     },
 
@@ -579,6 +615,9 @@ export const TRANSACTION_PATTERNS: Record<string, PatternGroup> = {
             { pattern: /spent\s+on\s+credit\s+card/i, weight: 0.95 },
             { pattern: /debited\s+from\s+your\s+hdfc\s+bank\s+credit\s+card/i, weight: 0.95 }, // Specific HDFC Format
             { pattern: /payment\s+was\s+successful/i, weight: 0.9 }, // Generic success
+        ],
+        excludePatterns: [
+            ...PENDING_FAILED_PATTERNS
         ]
     },
 

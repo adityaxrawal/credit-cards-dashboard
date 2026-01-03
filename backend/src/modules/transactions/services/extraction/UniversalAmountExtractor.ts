@@ -5,6 +5,29 @@ export class UniversalAmountExtractor {
         // Pre-cleaning: collapse spaces to single space to make regex simpler
         const cleanText = text.replace(/\s+/g, ' ');
 
+        // 0. Check for explicit Indian Text Formats (Lakh/Crore) - Fix #7
+        // Matches: "1.5 Lakh", "10 Lakhs", "1.2 Cr", "5 Crores", "₹ 2.5 L"
+        const indianTextMatch = cleanText.match(/((?:₹|Rs\.?|INR)?\s*[\d,]+(?:\.\d+)?)\s*(Lakhs?|Crores?|Cr\.?|L\.?)\b/i);
+        if (indianTextMatch) {
+            // Extract the numeric part (remove currency symbols but KEEP decimals)
+            // Remove Rs, Rs., INR, ₹, commas, spaces
+            const numberPart = indianTextMatch[1]
+                .replace(/Rs\.?|INR|₹/gi, '') // Remove symbols
+                .replace(/,/g, '')           // Remove commas
+                .trim();                     // Remove spaces
+
+            const unit = indianTextMatch[2].toLowerCase().replace('.', '');
+
+            const val = parseFloat(numberPart);
+            if (!isNaN(val)) {
+                if (unit.startsWith('l')) { // Lakh
+                    return val * 100000;
+                } else if (unit.startsWith('c')) { // Crore
+                    return val * 10000000;
+                }
+            }
+        }
+
         // Strategy Priority:
         // 1. Explicit Symbol Match (Highest Confidence): ₹ 500, INR 5,000.00
         // 2. Suffix Match: 500/-

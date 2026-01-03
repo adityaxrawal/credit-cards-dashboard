@@ -6,13 +6,24 @@ import { TransactionRepository } from '@modules/transactions/repositories/Transa
 /**
  * Transaction fingerprint components
  */
-interface FingerprintComponents {
+export interface FingerprintComponents {
     amount: number;
     merchant: string;
     date: Date | string;
     cardLastFour?: string;
     bankDomain?: string;
     direction?: 'debit' | 'credit';
+
+    // New fields for Fix #1
+    rrn?: string;
+    arn?: string;
+    upiRef?: string;
+    impsRef?: string;
+    walletTxnId?: string;
+
+    // Multi-currency support (Fix #8)
+    originalAmount?: number;
+    originalCurrency?: string;
 }
 
 /**
@@ -23,17 +34,16 @@ export interface DeduplicationResult {
     isDuplicate: boolean;
     existingTransactionId?: string;
     confidence: number;
+    matchType?: 'PRIMARY_REF' | 'EXACT_FINGERPRINT' | 'SOFT_MATCH' | 'NONE';
 }
 
 /**
  * TransactionDeduplicator - Prevent duplicate transaction entries
  * 
- * Uses SHA256 fingerprinting based on:
- * - Amount (normalized to 2 decimals)
- * - Merchant (normalized lowercase)
- * - Date (YYYY-MM-DD)
- * - Card last 4 digits
- * - Bank domain
+ * Uses multi-stage deduplication:
+ * 1. Primary References (RRN, ARN, UPI Ref) - 100% confidence
+ * 2. Exact Fingerprint Match - 100% confidence
+ * 3. Soft Match (Fuzzy) - High confidence
  */
 export class TransactionDeduplicator {
     /**
@@ -46,7 +56,12 @@ export class TransactionDeduplicator {
             date: this.normalizeDate(components.date),
             cardLastFour: components.cardLastFour?.slice(-4) || 'xxxx',
             bankDomain: components.bankDomain?.toLowerCase().split('@')[1]?.split('.')[0] || 'unknown',
-            direction: components.direction || 'unknown'
+            direction: components.direction || 'unknown',
+            rrn: components.rrn || '',
+            arn: components.arn || '',
+            upiRef: components.upiRef || '',
+            originalAmount: components.originalAmount ? components.originalAmount.toFixed(2) : '',
+            originalCurrency: components.originalCurrency || ''
         };
 
         const fingerprintString = [
@@ -55,7 +70,12 @@ export class TransactionDeduplicator {
             normalized.date,
             normalized.cardLastFour,
             normalized.bankDomain,
-            normalized.direction
+            normalized.direction,
+            normalized.rrn,
+            normalized.arn,
+            normalized.upiRef,
+            normalized.originalAmount,
+            normalized.originalCurrency
         ].join('|');
 
         return crypto.createHash('sha256').update(fingerprintString).digest('hex');
@@ -67,9 +87,15 @@ export class TransactionDeduplicator {
     private static normalizeMerchant(merchant: string): string {
         if (!merchant) return 'unknown';
 
-        return merchant
-            .toLowerCase()
-            .trim()
+        let normalized = merchant.toLowerCase().trim();
+
+        // Remove common suffixes/prefixes
+        const noiseWords = ['pvt', 'ltd', 'limited', 'private', 'inc', 'corp', 'llp', 'upi', 'imps', 'neft', 'rtgs', 'slash'];
+        noiseWords.forEach(word => {
+            normalized = normalized.replace(new RegExp(`\\b${word}\\b`, 'g'), '');
+        });
+
+        return normalized
             .replace(/[^a-z0-9]/g, '') // Remove special chars
             .replace(/\s+/g, '')
             .substring(0, 50); // Cap length
@@ -92,9 +118,35 @@ export class TransactionDeduplicator {
      */
     static async checkDuplicate(
         userId: string,
-        fingerprint: string
+        fingerprint: string,
+        components?: FingerprintComponents
     ): Promise<DeduplicationResult> {
         try {
+            // STEP 1: Check Primary References (RRN/ARN) - Fix #1
+            if (components) {
+                const refMatch = await TransactionRepository.findByReference(userId, {
+                    rrn: components.rrn,
+                    arn: components.arn,
+                    upiRef: components.upiRef,
+                    impsRef: components.impsRef
+                });
+
+                if (refMatch) {
+                    logger.info('[Deduplicator] Found duplicate via Primary Reference', {
+                        rrn: components.rrn,
+                        existingId: refMatch.id
+                    });
+                    return {
+                        fingerprint,
+                        isDuplicate: true,
+                        existingTransactionId: refMatch.id,
+                        confidence: 1.0,
+                        matchType: 'PRIMARY_REF'
+                    };
+                }
+            }
+
+            // STEP 2: Check Exact Fingerprint
             const existing = await TransactionRepository.findByFingerprint(userId, fingerprint);
 
             if (existing) {
@@ -102,14 +154,30 @@ export class TransactionDeduplicator {
                     fingerprint,
                     isDuplicate: true,
                     existingTransactionId: existing.id,
-                    confidence: 1.0
+                    confidence: 1.0,
+                    matchType: 'EXACT_FINGERPRINT'
                 };
+            }
+
+            // STEP 3: Check Soft Dedupe (if components provided)
+            if (components) {
+                const softMatch = await this.checkNearDuplicate(userId, components);
+                if (softMatch.isNearDuplicate && softMatch.matchedIds.length > 0) {
+                    return {
+                        fingerprint,
+                        isDuplicate: true,
+                        existingTransactionId: softMatch.matchedIds[0],
+                        confidence: softMatch.confidence,
+                        matchType: 'SOFT_MATCH'
+                    };
+                }
             }
 
             return {
                 fingerprint,
                 isDuplicate: false,
-                confidence: 1.0
+                confidence: 0,
+                matchType: 'NONE'
             };
         } catch (error) {
             logger.error('[Deduplicator] Failed to check duplicate:', error);
@@ -117,7 +185,8 @@ export class TransactionDeduplicator {
             return {
                 fingerprint,
                 isDuplicate: false,
-                confidence: 0.5
+                confidence: 0,
+                matchType: 'NONE'
             };
         }
     }
@@ -129,7 +198,7 @@ export class TransactionDeduplicator {
     static async checkNearDuplicate(
         userId: string,
         components: FingerprintComponents,
-        toleranceMs: number = 86400000 // 24 hours
+        toleranceMs: number = 86400000 * 3 // 3 days tolerance (Fix #6)
     ): Promise<{ isNearDuplicate: boolean; matchedIds: string[]; confidence: number }> {
         try {
             const dateStart = new Date(
@@ -139,32 +208,43 @@ export class TransactionDeduplicator {
                 (components.date instanceof Date ? components.date : new Date(components.date)).getTime() + toleranceMs
             );
 
+            const amountMin = components.amount - 0.01;
+            const amountMax = components.amount + 0.01;
+
             const potentialDuplicates = await TransactionRepository.findPotentialDuplicates(
                 userId,
-                components.amount,
+                amountMin,
+                amountMax,
                 dateStart,
                 dateEnd
             );
 
             if (potentialDuplicates.length === 0) {
-                return { isNearDuplicate: false, matchedIds: [], confidence: 1.0 };
+                return { isNearDuplicate: false, matchedIds: [], confidence: 0 };
             }
 
             // Check merchant similarity
             const normalizedMerchant = this.normalizeMerchant(components.merchant);
             const matches = potentialDuplicates.filter(row => {
                 const rowMerchant = this.normalizeMerchant(row.merchant);
-                return this.merchantSimilarity(normalizedMerchant, rowMerchant) > 0.7;
+                return this.merchantSimilarity(normalizedMerchant, rowMerchant) > 0.85; // Stricter threshold for auto-dedupe
             });
 
-            return {
-                isNearDuplicate: matches.length > 0,
-                matchedIds: matches.map(m => m.id),
-                confidence: matches.length > 0 ? 0.8 : 1.0
-            };
+            // Special check: If amount is same, date is close, merchant matches -> likely duplicate
+            // We return confidence based on these factors
+
+            if (matches.length > 0) {
+                return {
+                    isNearDuplicate: true,
+                    matchedIds: matches.map(m => m.id),
+                    confidence: 0.9 // High confidence for soft match
+                };
+            }
+
+            return { isNearDuplicate: false, matchedIds: [], confidence: 0 };
         } catch (error) {
             logger.error('[Deduplicator] Failed to check near-duplicate:', error);
-            return { isNearDuplicate: false, matchedIds: [], confidence: 0.5 };
+            return { isNearDuplicate: false, matchedIds: [], confidence: 0 };
         }
     }
 
@@ -225,19 +305,22 @@ export class TransactionDeduplicator {
     static async getOrCreate(
         userId: string,
         fingerprint: string,
+        components: FingerprintComponents,
         createFn: () => Promise<string | null>
-    ): Promise<{ transactionId: string | null; isNew: boolean }> {
+    ): Promise<{ transactionId: string | null; isNew: boolean; mergeStrategy?: string }> {
         // First check if exists
-        const existing = await this.checkDuplicate(userId, fingerprint);
+        const existing = await this.checkDuplicate(userId, fingerprint, components);
 
         if (existing.isDuplicate) {
-            logger.debug('[Deduplicator] Found existing transaction:', {
+            logger.info('[Deduplicator] Found existing transaction:', {
                 fingerprint: fingerprint.substring(0, 16),
-                existingId: existing.existingTransactionId
+                existingId: existing.existingTransactionId,
+                strategy: existing.matchType
             });
             return {
                 transactionId: existing.existingTransactionId || null,
-                isNew: false
+                isNew: false,
+                mergeStrategy: existing.matchType
             };
         }
 
@@ -252,7 +335,7 @@ export class TransactionDeduplicator {
             // Check if this was a duplicate constraint error
             if (isUniqueViolationError(error)) {
                 logger.debug('[Deduplicator] Concurrent duplicate detected, fetching existing');
-                const retryCheck = await this.checkDuplicate(userId, fingerprint);
+                const retryCheck = await this.checkDuplicate(userId, fingerprint, components);
                 return {
                     transactionId: retryCheck.existingTransactionId || null,
                     isNew: false
@@ -284,7 +367,8 @@ export class TransactionDeduplicator {
                     merchant: row.merchant,
                     date: row.transaction_date,
                     bankDomain: row.email_sender || undefined, // Mapping from record to components
-                    direction: row.direction as 'debit' | 'credit' | undefined
+                    direction: row.direction as 'debit' | 'credit' | undefined,
+                    // TODO: Extract RRN from metadata/description if possible during backfill
                 });
 
                 await TransactionRepository.updateFingerprint(row.id, fingerprint);
@@ -439,4 +523,5 @@ export class TransactionDeduplicator {
         }
     }
 }
+
 

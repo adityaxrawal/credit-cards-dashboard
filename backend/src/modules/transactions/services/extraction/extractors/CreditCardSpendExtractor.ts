@@ -69,8 +69,8 @@ export class CreditCardSpendExtractor {
         return {
             type: TransactionType.CREDIT_CARD_SPEND,
             direction: TransactionDirection.DEBIT,
-            amount: currencyResult.isNegative ? -Math.abs(amount) : amount,
-            currency: detectedCurrency,
+            amount: currencyResult.isNegative ? -Math.abs(conversion.convertedAmount) : conversion.convertedAmount,
+            currency: 'INR', // Always normalized to INR if converted
             merchant,
             instrumentType: InstrumentType.CREDIT_CARD,
             instrumentId,
@@ -83,6 +83,8 @@ export class CreditCardSpendExtractor {
             currencyConfidence: currencyResult.currencyConfidence,
             currencyDetectionMethod: currencyResult.detectionMethod,
             // Conversion fields
+            originalAmount: conversion.conversionSkipped ? undefined : (currencyResult.isNegative ? -Math.abs(amount) : amount),
+            originalCurrency: conversion.conversionSkipped ? undefined : detectedCurrency,
             convertedAmount: conversion.convertedAmount,
             conversionRate: conversion.conversionRate,
             rateSource: conversion.rateSource,
@@ -95,7 +97,8 @@ export class CreditCardSpendExtractor {
                 cardLast4,
                 emailSubject: email.subject,
                 extractedAt: new Date().toISOString(),
-                isInternational: BankParserPatterns.KEYWORD_INTERNATIONAL.test(text)
+                isInternational: BankParserPatterns.KEYWORD_INTERNATIONAL.test(text),
+                fxRate: conversion.conversionRate
             }
         };
     }

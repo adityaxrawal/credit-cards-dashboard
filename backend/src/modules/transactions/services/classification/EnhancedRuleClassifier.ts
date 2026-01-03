@@ -1,5 +1,5 @@
 import { CleanEmail } from '@shared/types/transaction.types';
-import { TRANSACTION_PATTERNS, isKnownBankSender, PatternGroup } from '../../../../data/transaction-patterns';
+import { TRANSACTION_PATTERNS, isKnownBankSender, PatternGroup, GLOBAL_EXCLUSIONS } from '../../../../data/transaction-patterns';
 import logger from '@shared/utils/infrastructure/logger';
 
 /**
@@ -40,7 +40,14 @@ export class EnhancedRuleClassifier {
     static checkExclusions(cleanEmail: CleanEmail): { isExcluded: boolean; matchedPattern?: string } {
         const fullText = `${cleanEmail.subject} ${cleanEmail.cleanedBody}`.toLowerCase();
 
-        // Check explicitly defined exclusions in patterns (like OTP_EXCLUSION)
+        // 1. Check Global Exclusions (OTP, Login Alert, etc)
+        for (const pattern of GLOBAL_EXCLUSIONS) {
+            if (pattern.test(fullText)) {
+                return { isExcluded: true, matchedPattern: 'global_exclusion' };
+            }
+        }
+
+        // 2. Check explicitly defined exclusions in patterns (like OTP_EXCLUSION)
         for (const [category, pattern] of Object.entries(TRANSACTION_PATTERNS)) {
             if (pattern.isTransaction === false && pattern.transactionType === 'non_financial') {
                 // This is a rejection group

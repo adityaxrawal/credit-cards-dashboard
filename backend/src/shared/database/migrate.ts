@@ -1,7 +1,10 @@
+
 import { Client } from 'pg';
 import fs from 'fs';
 import path from 'path';
 import { env } from '@shared/config/env';
+
+const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 
 const runMigration = async () => {
   const client = new Client({
@@ -13,18 +16,59 @@ const runMigration = async () => {
     await client.connect();
     console.log('Connected to database');
 
-    const schemaPath = path.join(__dirname, 'schema.sql');
-    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+    // 1. Create migrations table if not exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS _migrations (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        run_on TIMESTAMP DEFAULT NOW()
+      );
+    `);
 
-    console.log('Executing schema...');
-    await client.query(schemaSql);
-    console.log('Schema executed successfully');
+    // 2. Get list of files
+    if (!fs.existsSync(MIGRATIONS_DIR)) {
+      console.log('No migrations directory found.');
+      return;
+    }
 
-    // Migrations are now squashed into schema.sql
-    console.log('Schema is up to date.');
+    const files = fs.readdirSync(MIGRATIONS_DIR).sort();
+    console.log(`Found ${files.length} migration files.`);
+
+    // 3. Get executed migrations
+    const res = await client.query('SELECT name FROM _migrations');
+    const executed = new Set(res.rows.map(r => r.name));
+
+    // 4. Run pending migrations
+    for (const file of files) {
+      if (!file.endsWith('.sql')) continue;
+
+      if (executed.has(file)) {
+        // console.log(`Skipping ${file} (already executed)`);
+        continue;
+      }
+
+      console.log(`Running migration: ${file}...`);
+      const filePath = path.join(MIGRATIONS_DIR, file);
+      const sql = fs.readFileSync(filePath, 'utf8');
+
+      try {
+        await client.query('BEGIN');
+        await client.query(sql);
+        await client.query('INSERT INTO _migrations (name) VALUES ($1)', [file]);
+        await client.query('COMMIT');
+        console.log(`Successfully applied ${file}`);
+      } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(`Failed to apply ${file}:`, err);
+        process.exit(1);
+      }
+    }
+
+    console.log('All migrations checked/applied.');
 
   } catch (err) {
-    console.error('Migration failed:', err);
+    console.error('Migration script failed:', err);
+    process.exit(1);
   } finally {
     await client.end();
   }

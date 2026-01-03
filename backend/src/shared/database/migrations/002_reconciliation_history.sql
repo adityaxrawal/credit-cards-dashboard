@@ -13,5 +13,5 @@ CREATE TABLE IF NOT EXISTS reconciliation_history (
   CONSTRAINT unique_reconciliation_per_statement UNIQUE (instrument_id, statement_date)
 );
 
-CREATE INDEX idx_reconciliation_user ON reconciliation_history(user_id);
-CREATE INDEX idx_reconciliation_instrument ON reconciliation_history(instrument_id);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_user ON reconciliation_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_instrument ON reconciliation_history(instrument_id);

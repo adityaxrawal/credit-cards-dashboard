@@ -146,7 +146,7 @@ export function createAuthController(deps: IAuthDependencies): IAuthController {
     getMe: asyncHandler(async (req: AuthRequest, res: Response) => {
       logger.info('[AuthController] GET /me request received');
       const maskedEmail = req.user ? req.user.email.replace(/(.{1})(.*)(@.*)/, '$1***$3') : 'NO USER';
-      logger.info(`[AuthController] User from auth middleware: ${maskedEmail}`);
+      // logger.info(`[AuthController] User from auth middleware: ${maskedEmail}`);
       if (!req.user) {
         logger.warn('[AuthController] No user in request, returning 401');
         return res.status(401).json({ error: 'Not authenticated' });

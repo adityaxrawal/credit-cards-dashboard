@@ -23,6 +23,7 @@ import { featureFlags } from '@shared/config/featureFlags';
 import { MerchantEnricher } from '../enrichment/MerchantEnricher';
 import { UnclassifiedRepository } from '@modules/manual-review/unclassified.repository';
 import { UserProfileService } from '@modules/user/user-profile.service';
+import { EmailTrustService } from '@shared/services/EmailTrustService';
 
 
 export interface IPipelineDependencies {
@@ -66,6 +67,10 @@ export class UniversalTransactionPipeline {
             const emailInfo = `[${rawEmail.messageId}]"${rawEmail.subject}"`;
             logger.info(`\n >>> [PIPELINE START] ${emailInfo} `);
             console.log(`[PIPELINE] Processing: ${rawEmail.subject.substring(0, 50)}...[${rawEmail.messageId}]`);
+
+            // Fix #2: Calculate Trust Score
+            const trustScore = EmailTrustService.calculateTrustScore(rawEmail.authResults || '', rawEmail.from);
+            logger.info(`[Pipeline] Trust Score: ${trustScore} (Auth: ${rawEmail.authResults ? 'Present' : 'Missing'})`);
 
             // ========================================
             // STAGE 1: SAVE RAW (Audit Trail) - QUEUED, NON-BLOCKING
@@ -362,7 +367,8 @@ export class UniversalTransactionPipeline {
                 rawEmail.messageId,
                 rawEmail.subject,
                 rawEmail.from,
-                startTime
+                startTime,
+                trustScore
             );
 
         } catch (error) {
@@ -422,7 +428,8 @@ export class UniversalTransactionPipeline {
         messageId: string,
         subject: string,
         sender: string,
-        startTime: number
+        startTime: number,
+        trustScore: number
     ): Promise<PipelineResult> {
         // ========================================
         // STAGE 5: EXTRACT DATA (Normalize)
@@ -552,7 +559,13 @@ export class UniversalTransactionPipeline {
             rawEmailId,
             scanJobId: jobId,
             rawExtraction: classificationResult,
-            metadata: extracted.metadata || {}
+            metadata: extracted.metadata || {},
+            trustScore, // Fix #2
+            // Multi-currency (Fix #8)
+            originalAmount: extracted.originalAmount,
+            originalCurrency: extracted.originalCurrency,
+            exchangeRate: extracted.conversionRate,
+            conversionSkipped: extracted.conversionSkipped
         });
 
         // Queue scanned email update

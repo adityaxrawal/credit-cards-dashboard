@@ -101,6 +101,7 @@ export interface SimplifiedEmail {
     from: string;
     snippet?: string;
     raw_snippet?: string;
+    authResults?: string; // Fix #2
     // New architecture fields
     threadId?: string;
     to?: string;
@@ -178,6 +179,7 @@ export interface ExtractedTransaction {
     runningBalance?: number;
     fxRate?: number;
     originalCurrency?: string;
+    originalAmount?: number;
     feeComponents?: {
         gst?: number;
         tax?: number;

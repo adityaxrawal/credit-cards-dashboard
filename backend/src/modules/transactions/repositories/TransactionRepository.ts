@@ -60,6 +60,47 @@ export class TransactionRepository {
     }
 
     /**
+     * Find transaction by external references (RRN, ARN, etc)
+     */
+    static async findByReference(
+        userId: string,
+        refs: { rrn?: string; arn?: string; upiRef?: string; impsRef?: string },
+        client?: PoolClient
+    ): Promise<Transaction | null> {
+        const runQuery = this.getRunner(client);
+
+        const conditions: string[] = [];
+        const params: any[] = [userId];
+        let pIdx = 2;
+
+        if (refs.rrn) {
+            conditions.push(`rrn = $${pIdx++}`);
+            params.push(refs.rrn);
+        }
+        if (refs.arn) {
+            conditions.push(`arn = $${pIdx++}`);
+            params.push(refs.arn);
+        }
+        if (refs.upiRef) {
+            conditions.push(`upi_ref = $${pIdx++}`);
+            params.push(refs.upiRef);
+        }
+        if (refs.impsRef) {
+            conditions.push(`imps_ref = $${pIdx++}`);
+            params.push(refs.impsRef);
+        }
+
+        if (conditions.length === 0) return null;
+
+        const whereClause = conditions.join(' OR ');
+        const result = await runQuery(
+            `SELECT * FROM transactions WHERE user_id = $1 AND (${whereClause}) LIMIT 1`,
+            params
+        );
+        return result.rows[0] || null;
+    }
+
+    /**
      * Check which fingerprints already exist
      */
     static async getExistingFingerprints(userId: string, fingerprints: string[], client?: PoolClient): Promise<string[]> {
@@ -109,6 +150,9 @@ export class TransactionRepository {
         rawEmailId?: string;
         rawExtraction?: any;
         referenceNumber?: string;
+        originalCurrency?: string;
+        exchangeRate?: number;
+        conversionSkipped?: boolean;
     }, client?: PoolClient): Promise<Transaction> {
         const runQuery = this.getRunner(client);
         const result = await runQuery(
@@ -118,8 +162,8 @@ export class TransactionRepository {
                 txn_fingerprint, is_manually_added, metadata, classification_method, parent_transaction_id, transaction_type,
                 email_subject, email_sender, exact_timestamp, gmail_thread_id, gmail_account_index,
                 currency_code, original_amount, transaction_subtype, scan_job_id, raw_email_id,
-                raw_extraction, reference_number
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+                raw_extraction, reference_number, original_currency, exchange_rate, conversion_skipped
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
             RETURNING *`,
             [
                 data.userId, data.instrumentType, data.instrumentId, data.transactionDate,
@@ -129,7 +173,8 @@ export class TransactionRepository {
                 data.classificationMethod ?? 'manual', data.parentTransactionId, data.transactionType,
                 data.emailSubject, data.emailSender, data.exactTimestamp, data.gmailThreadId, data.gmailAccountIndex,
                 data.currencyCode, data.originalAmount, data.transactionSubtype, data.scanJobId, data.rawEmailId,
-                data.rawExtraction ? JSON.stringify(data.rawExtraction) : null, data.referenceNumber
+                data.rawExtraction ? JSON.stringify(data.rawExtraction) : null, data.referenceNumber,
+                data.originalCurrency, data.exchangeRate, data.conversionSkipped
             ]
         );
         return result.rows[0];
@@ -409,17 +454,18 @@ export class TransactionRepository {
 
     static async findPotentialDuplicates(
         userId: string,
-        amount: number,
+        amountMin: number,
+        amountMax: number,
         dateStart: Date,
         dateEnd: Date
     ): Promise<Transaction[]> {
         const result = await query(
             `SELECT * FROM transactions 
              WHERE user_id = $1 
-               AND amount = $2 
-               AND transaction_date BETWEEN $3 AND $4
+               AND amount BETWEEN $2 AND $3
+               AND transaction_date BETWEEN $4 AND $5
              LIMIT 5`,
-            [userId, amount, dateStart, dateEnd]
+            [userId, amountMin, amountMax, dateStart, dateEnd]
         );
         return result.rows;
     }
@@ -604,6 +650,10 @@ export class TransactionRepository {
         transactionSubtype?: string;
         scanJobId?: string;
         rawEmailId?: string;
+        trustScore?: number;
+        originalCurrency?: string;
+        exchangeRate?: number;
+        conversionSkipped?: boolean;
     }>): Promise<void> {
         if (transactions.length === 0) return;
 
@@ -642,7 +692,12 @@ export class TransactionRepository {
         const originalAmounts: (number | null)[] = [];
         const transactionSubtypes: (string | null)[] = [];
         const scanJobIds: (string | null)[] = [];
+        const originalCurrencies: (string | null)[] = [];
+        const exchangeRates: (number | null)[] = [];
+        const conversionSkippeds: boolean[] = [];
+
         const rawEmailIds: (string | null)[] = [];
+        const trustScores: (number | null)[] = [];
 
         // Import randomUUID dynamically
         const { randomUUID } = require('crypto');
@@ -692,6 +747,10 @@ export class TransactionRepository {
             transactionSubtypes.push(data.transactionSubtype || null);
             scanJobIds.push(data.scanJobId || null);
             rawEmailIds.push(data.rawEmailId || null);
+            trustScores.push(data.trustScore !== undefined ? data.trustScore : null);
+            originalCurrencies.push(data.originalCurrency || null);
+            exchangeRates.push(data.exchangeRate || null);
+            conversionSkippeds.push(data.conversionSkipped || false);
         }
 
         await query(
@@ -706,7 +765,8 @@ export class TransactionRepository {
             needs_review, review_reason,
             exact_timestamp, gmail_thread_id, gmail_account_index,
             currency_code, original_amount, transaction_subtype,
-            scan_job_id, raw_email_id,
+            scan_job_id, raw_email_id, trust_score,
+            original_currency, exchange_rate, conversion_skipped,
             created_at, updated_at
         )
         SELECT *, NOW(), NOW() FROM UNNEST(
@@ -720,7 +780,8 @@ export class TransactionRepository {
             $26::boolean[], $27::text[],
             $28::timestamp[], $29::text[], $30::integer[],
             $31::text[], $32::numeric[], $33::text[],
-            $34::uuid[], $35::uuid[]
+            $34::uuid[], $35::uuid[], $36::integer[],
+            $37::text[], $38::numeric[], $39::boolean[]
         )
         ON CONFLICT (email_message_id, txn_fingerprint) DO NOTHING`,
             [
@@ -734,7 +795,8 @@ export class TransactionRepository {
                 needsReviews, reviewReasons,
                 exactTimestamps, gmailThreadIds, gmailAccountIndices,
                 currencyCodes, originalAmounts, transactionSubtypes,
-                scanJobIds, rawEmailIds
+                scanJobIds, rawEmailIds, trustScores,
+                originalCurrencies, exchangeRates, conversionSkippeds
             ]
         );
     }

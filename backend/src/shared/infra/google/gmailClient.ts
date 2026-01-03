@@ -79,6 +79,7 @@ export interface GmailMessage {
   bodyHtml?: string;
   snippet: string;
   attachments?: Array<{ id: string; filename: string; mimeType: string }>;
+  authResults?: string; // Fix #2
 }
 
 /**
@@ -289,6 +290,7 @@ export function parseMessage(rawMessage: gmail_v1.Schema$Message): GmailMessage 
     bodyHtml,
     snippet: rawMessage.snippet || '',
     attachments,
+    authResults: getHeader('Authentication-Results'), // Fix #2
   };
 }
 
