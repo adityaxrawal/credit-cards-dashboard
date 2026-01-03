@@ -11,6 +11,7 @@ backend/deploy.sh
 backend_repo.txt
 frontend_repo.txt
 generate_repo_text.js
+database_repo.txt
 
 
 .dockerignore
@@ -24,6 +25,20 @@ CC Dashboard _ Gmail Sync Flow.svg
 
 # Sensitive dumps and artifacts
 emails_dump.json
+emails_dump_15000.json
+emails_dump_clean.json
+emails_dump_5000.json
+emails_output_1.json
+emails_output_2.json
+emails_output_3.json
+emails_output_4.json
+emails_output_5.json
+emails_output_6.json
+emails_output_7.json
+emails_output_8.json
+emails_output_9.json
+emails_output_10.json
+process_emails.js
 dump.rdb
 frontend/dump-frontend.js
 *.dump
